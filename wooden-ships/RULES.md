@@ -38,8 +38,7 @@ Real time. Two players on one phone, or you vs the CPU, as in Dot Army.
   generator smooths those away before tiles are picked: any tile with
   only a diagonal pair gets one more corner raised to match.
 - The edge of the sea is a wall: a ship that reaches it stops dead, as
-  if it had hit an island, but takes no damage. **(open: wrap around
-  instead)**
+  if it had hit an island. **(open: wrap around instead)**
 
 ## The wind
 

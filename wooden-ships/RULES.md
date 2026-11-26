@@ -25,12 +25,18 @@ Real time. Two players on one phone, or you vs the CPU, as in Dot Army.
 - The sea is laid out on a grid of square tiles, 22 m on a side, drawn
   with the prototype's terrain tiles (see Art).
 - **Islands:** none, some (the default), or many. Generated from the
-  game's seed as blobs of land tiles, point-symmetric (rotated 180° about
-  the centre), and kept clear of the start positions. Coastlines are
-  picked automatically from the tile sheet's edge and corner pieces.
-  **(open: whether the sheet has every piece that generated shapes need,
-  or islands have to be limited to shapes it can draw)**
+  game's seed, point-symmetric (rotated 180° about the centre), and kept
+  clear of the start positions.
 - **Shallows** ring every island, one tile wide (see Hazards).
+- **How islands are generated:** terrain is decided at tile *corners*,
+  not tiles. Each corner is deep water, shallows or land, and each tile
+  is drawn with the piece that matches its four corners. The prototype's
+  Tiled map already labels which piece goes with which corners: a
+  two-level "corner" terrain set, shallows over open water and beach over
+  shallows. Each level has 14 of the 16 possible pieces. The missing two
+  are the diagonals (two opposite corners set, the other two not), so the
+  generator smooths those away before tiles are picked: any tile with
+  only a diagonal pair gets one more corner raised to match.
 - The edge of the sea is a wall: a ship that reaches it stops dead, as
   if it had hit an island, but takes no damage. **(open: wrap around
   instead)**
@@ -224,6 +230,40 @@ real seconds, so leading a moving target is a skill. That makes balls
 far slower than real ones relative to the ships. **(open: whether 4× is
 fast enough to feel like a fidget toy)**
 
+## Room for a campaign (not the MVP)
+
+A campaign could come later: run down cargo ships and loot them, escape
+from heavier and better-armed ships, bombard enemy ports, refit at
+friendly ones, dodge storms. None of that is in the first version, but
+the duel shouldn't be built in ways that rule it out:
+
+- **Any number of ships,** each with a side (blue, red, neutral, or
+  later more) rather than hardcoded as "blue" and "red".
+- **Ship types are data:** length, sail and hull coefficients, guns per
+  side, hull, and later cargo and crew. The duel uses one type. The
+  prototype already kept its coefficients in a `Specs` record.
+- **Guns are batteries** that belong to something. A ship has two (port
+  and starboard). A fort at a port would be a battery on land with its
+  own arc.
+- **Wind is a function of position and time,** not one global value.
+  In the duel it's the same everywhere. A storm would be a moving patch
+  of strong, shifting wind.
+- **The sea can be bigger than the screen.** The duel fits the screen,
+  but the renderer goes through a camera (world to screen) from the
+  start, so a scrolling sea is a camera change, not a rewrite.
+- **The map is data in the sim:** a corner grid with places on it.
+  Ports would be special tiles with a side and a battery.
+- **The CPU steers by goals** (close to fire, rake, flee, follow a route,
+  make for port), so a cargo ship that runs and a frigate that hunts are
+  the same machinery with different goals.
+- **Hull is state that can persist** between encounters. Damage has no
+  effect in the duel, but persistent damage is what would make refitting
+  matter. Looting probably needs a way to take a ship rather than sink
+  it, such as striking colours at low hull, or boarding. That ties in
+  with the open question under Collision.
+- **State can be saved:** the whole sim state is plain data plus the
+  seed, so a campaign save is a serialised state.
+
 ## Notes
 
 - **The weather gauge.** In real fleet actions the upwind ship chose
@@ -266,12 +306,15 @@ fast enough to feel like a fidget toy)**
   come straight from the cross and dot products of the bow and the
   apparent wind. That keeps lockstep network play possible later.
 - **Art.** This uses the prototype's sprites and terrain, to be copied
-  into `wooden-ships/assets/` when the code goes in: the ship sheet (`shipsMiscellaneous_sheet`) and
-  the terrain tiles (`tiles_sheet`). The sheet names match Kenney's
+  into `wooden-ships/assets/` when the code goes in: the ship sheet
+  (`shipsMiscellaneous_sheet`) and the terrain tiles (`tiles_sheet`). The sheet names match Kenney's
   [Pirate Pack](https://kenney.nl/assets/pirate-pack), which is CC0, but
   the files haven't been checked against the pack itself yet. It's
-  still drawn on a plain canvas with no Phaser, reading the sheet's XML
-  atlas directly.
+  drawn on a plain canvas to start, reading the sheet's XML atlas
+  directly. If the game turns out to be worth polishing, porting to
+  Phaser for its particles, tweens and atlas loading only touches
+  `render.js` and `main.js`, because the sim never depends on the
+  renderer.
   - Ships are drawn as a hull (`hullLarge`) with a separate sail
     (`sailLarge`) on top, rotated to the sail's trim angle, so you can
     see how the ship is set to the wind. The ready-made `ship (n)`

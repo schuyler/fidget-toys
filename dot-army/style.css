@@ -94,6 +94,43 @@ dialog input, dialog select {
   font: inherit;
 }
 
+.row { margin: 12px 0; }
+.row-name { font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+.opts {
+  display: flex;
+  border: 1px solid var(--edge);
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--bg);
+}
+dialog .opts label {
+  flex: 1;
+  display: block;
+  margin: 0;
+  position: relative;
+  color: var(--text);
+}
+.opts label + label { border-left: 1px solid var(--edge); }
+.opts label { cursor: pointer; }
+.opts input {
+  /* visually hidden but focusable; tapping the label selects it */
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+.opts span {
+  display: block;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.opts input:checked + span { background: var(--blue); color: #fff; font-weight: 600; }
+.opts input:focus-visible + span { outline: 2px solid #fff; outline-offset: -3px; }
+
 .hint { font-size: 13px; color: var(--muted); line-height: 1.45; }
 .hint a { color: var(--blue); }
 

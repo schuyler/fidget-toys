@@ -270,7 +270,7 @@ const form = /** @type {HTMLFormElement} */ ($('settings-form'));
 $('btn-settings').addEventListener('click', () => {
   paused = phase !== 'over';
   for (const [k, v] of Object.entries(settings)) {
-    const el = /** @type {HTMLSelectElement|null} */ (form.elements.namedItem(k));
+    const el = /** @type {RadioNodeList|null} */ (form.elements.namedItem(k)); // radio group: setting .value checks the match
     if (el) el.value = v;
   }
   dialog.showModal();

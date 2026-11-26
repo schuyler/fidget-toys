@@ -21,41 +21,46 @@
   <dialog id="settings">
     <form id="settings-form" method="dialog">
       <h2>Dot Army</h2>
-      <label>Opponent
-        <select name="mode">
-          <option value="2p">Human</option>
-          <option value="cpu-easy">Easy CPU</option>
-          <option value="cpu">Hard CPU</option>
-        </select>
-      </label>
-      <label>Board
-        <select name="size">
-          <option value="small">Small</option>
-          <option value="medium">Medium</option>
-          <option value="large">Large</option>
-        </select>
-      </label>
-      <label>Speed
-        <select name="speed">
-          <option value="slow">Slow</option>
-          <option value="average">Average</option>
-          <option value="fast">Fast</option>
-        </select>
-      </label>
-      <label>Spawns
-        <select name="spawns">
-          <option value="few">Few</option>
-          <option value="some">Some</option>
-          <option value="many">Many</option>
-        </select>
-      </label>
-      <label>Obstacles
-        <select name="obstacles">
-          <option value="none">None</option>
-          <option value="some">Some</option>
-          <option value="many">Many</option>
-        </select>
-      </label>
+      <div class="row">
+        <div class="row-name" id="lbl-mode">Opponent</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-mode">
+          <label><input type="radio" name="mode" value="2p"><span>Human</span></label>
+          <label><input type="radio" name="mode" value="cpu-easy"><span>Easy CPU</span></label>
+          <label><input type="radio" name="mode" value="cpu"><span>Hard CPU</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-name" id="lbl-size">Board</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-size">
+          <label><input type="radio" name="size" value="small"><span>Small</span></label>
+          <label><input type="radio" name="size" value="medium"><span>Medium</span></label>
+          <label><input type="radio" name="size" value="large"><span>Large</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-name" id="lbl-speed">Speed</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-speed">
+          <label><input type="radio" name="speed" value="slow"><span>Slow</span></label>
+          <label><input type="radio" name="speed" value="average"><span>Average</span></label>
+          <label><input type="radio" name="speed" value="fast"><span>Fast</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-name" id="lbl-spawns">Spawns</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-spawns">
+          <label><input type="radio" name="spawns" value="few"><span>Few</span></label>
+          <label><input type="radio" name="spawns" value="some"><span>Some</span></label>
+          <label><input type="radio" name="spawns" value="many"><span>Many</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-name" id="lbl-obstacles">Obstacles</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-obstacles">
+          <label><input type="radio" name="obstacles" value="none"><span>None</span></label>
+          <label><input type="radio" name="obstacles" value="some"><span>Some</span></label>
+          <label><input type="radio" name="obstacles" value="many"><span>Many</span></label>
+        </div>
+      </div>
       <p class="hint">Drag your marker; your dots follow. A dot destroys an enemy it's facing, unless that enemy faces it back. Park your marker on or beside a spawn point to attack it. With a CPU opponent, you're blue. Capture every spawn to win. <a href="https://github.com/schuyler/fidget-toys/blob/main/dot-army/RULES.md" target="_blank" rel="noopener">Full rules</a></p>
       <menu>
         <button value="reset" formnovalidate>Defaults</button>

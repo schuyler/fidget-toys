@@ -22,10 +22,15 @@ Real time. Two players on one phone, or you vs the CPU, as in Dot Army.
 - The short side is 1,000 m of sea. The long side stretches to match the
   screen's shape. A ship is 40 m long, so the sea is 25 ship lengths
   across.
+- The sea is laid out on a grid of square tiles, 22 m on a side, drawn
+  with the prototype's terrain tiles (see Art).
 - **Islands:** none, some (the default), or many. Generated from the
-  game's seed, point-symmetric (rotated 180° about the centre), and kept
-  clear of the start positions.
-- **Shallows** ring every island (see Hazards).
+  game's seed as blobs of land tiles, point-symmetric (rotated 180° about
+  the centre), and kept clear of the start positions. Coastlines are
+  picked automatically from the tile sheet's edge and corner pieces.
+  **(open: whether the sheet has every piece that generated shapes need,
+  or islands have to be limited to shapes it can draw)**
+- **Shallows** ring every island, one tile wide (see Hazards).
 - The edge of the sea is a wall: a ship that reaches it stops dead, as
   if it had hit an island, but takes no damage. **(open: wrap around
   instead)**
@@ -118,8 +123,8 @@ Getting upwind of your rival lets you steal their wind. **(open)**
     length of a ship a ball passes through everything. Crossing your
     rival's bow or stern while they can't reply is the best move in the
     game.
-- Damage changes nothing until it sinks you. **(open: damage slows the
-  ship, or knocks out guns. Both make a lead harder to come back from)**
+- Damage changes nothing until it sinks you. A battered ship sails and
+  shoots as well as a fresh one, so a lead can always be overturned.
 
 ## Hazards
 
@@ -147,13 +152,20 @@ the bottom one.
 
 - **Steering:** drag sideways anywhere in your half. How far you drag
   from where you first touched sets the rudder, up to full lock at about
-  a thumb's width. Let go and the rudder centres. **(open: a rudder that
-  stays where you leave it)**
-- **Fire:** two buttons in your half's corners, port on the left and
-  starboard on the right, *as the ship faces*. The labels swap when your
-  bow points toward you, so the button on the side of your guns always
-  fires them. **(open: whether swapping labels confuses more than it
-  helps)**
+  a thumb's width. Let go and the rudder centres.
+- **Fire:** two buttons in your half's corners, **left** and **right**
+  as *you* see the screen, not port and starboard. The left button
+  fires whichever broadside is facing your left right now. Each button
+  shows a small arrow pointing the way its guns point.
+  - So you never have to work out port and starboard when your ship is
+    coming toward you. That's the mirror-image problem anyone who's
+    steered a remote-control car toward themselves knows about.
+  - When your bow points straight left or right, one broadside faces
+    you and the other faces away, and neither is clearly "left". The
+    buttons only swap sides once the bow is 15° past that line, so they
+    don't flicker while you sail across the screen.
+  - For red, at the top of a shared phone, "left" is red's left, which
+    is screen right.
 - Each ship shows its no-go wedge as a faint shadow ahead of the bow, so
   you can see when you're about to sail into it.
 - Against the CPU you have the whole screen, and the buttons sit at the
@@ -253,7 +265,20 @@ fast enough to feel like a fidget toy)**
   angle of attack is never computed as an angle: `sin a` and `cos a`
   come straight from the cross and dot products of the bow and the
   apparent wind. That keeps lockstep network play possible later.
-- **Art.** The prototype used Kenney's pirate sprite sheet (CC0, I
-  believe; worth checking before reuse). This version draws its ships,
-  sails and islands on a canvas instead, which suits the other toys and
-  means sails can be drawn at their actual trim angle.
+- **Art.** This uses the prototype's sprites and terrain, to be copied
+  into `wooden-ships/assets/` when the code goes in: the ship sheet (`shipsMiscellaneous_sheet`) and
+  the terrain tiles (`tiles_sheet`). The sheet names match Kenney's
+  [Pirate Pack](https://kenney.nl/assets/pirate-pack), which is CC0, but
+  the files haven't been checked against the pack itself yet. It's
+  still drawn on a plain canvas with no Phaser, reading the sheet's XML
+  atlas directly.
+  - Ships are drawn as a hull (`hullLarge`) with a separate sail
+    (`sailLarge`) on top, rotated to the sail's trim angle, so you can
+    see how the ship is set to the wind. The ready-made `ship (n)`
+    sprites have their sails fixed fore and aft. The sheet has sails in
+    several colours, including blue (`sailLarge (5)`) and red
+    (`sailLarge (3)`).
+  - `cannonBall`, `explosion1–3` and `fire1–2` cover shots, hits and a
+    sinking ship. `wood (n)` can be wreckage.
+  - A hull sprite is 108 px long for a 40 m ship. So 64 px terrain
+    tiles come out at about 22 m, which sets the tile size above.

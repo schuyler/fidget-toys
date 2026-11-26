@@ -48,7 +48,7 @@ const audio = createAudio();
 let game;
 /** @type {(ReturnType<typeof createAI>|null)[]} */
 let ais = [null, null];
-let phase = 'countdown'; // 'countdown' | 'play' | 'over'
+let phase = 'menu'; // 'menu' | 'countdown' | 'play' | 'over'
 let countdown = 0;
 let paused = false;
 let acc = 0;
@@ -61,7 +61,8 @@ const drags = new Map();
 /** @type {{x: number, y: number}[]} smoothed on-screen target positions (board px) */
 let targetsPx = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
 
-function newGame() {
+/** @param {boolean} [start] false: set up the board but wait at the start menu */
+function newGame(start = true) {
   const short = CHOICES.size[/** @type {keyof typeof CHOICES.size} */ (settings.size)];
   const portrait = window.innerHeight > window.innerWidth;
   // Match the board's aspect ratio to the screen (hex rows are 1.5 radii
@@ -89,17 +90,17 @@ function newGame() {
   });
   ais = [null, settings.mode === '2p' ? null
     : createAI(1, game.params.seed, settings.mode === 'cpu-easy'
-      ? { thinkEvery: 16, aggression: 0.5, noise: 14, dragSpeed: 0.55 }
-      : { dragSpeed: 1.1 })];
+      ? { thinkEvery: 16, aggression: 0.5, noise: 14, dragSpeed: 1.1 }
+      : { dragSpeed: 2.2 })];
   renderer.setGame(game);
   drags.clear();
   targetsPx = [0, 1].map((p) => cellPx(game.targets[p]));
-  phase = 'countdown';
+  phase = start ? 'countdown' : 'menu';
   countdown = 3.2;
   lastCount = 4;
   paused = false;
   acc = 0;
-  hintsUntil = performance.now() + 7000;
+  hintsUntil = start ? performance.now() + 7000 : 0;
 }
 
 function cellPx(/** @type {number} */ cell) {
@@ -267,14 +268,15 @@ muteBtn.addEventListener('click', () => { audio.unlock(); audio.setMuted(!audio.
 
 const dialog = /** @type {HTMLDialogElement} */ ($('settings'));
 const form = /** @type {HTMLFormElement} */ ($('settings-form'));
-$('btn-settings').addEventListener('click', () => {
-  paused = phase !== 'over';
+function openSettings() {
+  paused = phase === 'countdown' || phase === 'play';
   for (const [k, v] of Object.entries(settings)) {
     const el = /** @type {RadioNodeList|null} */ (form.elements.namedItem(k)); // radio group: setting .value checks the match
     if (el) el.value = v;
   }
   dialog.showModal();
-});
+}
+$('btn-settings').addEventListener('click', openSettings);
 form.addEventListener('submit', (e) => {
   const submitter = /** @type {HTMLButtonElement|null} */ (/** @type {SubmitEvent} */ (e).submitter);
   if (submitter?.value === 'reset') {
@@ -297,5 +299,38 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden && phase === 'play') paused = true;
 });
 
-newGame();
+// ---------------------------------------------------------------------------
+// Start menu (shown on every page load) and the how-to-play card
+
+const startDialog = /** @type {HTMLDialogElement} */ ($('start'));
+const rulesDialog = /** @type {HTMLDialogElement} */ ($('rules'));
+$('start-new').addEventListener('click', () => {
+  audio.unlock(); // a tap: browsers allow sound from here on
+  startDialog.close();
+  newGame();
+});
+$('start-settings').addEventListener('click', () => {
+  audio.unlock();
+  startDialog.close();
+  openSettings();
+});
+$('start-rules').addEventListener('click', () => {
+  audio.unlock();
+  startDialog.close();
+  rulesDialog.showModal();
+});
+// Escape on the menu means "just play".
+startDialog.addEventListener('cancel', (e) => {
+  e.preventDefault();
+  $('start-new').click();
+});
+// Leaving settings or rules without starting a game goes back to the menu.
+for (const d of [dialog, rulesDialog]) {
+  d.addEventListener('close', () => {
+    if (phase === 'menu' && !startDialog.open) startDialog.showModal();
+  });
+}
+
+newGame(false);
+startDialog.showModal();
 requestAnimationFrame(frame);

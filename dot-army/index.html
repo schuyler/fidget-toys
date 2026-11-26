@@ -18,6 +18,34 @@
     <button id="btn-settings" title="Settings" aria-label="Settings">⚙</button>
   </div>
 
+  <dialog id="start" class="menu">
+    <h1>Dot Army</h1>
+    <p class="tagline">Two swarms. One rule: never turn your back.</p>
+    <div class="pills">
+      <button id="start-new" class="pill primary" autofocus>New game</button>
+      <button id="start-settings" class="pill">Settings</button>
+      <button id="start-rules" class="pill">Rules</button>
+    </div>
+  </dialog>
+
+  <dialog id="rules">
+    <form method="dialog">
+      <h2>How to play</h2>
+      <ul class="rules">
+        <li><b>Drag your marker.</b> Your dots stream toward it. That's your only control.</li>
+        <li><b>Dots face the way they last moved.</b> A dot destroys an enemy in front of it, unless that enemy is facing it back. Then they freeze, glaring, until someone hits one from the side or behind.</li>
+        <li><b>Dots that reach your marker bunch up</b> into a hedgehog, facing outward.</li>
+        <li><b>Park your marker on or beside a spawn point</b> and your dots throw themselves at it, draining its ring. Empty the ring and it's yours: it starts making dots for you.</li>
+        <li><b>Own every spawn point to win.</b></li>
+        <li><b>Playing a friend?</b> Each of you drags your own colour. Tap in your half of the screen to jump your marker there.</li>
+      </ul>
+      <p class="hint"><a href="https://github.com/schuyler/fidget-toys/blob/main/dot-army/RULES.md" target="_blank" rel="noopener">Full rules</a>, for the curious.</p>
+      <menu>
+        <button value="back" class="primary">Back</button>
+      </menu>
+    </form>
+  </dialog>
+
   <dialog id="settings">
     <form id="settings-form" method="dialog">
       <h2>Dot Army</h2>

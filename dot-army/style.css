@@ -151,3 +151,31 @@ menu button {
   cursor: pointer;
 }
 menu button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+/* start menu */
+dialog.menu {
+  width: min(320px, calc(100vw - 32px));
+  text-align: center;
+  padding: 28px 22px 24px;
+}
+dialog.menu h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: 0.5px; }
+.tagline { margin: 0 0 22px; color: var(--muted); font-size: 14px; }
+.pills { display: flex; flex-direction: column; gap: 10px; }
+.pill {
+  padding: 12px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pill.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.pill:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* how-to-play card */
+ul.rules { padding-left: 18px; margin: 0 0 8px; font-size: 14px; line-height: 1.45; }
+ul.rules li { margin: 8px 0; color: var(--muted); }
+ul.rules b { color: var(--text); }

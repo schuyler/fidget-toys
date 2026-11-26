@@ -1,32 +1,43 @@
 // Wires the simulation, renderer, input, AI and sound together.
 
-import { createGame, setTarget, step, DEFAULTS } from './sim.js';
+import { createGame, setTarget, step } from './sim.js';
 import { createAI } from './ai.js';
 import { createRenderer, COLORS } from './render.js';
 import { createAudio } from './audio.js';
 import { cellCenter, pixelToCell } from './hex.js';
 
-/** Cells across the screen's short side; the long side is sized to fill the screen. */
-const SIZES = { small: 24, medium: 34, large: 46 };
+// The settings players see: five simple choices, each a preset. Everything
+// else (meters, regen, spawn interval, facing arc) stays at the sim defaults.
+const CHOICES = {
+  mode: ['2p', 'cpu-easy', 'cpu'],
+  /** cells across the screen's short side; the long side fills the screen */
+  size: { small: 24, medium: 34, large: 46 },
+  /** ticks per second */
+  speed: { slow: 5, average: 8, fast: 12 },
+  /** neutral spawn points */
+  spawns: { few: 4, some: 6, many: 10 },
+  /** rock layout */
+  obstacles: { none: 'open', some: 'rocks', many: 'dense' },
+};
 const SQRT3 = Math.sqrt(3);
 
-const SETTINGS_KEY = 'dot-army-settings';
-const defaultSettings = {
-  mode: '2p',
-  size: 'medium',
-  terrain: 'open',
-  tickRate: DEFAULTS.tickRate,
-  spawnInterval: DEFAULTS.spawnInterval,
-  neutralSpawns: DEFAULTS.neutralSpawns,
-  facingArc: DEFAULTS.facingArc,
-  meterMax: DEFAULTS.meterMax,
-  neutralMeter: DEFAULTS.neutralMeter,
-  meterRegen: DEFAULTS.meterRegen,
-};
+// v2: only the five simple choices are stored, so values from the old
+// advanced fields can't linger invisibly.
+const SETTINGS_KEY = 'dot-army-settings-v2';
+const defaultSettings = { mode: '2p', size: 'medium', speed: 'average', spawns: 'some', obstacles: 'none' };
+/** @param {any} raw */
+function sanitize(raw) {
+  const out = { ...defaultSettings };
+  if (!raw || typeof raw !== 'object') return out;
+  if (CHOICES.mode.includes(raw.mode)) out.mode = raw.mode;
+  for (const k of /** @type {const} */ (['size', 'speed', 'spawns', 'obstacles'])) {
+    if (typeof raw[k] === 'string' && raw[k] in CHOICES[k]) out[k] = raw[k];
+  }
+  return out;
+}
 let settings = { ...defaultSettings };
 try {
-  const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
-  if (saved && typeof saved === 'object') settings = { ...settings, ...saved };
+  settings = sanitize(JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'));
 } catch { /* storage unavailable: use defaults */ }
 
 const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('game'));
@@ -51,7 +62,7 @@ const drags = new Map();
 let targetsPx = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
 
 function newGame() {
-  const short = SIZES[/** @type {keyof typeof SIZES} */ (settings.size)] ?? SIZES.medium;
+  const short = CHOICES.size[/** @type {keyof typeof CHOICES.size} */ (settings.size)];
   const portrait = window.innerHeight > window.innerWidth;
   // Match the board's aspect ratio to the screen (hex rows are 1.5 radii
   // tall, columns sqrt(3) wide), leaving room for the HUD.
@@ -71,18 +82,15 @@ function newGame() {
   game = createGame({
     width,
     height,
-    tickRate: settings.tickRate,
-    spawnInterval: settings.spawnInterval,
-    neutralSpawns: settings.neutralSpawns,
-    facingArc: settings.facingArc,
-    meterMax: settings.meterMax,
-    neutralMeter: settings.neutralMeter,
-    meterRegen: settings.meterRegen,
-    terrain: settings.terrain,
+    tickRate: CHOICES.speed[/** @type {keyof typeof CHOICES.speed} */ (settings.speed)],
+    neutralSpawns: CHOICES.spawns[/** @type {keyof typeof CHOICES.spawns} */ (settings.spawns)],
+    terrain: CHOICES.obstacles[/** @type {keyof typeof CHOICES.obstacles} */ (settings.obstacles)],
     seed: (Math.random() * 2 ** 31) >>> 0,
   });
   ais = [null, settings.mode === '2p' ? null
-    : createAI(1, game.params.seed, settings.mode === 'cpu-easy' ? { thinkEvery: 16, aggression: 0.5, noise: 14 } : {})];
+    : createAI(1, game.params.seed, settings.mode === 'cpu-easy'
+      ? { thinkEvery: 16, aggression: 0.5, noise: 14, dragSpeed: 0.55 }
+      : { dragSpeed: 1.1 })];
   renderer.setGame(game);
   drags.clear();
   targetsPx = [0, 1].map((p) => cellPx(game.targets[p]));
@@ -262,8 +270,8 @@ const form = /** @type {HTMLFormElement} */ ($('settings-form'));
 $('btn-settings').addEventListener('click', () => {
   paused = phase !== 'over';
   for (const [k, v] of Object.entries(settings)) {
-    const el = /** @type {HTMLInputElement|null} */ (form.elements.namedItem(k));
-    if (el) el.value = String(v);
+    const el = /** @type {RadioNodeList|null} */ (form.elements.namedItem(k)); // radio group: setting .value checks the match
+    if (el) el.value = v;
   }
   dialog.showModal();
 });
@@ -272,20 +280,7 @@ form.addEventListener('submit', (e) => {
   if (submitter?.value === 'reset') {
     settings = { ...defaultSettings };
   } else if (submitter?.value === 'apply') {
-    const data = new FormData(form);
-    for (const k of Object.keys(defaultSettings)) {
-      const v = data.get(k);
-      if (v === null) continue;
-      const def = /** @type {any} */ (defaultSettings)[k];
-      if (typeof def === 'number') {
-        const el = /** @type {HTMLInputElement} */ (form.elements.namedItem(k));
-        const n = Number(v);
-        const min = Number(el.min || 0), max = Number(el.max || Infinity);
-        /** @type {any} */ (settings)[k] = Number.isFinite(n) && v !== '' ? Math.min(max, Math.max(min, Math.round(n))) : def;
-      } else {
-        /** @type {any} */ (settings)[k] = String(v);
-      }
-    }
+    settings = sanitize(Object.fromEntries(new FormData(form)));
   } else {
     paused = false;
     return;

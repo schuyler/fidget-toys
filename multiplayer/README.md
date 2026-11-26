@@ -133,7 +133,7 @@ The relay in NETWORK.md forwards every message through a Durable Object. It
 estimates about **170 ten-minute games a day** before hitting the free limit.
 The limit is Durable Object *duration*, not requests. A Dot Army room gets a
 message every 125 ms, so it never goes idle long enough to hibernate, and
-it's billed for the whole game (128 MB × 600 s ≈ 75 GB-s, against 13,000
+it's billed for the whole game (128 MB × 600 s ≈ 77 GB-s, against 13,000
 GB-s a day).
 
 With WebRTC, the Durable Object only handles connection setup: an offer, an
@@ -175,7 +175,7 @@ fallback. Two options:
 
 - `GET /room/<game>/<CODE>`, upgraded to a WebSocket, goes to the Durable
   Object `idFromName('<game>/<CODE>')`. The game in the path keeps rooms of
-  different games apart and lets the Worker check a per-game seat limit.
+  different games apart and could let the relay check a per-game seat limit (today it's a global 8).
 - **Seats** numbered 0..N-1 instead of host/guest. Seat 0 is the host,
   whose settings apply (as in NETWORK.md).
 - It forwards messages unread, tagged with the sender's seat: `{from, msg}`.
@@ -215,7 +215,7 @@ On a home server:
 - **TURN** (with step 1b): run [coturn](https://github.com/coturn/coturn) next to it as the
   fallback when P2P fails, instead of relaying game traffic through
   `server.js`. Use its time-limited credentials (`use-auth-secret`):
-  `server.js` mints a username and password for each room, so the TURN
+  `server.js` would mint a username and password for each room, so the TURN
   server isn't an open relay. coturn needs a range of UDP ports forwarded
   through the router as well as its listening port. The relay path in
   `server.js` stays as a last resort.
@@ -247,7 +247,7 @@ within a few seconds. A query parameter will force one, for testing; today
 
 ### Session
 
-This is Dot Army's network code, moved out of its `main.js` and made
+This will be Dot Army's network code, moved out of its `main.js` and made
 game-agnostic:
 
 - `hello` / `start` / `bye` handshake. `PROTOCOL` belongs to each game's

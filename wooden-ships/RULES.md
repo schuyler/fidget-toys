@@ -340,9 +340,11 @@ Each is a sketch, not a rule yet.
   - Lofted shots could clear low islands, and later could be how chain
     shot reaches rigging.
   - The ball's height shows as its shadow on the water pulling away
-    from it. **(open: whether charging also shows where the shots will
-    land, or only a gauge. A landing line makes range easy to judge,
-    and may take the skill out)**
+    from it. While charging, a gauge shows how far you've charged.
+  - **Targeting lines** (later): showing where the shots will land
+    while you charge. Deferred until the MVP has shown whether the game
+    is playable and fun. A landing line makes range easy to judge, and
+    may take the skill out.
 - **Magazine explosions** (optional): a hit that kills the last of a
   ship's crew has a small chance of blowing her up instead of making her
   strike. That brings back a dramatic sinking without a second damage

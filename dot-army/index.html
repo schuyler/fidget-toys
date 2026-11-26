@@ -23,37 +23,40 @@
       <h2>Dot Army</h2>
       <label>Opponent
         <select name="mode">
-          <option value="cpu-easy">Easy CPU (you're blue)</option>
-          <option value="cpu">CPU (you're blue)</option>
-          <option value="2p">Two players, one screen</option>
+          <option value="2p">Human</option>
+          <option value="cpu-easy">Easy CPU</option>
+          <option value="cpu">Hard CPU</option>
         </select>
       </label>
-      <label>Field
+      <label>Board
         <select name="size">
           <option value="small">Small</option>
           <option value="medium">Medium</option>
           <option value="large">Large</option>
         </select>
       </label>
-      <label>Terrain
-        <select name="terrain">
-          <option value="open">Open field</option>
-          <option value="rocks">Rocks</option>
+      <label>Speed
+        <select name="speed">
+          <option value="slow">Slow</option>
+          <option value="average">Average</option>
+          <option value="fast">Fast</option>
         </select>
       </label>
-      <label>Neutral spawns <input name="neutralSpawns" type="number" min="0" max="16" step="2"></label>
-      <label>Ticks per second <input name="tickRate" type="number" min="1" max="30"></label>
-      <label>Ticks between spawns <input name="spawnInterval" type="number" min="1" max="20"></label>
-      <label>Spawn meter max <input name="meterMax" type="number" min="1" max="200"></label>
-      <label>Neutral starting meter <input name="neutralMeter" type="number" min="1" max="200"></label>
-      <label>Ticks per meter regen <input name="meterRegen" type="number" min="0" max="200" title="0 = no regen"></label>
-      <label>Facing arc
-        <select name="facingArc">
-          <option value="1">Dead ahead</option>
-          <option value="3">Front three</option>
+      <label>Spawns
+        <select name="spawns">
+          <option value="few">Few</option>
+          <option value="some">Some</option>
+          <option value="many">Many</option>
         </select>
       </label>
-      <p class="hint">Drag your marker; your dots follow. A dot destroys an enemy it's facing, unless that enemy faces it back. Park your marker on a spawn point to attack it. Capture every spawn to win. <a href="https://github.com/schuyler/fidget-toys/blob/main/dot-army/RULES.md" target="_blank" rel="noopener">Full rules</a></p>
+      <label>Obstacles
+        <select name="obstacles">
+          <option value="none">None</option>
+          <option value="some">Some</option>
+          <option value="many">Many</option>
+        </select>
+      </label>
+      <p class="hint">Drag your marker; your dots follow. A dot destroys an enemy it's facing, unless that enemy faces it back. Park your marker on or beside a spawn point to attack it. With a CPU opponent, you're blue. Capture every spawn to win. <a href="https://github.com/schuyler/fidget-toys/blob/main/dot-army/RULES.md" target="_blank" rel="noopener">Full rules</a></p>
       <menu>
         <button value="reset" formnovalidate>Defaults</button>
         <button value="cancel" formnovalidate>Cancel</button>

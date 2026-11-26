@@ -16,7 +16,7 @@ const results = [];
 for (let g = 0; g < games; g++) {
   const seed = 1000 + g;
   const game = createGame({ ...overrides, seed });
-  const ais = [createAI(0, seed * 3 + 1), createAI(1, seed * 7 + 2)];
+  const ais = [createAI(0, seed * 3 + 1, { dragSpeed: 0.75 }), createAI(1, seed * 7 + 2, { dragSpeed: 0.75 })];
   let kills = 0, captures = 0, peak = 0, lockedSum = 0;
   const t0 = performance.now();
   while (game.winner < 0 && game.tick < maxTicks) {

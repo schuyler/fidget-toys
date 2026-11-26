@@ -203,16 +203,21 @@ function generateLayout(game) {
     placed++;
   }
 
-  if (params.terrain === 'rocks') generateRocks(game);
+  if (params.terrain === 'rocks') generateRocks(game, 220);
+  else if (params.terrain === 'dense') generateRocks(game, 100);
 }
 
-/** Scatter mirrored rock clusters, keeping every spawn reachable. */
-function generateRocks(/** @type {Game} */ game) {
+/**
+ * Scatter mirrored rock clusters, keeping every spawn reachable. If a layout
+ * cuts something off, retry with slightly fewer rocks.
+ * @param {Game} game @param {number} cellsPerRock  board cells per rock cluster
+ */
+function generateRocks(game, cellsPerRock) {
   const { grid, rng } = game;
   const { W, H, N } = grid;
   for (let attempt = 0; attempt < 20; attempt++) {
     const walls = new Uint8Array(N);
-    const clusters = Math.floor((W * H) / 220);
+    const clusters = Math.floor(((W * H) / cellsPerRock) * (1 - attempt * 0.04));
     for (let k = 0; k < clusters; k++) {
       // a short random walk makes an irregular rock
       let c = rng.int(N);

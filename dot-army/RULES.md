@@ -15,7 +15,7 @@ way each dot is facing. Capture every spawn point to win.
 - The layout is point-symmetric (rotated 180° about the centre), so
   neither side has an advantage. In portrait, blue is at the bottom and
   red at the top, so two people can face each other across a phone.
-- **Terrain:** open field (the default), or scattered rocks. Rocks are
+- **Obstacles:** none (the default), some, or many rocks. Rocks are
   impassable, and dots path around them. Every spawn point is always
   reachable.
 
@@ -154,10 +154,25 @@ loser still has on the field don't matter.
   colour's marker, and multitouch lets both drag at once. Tapping empty
   space in your own half of the screen jumps your marker there. Halves
   are bottom and top in portrait, left and right in landscape.
-- **vs CPU** (normal or easy): you're blue, and the CPU moves red's
-  marker under exactly the same rules a human does.
+- **vs CPU** (easy or hard): you're blue, and the CPU moves red's
+  marker under the same rules a human does. It drags the marker at a
+  limited speed rather than jumping it: about 3 cells per second on
+  easy and 6 on hard, at average speed.
 - Pause, new game, mute and settings buttons are at the edge of the
   screen. Settings are remembered between visits.
+
+## Settings
+
+The settings panel offers five choices. Everything else in the parameter
+table below is fixed at its default.
+
+| Setting | Choices |
+|---|---|
+| Opponent | Human, Easy CPU, Hard CPU |
+| Board | Small, Medium, Large (24 / 34 / 46 cells across the short side) |
+| Speed | Slow, Average, Fast (5 / 8 / 12 ticks per second) |
+| Spawns | Few, Some, Many (4 / 6 / 10 neutral spawns) |
+| Obstacles | None, Some, Many |
 
 ## Parameters
 
@@ -172,7 +187,7 @@ loser still has on the field don't matter.
 | `meterRegen` | 8 | Ticks per +1 meter on owned spawns (0 = off) |
 | `facingArc` | 1 | 1 = dead ahead, 3 = front three |
 | `maxDotsPerPlayer` | 0 | Optional cap on each player's dots (0 = none) |
-| `terrain` | open | `open` or `rocks` |
+| `terrain` | open | `open`, `rocks` or `dense` |
 | `seed` | random | Same seed and same inputs = same game |
 
 ## Notes

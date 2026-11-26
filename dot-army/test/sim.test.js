@@ -220,3 +220,37 @@ test('generated layouts are point-symmetric', () => {
     assert.equal(m.meter, s.meter);
   }
 });
+
+test('the CPU drags its marker at a limited speed instead of jumping', () => {
+  const game = createGame({ seed: 11 });
+  const ai = createAI(RED, 3, { dragSpeed: 0.5 });
+  let prev = game.targets[RED], moved = 0;
+  for (let i = 0; i < 200; i++) {
+    const t = ai.think(game);
+    if (t !== null) {
+      assert.ok(game.grid.nbr.subarray(prev * 6, prev * 6 + 6).includes(t), 'one cell per move');
+      setTarget(game, RED, t);
+      prev = t;
+      moved++;
+    }
+    step(game);
+  }
+  assert.ok(moved > 0 && moved <= 100, `moved ${moved} cells in 200 ticks at 0.5 cells/tick`);
+});
+
+test('dense rocks stay symmetric and leave every spawn reachable', () => {
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const game = createGame({ seed, terrain: 'dense' });
+    const g = game.grid;
+    let rocks = 0;
+    for (let i = 0; i < g.N; i++) {
+      assert.equal(game.terrain[i], game.terrain[mirror(g, i)]);
+      if (game.terrain[i] === 1) rocks++;
+    }
+    assert.ok(rocks > 0, 'has rocks');
+    // every spawn has a reachable exit in blue's flow field from its home
+    setTarget(game, BLUE, game.spawns[0].exits[0]);
+    step(game);
+    for (const s of game.spawns) assert.ok(s.exits.some((e) => game.dist[BLUE][e] < 1e9), `spawn ${s.id} reachable`);
+  }
+});

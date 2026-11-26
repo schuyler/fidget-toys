@@ -1,8 +1,9 @@
 // @ts-check
-// A simple CPU opponent. It only ever moves its target, exactly like a human.
+// A simple CPU opponent. It only ever moves its target, like a human, and it
+// drags the target there at a limited speed rather than teleporting it.
 // Deliberately uses its own RNG so it never disturbs the game's RNG stream.
 
-import { hexDist } from './hex.js';
+import { hexDist, dirToward } from './hex.js';
 import { createRng } from './rng.js';
 
 /** @typedef {import('./sim.js').Game} Game */
@@ -10,7 +11,8 @@ import { createRng } from './rng.js';
 /**
  * @param {number} player
  * @param {number} seed
- * @param {{ thinkEvery?: number, aggression?: number, noise?: number }} [opts]
+ * @param {{ thinkEvery?: number, aggression?: number, noise?: number, dragSpeed?: number }} [opts]
+ *   dragSpeed: cells per tick the marker moves toward where the CPU wants it (Infinity = jump)
  */
 export function createAI(player, seed, opts = {}) {
   const rng = createRng(seed ^ 0x9e3779b9);
@@ -20,9 +22,35 @@ export function createAI(player, seed, opts = {}) {
   let goal = -1;        // spawn id we're going after
   let goalSince = 0;
   let lastMeter = 0;
+  const dragSpeed = opts.dragSpeed ?? Infinity;
+  let aim = -1;         // cell the CPU wants its marker on
+  let travel = 0;       // fractional cells of drag owed
 
-  /** @param {Game} game @returns {number|null} new target cell, or null for no change */
+  /**
+   * Call once per tick. Decides where it wants its marker, then drags the
+   * marker toward that cell at dragSpeed.
+   * @param {Game} game @returns {number|null} new target cell, or null for no change
+   */
   function think(game) {
+    const want = decide(game);
+    if (want !== null) aim = want;
+    const at = game.targets[player];
+    if (aim < 0 || aim === at) { travel = 0; return null; }
+    if (!Number.isFinite(dragSpeed)) return aim;
+    travel += dragSpeed;
+    let cell = at;
+    while (travel >= 1 && cell !== aim) {
+      const next = game.grid.nbr[cell * 6 + dirToward(game.grid, cell, aim)];
+      if (next < 0) break;
+      cell = next;
+      travel -= 1;
+    }
+    if (cell === aim) travel = 0;
+    return cell === at ? null : cell;
+  }
+
+  /** @param {Game} game @returns {number|null} the cell it now wants, or null for no change */
+  function decide(game) {
     if (game.tick % thinkEvery !== 0) return null;
     const { grid } = game;
     const enemy = 1 - player;

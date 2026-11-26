@@ -123,30 +123,35 @@ Getting upwind of your rival lets you steal their wind. **(open)**
   An arc beside each button shows its reload.
 - **Hits:** a ball that crosses the other ship's hull (a 40 × 12 m
   capsule) hits it and is removed. A ship can't hit itself.
-  - A normal hit does 1 damage.
+  - A normal hit kills 1 crew.
   - A **raking** hit, from a ball travelling within 30° of the target's
-    fore-aft line (from dead ahead or dead astern), does 2. Down the
-    length of a ship a ball passes through everything. Crossing your
+    fore-aft line (from dead ahead or dead astern), kills 2. A ball
+    fired down the length of a ship travels the whole gun deck, which
+    is why raking was so feared. Crossing your
     rival's bow or stern while they can't reply is the best move in the
     game.
-- Damage changes nothing until it sinks you. A battered ship sails and
-  shoots as well as a fresh one, so a lead can always be overturned.
+- **Crew is your hit points,** as in Star Control. Losing crew changes
+  nothing until you have none: a short-handed ship sails and shoots as
+  well as a full one, so a lead can always be overturned. **(future
+  option: damage slows a ship. See Notes)**
 
 ## Hazards
 
 - **Shallows:** `bowDrag` and `keelDrag` are tripled. You can sail
   through, slowly.
-- **Islands:** a ship that touches an island stops dead, takes 1 damage
+- **Islands:** a ship that touches an island stops dead, loses 1 crew
   (at most once a second), and is pushed clear. Balls hit islands and
   stop.
-- **Collision:** ships that touch bounce apart, and each takes damage
+- **Collision:** ships that touch bounce apart, and each loses crew
   equal to their closing speed ÷ 4 kts, rounded down. Boarding comes
   later (see Embellishments).
 
 ## Winning
 
-- Each ship has **12 hull**. A ship at 0 sinks, and the other side wins.
-- If both sink in the same tick, it's a draw.
+- Each ship has **12 crew**. A ship with none left **strikes her
+  colours** (surrenders), and the other side wins. Her flag comes down,
+  and she drifts.
+- If both strike in the same tick, it's a draw.
 - No time limit. **(open: one, if headless games show long standoffs
   with both ships running downwind)**
 
@@ -197,7 +202,7 @@ the bottom one.
 | Islands | None, Some, Many |
 | Wind | Steady, Shifty (default), Gusty |
 | Wind shadow | Off, On |
-| Hull | 6, 12, 20 |
+| Crew | 6, 12, 20 |
 
 *Steady* never shifts. *Gusty* shifts twice as often, by up to 45°.
 
@@ -217,8 +222,8 @@ the bottom one.
 | `gunRange` | 300 m | Distance before a ball splashes |
 | `spread` | ±3° | Random error per ball |
 | `reload` | 5 s | Per side, in real seconds |
-| `rakeArc` | 30° | Fore-aft cone for double damage |
-| `hull` | 12 | Damage to sink |
+| `rakeArc` | 30° | Fore-aft cone for double casualties |
+| `crew` | 12 | Crew per ship; at 0 she strikes |
 | `seed` | random | Same seed and same inputs = same game |
 
 **Scale.** At real speed, a ship making 10 kts (5 m/s) would take over
@@ -240,7 +245,7 @@ the duel shouldn't be built in ways that rule it out:
 - **Any number of ships,** each with a side (blue, red, neutral, or
   later more) rather than hardcoded as "blue" and "red".
 - **Ship types are data:** length, sail and hull coefficients, guns per
-  side, hull, and later cargo and crew. The duel uses one type. The
+  side, crew, and later cargo. The duel uses one type. The
   prototype already kept its coefficients in a `Specs` record.
 - **Guns are batteries** that belong to something. A ship has two (port
   and starboard). A fort at a port would be a battery on land with its
@@ -256,11 +261,14 @@ the duel shouldn't be built in ways that rule it out:
 - **The CPU steers by goals** (close to fire, rake, flee, follow a route,
   make for port), so a cargo ship that runs and a frigate that hunts are
   the same machinery with different goals.
-- **Hull is state that can persist** between encounters. Damage has no
-  effect in the duel, but persistent damage is what would make refitting
-  matter. Looting probably needs a way to take a ship rather than sink
-  it, such as striking colours at low hull, or boarding (see
-  Embellishments).
+- **Crew is state that can persist** between encounters. A refit at a
+  friendly port is mostly recruiting.
+- **Prize crews.** A ship that strikes can be taken instead of left
+  adrift: come alongside, and move some of your crew across to sail her
+  home or loot her. Those crew come out of your own hit points, so every
+  prize makes you weaker until you reach port. That trade is the point
+  of using crew as hit points: taking a prize is a real cost. Captains in
+  the age of sail really did run short of men this way.
 - **State can be saved:** the whole sim state is plain data plus the
   seed, so a campaign save is a serialised state.
 
@@ -271,31 +279,45 @@ Each is a sketch, not a rule yet.
 
 - **Shore batteries.** Guns on land at a port or headland: a battery
   with a fixed arc, longer range than a ship's guns, and its own reload.
-  A battery has hull of its own and goes silent at 0, so bombarding a
-  port means silencing its guns first. Only a fort can hit you out to
+  A battery has its own gun crew and goes silent when it has none left,
+  so bombarding a port means silencing its guns first. Only a fort can hit you out to
   its full range, so you can't trade broadsides with it. You have to
   run past it or come in from outside its arc. **(open: whether a
   silenced battery comes back after a while)**
 - **Boarding.** Ships that touch below a set closing speed grapple
   instead of bouncing. They stay locked together, and neither can fire
-  into the other. The fight is decided by crew. Crew becomes a
-  ship-type stat, broadsides kill some of it, and the side with more
-  crew left wins over a few seconds. The winner takes the ship: that's
-  how looting works. Either ship can cut free (a button) while the
-  fight is still on. **(open: whether a third ship can fire into a
+  into the other. Each second, both sides lose crew in proportion to
+  the other side's crew, until one side has none and strikes. Because
+  crew is also hit points, softening a ship with broadsides first and
+  then boarding comes naturally: you're judging when they're weak
+  enough to grapple. The winner takes the ship as a prize. Either ship
+  can cut free (a button) while the fight is still on. **(open: whether a third ship can fire into a
   grappled pair, hitting both)**
 - **Running aground.** In the MVP, shallows only slow you and touching
   an island bounces you off. With grounding, a ship that enters a
   shallows tile faster than a set speed, or touches a beach, goes
-  aground. It stops, can't steer, and takes damage depending on its
-  speed. Only windage can get it off: it floats free if the apparent
+  aground. It stops and can't steer. It loses no crew: the cost is
+  time. Only windage can get it off: it floats free if the apparent
   wind pushes it back toward deeper water for long enough. Otherwise a
   **kedge** button frees it slowly. A grounded ship is a sitting target,
   so the charts suddenly matter. **(open: tides; whether heavier ships
   draw more water and ground on shallows a light ship can cross, which
   would give a small ship somewhere to run)**
 
+- **Magazine explosions** (optional): a hit that kills the last of a
+  ship's crew has a small chance of blowing her up instead of making her
+  strike. That brings back a dramatic sinking without a second damage
+  track. It also destroys the prize. **(open)**
+
 ## Notes
+
+- **Damage slows a ship (future option).** Fewer crew means sails
+  handled more slowly, so less drive and slower turns. That would feel
+  more realistic, but it risks unbalancing the game: whoever lands the
+  first broadside gets faster relative to their rival, so the gap keeps
+  growing. It's out of the MVP. If it's tried, the headless games should
+  show how often the side that kills crew first goes on to win, with and
+  without it.
 
 - **The weather gauge.** In real fleet actions the upwind ship chose
   whether and when to fight, and the downwind ship could only run or
@@ -352,7 +374,8 @@ Each is a sketch, not a rule yet.
     sprites have their sails fixed fore and aft. The sheet has sails in
     several colours, including blue (`sailLarge (5)`) and red
     (`sailLarge (3)`).
-  - `cannonBall`, `explosion1–3` and `fire1–2` cover shots, hits and a
-    sinking ship. `wood (n)` can be wreckage.
+  - `cannonBall`, `explosion1–3` and `fire1–2` cover shots and hits.
+    `flag (n)` can be lowered when a ship strikes. `wood (n)` can be
+    wreckage from a magazine explosion.
   - A hull sprite is 108 px long for a 40 m ship. So 64 px terrain
     tiles come out at about 22 m, which sets the tile size above.

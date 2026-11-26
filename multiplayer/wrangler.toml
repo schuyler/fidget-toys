@@ -1,0 +1,18 @@
+name = "fidget-rooms"
+main = "worker.js"
+# On or after 2026-04-07, the runtime answers close frames itself, so closed
+# sockets drop out of getWebSockets() promptly.
+compatibility_date = "2026-11-01"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# The free plan only offers SQLite-backed Durable Objects. Nothing is stored.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+# ALLOWED_ORIGINS defaults to https://schuyler.info plus localhost. To change it:
+# [vars]
+# ALLOWED_ORIGINS = "https://example.com,http://localhost:*"

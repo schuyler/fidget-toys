@@ -7,6 +7,7 @@ import { createAudio } from './audio.js';
 import { cellCenter, pixelToCell } from './hex.js';
 import { createLockstep } from './lockstep.js';
 import { broadcastTransport, PROTOCOL } from './net.js';
+import { relayTransport } from '../../multiplayer/relay.js';
 
 // The settings players see: five simple choices, each a preset. Everything
 // else (meters, regen, spawn interval, facing arc) stays at the sim defaults.
@@ -451,7 +452,10 @@ muteBtn.addEventListener('click', () => { audio.setMuted(!audio.muted); syncMute
 
 /** @param {string} room @param {'host'|'guest'} role */
 function startNet(room, role) {
-  const transport = broadcastTransport(room, role);
+  const relay = query.get('relay');
+  const transport = relay
+    ? relayTransport(relay, 'dot-army', room, role === 'host' ? 0 : 1)
+    : broadcastTransport(room, role);
   net = { role, local: role === 'host' ? 0 : 1, room, transport, ls: null, gameNo: 0, waitingSince: 0, status: 'lobby' };
   transport.onMessage(onNetMessage);
   newGame(false); // a board to look at while waiting; replaced when the game starts
@@ -506,11 +510,12 @@ function attachLockstep() {
   net.status = 'playing';
 }
 
-// ?room=ABCD&host joins a network game directly (phase 1: tabs in one browser).
+// ?room=ABCD&host joins a network game directly: through the room relay at
+// ?relay=wss://..., or between tabs in one browser without it.
 const query = new URLSearchParams(location.search);
 const room = query.get('room');
 if (room) {
-  startNet(room.toUpperCase().slice(0, 8), query.has('host') ? 'host' : 'guest');
+  startNet(room.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8), query.has('host') ? 'host' : 'guest');
 } else {
   newGame(false);
   startDialog.showModal();

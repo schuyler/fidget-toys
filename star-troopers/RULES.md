@@ -9,6 +9,9 @@ whole turn plays out at once.
 Turn-based. You command one squad; the CPU commands the other. Built so
 that pass-and-play and network play can be added later.
 
+An homage to Tom Walczyk's *StarSoldier* (SPI, 1977). See the notes at
+the end for what it borrows and what it changes.
+
 > **Draft.** *Star Troopers* is a working title. Every number here is a
 > starting guess, to be tuned with headless CPU-vs-CPU games. Questions
 > still open are marked **(open)**.
@@ -49,13 +52,32 @@ that pass-and-play and network play can be added later.
 
 | Species | Squad | Aim | Recovery | Special |
 |---|---|---|---|---|
-| **Troopers** (human) | 4 | 2 | 3 | — |
+| **Compact** (human) | 4 | 2 | 3 | — |
 | **Vell** | 6 | 1 | 1 | Every cell costs 1 to enter (except rock) |
+| **Orrin** | 4 | 2 | 2 | Orbital strikes (below) |
 
-Troopers shoot and dodge twice as well and shake off hits quickly. The
-Vell are worse at both, but there are more of them and they ignore rough
-ground. Mirror matches (Troopers against Troopers) are the default.
-**(open: whether 6 Vell are a fair match for 4 Troopers)**
+- **The Compact:** human colonial troopers. They shoot and dodge twice
+  as well as the Vell, and shake off hits quickly.
+- **The Vell:** worse at both, but there are more of them, they ignore
+  rough ground, and they don't stop coming.
+- **The Orrin:** a little slower to recover than the Compact, but they
+  have a ship overhead.
+
+Mirror matches (Compact against Compact) are the default.
+**(open: whether the three are fair matches for each other)**
+
+### Orbital strikes
+
+- An Orrin squad has **2 strikes** per game.
+- To call one, an Orrin trooper spends **3 points** during plotting and
+  picks a target cell in its line of sight.
+- The strike lands **at the end of the Move phase**, on the target cell
+  and the six around it, so anyone who guessed it was coming has had
+  the turn to get clear.
+- It hits every trooper in those cells, Orrin included, at **attack
+  12**, against the usual defence without the range term.
+- If the calling trooper goes down before the strike lands, the strike
+  still lands. **(open)**
 
 ## Orders
 
@@ -70,6 +92,7 @@ split between four tasks, and points left unspent are wasted:
   make every shot at this trooper harder this turn.
 - **Overwatch:** points held back to shoot the first enemy that shows
   itself during movement (see A turn).
+- **Strike** (Orrin only): 3 points to call an orbital strike.
 
 A trooper can do all four in one turn, as long as the points add up.
 
@@ -93,8 +116,8 @@ defence = cover            (of the cell the target is in when shot)
 - There's no combined fire: every shot is worked out on its own, and
   their shock adds up.
 
-For example, a fresh Trooper puts 5 points into a shot (attack 10) at a
-Trooper standing in the open 4 cells away (range 1). With no dodge,
+For example, a fresh Compact trooper puts 5 points into a shot (attack
+10) at another standing in the open 4 cells away (range 1). With no dodge,
 that's `floor(9 / 2) = 4` shock. If the target had put 3 points into
 dodging (+6), it would have taken `floor(3 / 2) = 1`.
 
@@ -137,11 +160,12 @@ orders.
      it is.
    - A trooper that goes down stops and is removed at the end of the
      step.
-4. **Recovery:** every trooper that took no shock this turn removes
+4. **Strikes:** orbital strikes called this turn land, all at once.
+5. **Recovery:** every trooper that took no shock this turn removes
    shock equal to its Recovery. A hurt trooper that gets into cover and
    keeps its head down will get back into the fight; one that's still
-   being shot at won't.
-5. **Win check.**
+   being shot at won't. Shock from a strike counts as being hit.
+6. **Win check.**
 
 ## Scenarios
 
@@ -177,8 +201,8 @@ numbers is a draw.
 
 | Setting | Choices |
 |---|---|
-| Your squad | Troopers, Vell |
-| Enemy squad | Troopers, Vell |
+| Your squad | Compact, Vell, Orrin |
+| Enemy squad | Compact, Vell, Orrin |
 | Scenario | Skirmish, Hold, Breakthrough |
 | CPU | Easy, Hard |
 | Map | Small, Medium, Large |
@@ -194,6 +218,9 @@ numbers is a draw.
 | `motionStep` | 2 | Plotted cells moved per +1 defence |
 | `damageDivisor` | 2 | Shock = margin ÷ this, rounded down |
 | `overwatchRange` | 6 | How far overwatch reaches |
+| `strikes` | 2 | Orbital strikes per Orrin squad per game |
+| `strikeCost` | 3 | Task points to call a strike |
+| `strikeAttack` | 12 | Attack of a strike against each trooper it hits |
 | `noise` | 0 | 0 = off, 1 = ±1 on shots that land |
 | `turnLimit` | 12 | Turns before a scenario is decided on troopers left |
 | `seed` | random | Same seed and same orders = same game |
@@ -221,9 +248,27 @@ numbers is a draw.
   prediction is easy to bait.
 - **Pass-and-play,** when it comes, needs a cover screen between the
   two players' plotting.
-- **What changed from the 1977 game that inspired this** (SPI's
-  StarSoldier). I couldn't get hold of its rulebook, so this is built
-  from reviews and published play reports:
+- **Homage.** Tom Walczyk's *StarSoldier* (SPI, 1977; developed by
+  B.E. Hessel, art by Redmond A. Simonsen) was the tactical volume of
+  SPI's StarForce trilogy, alongside StarForce and Outreach. Outreach is
+  also what inspired Coreward Bound. Its one big idea, and the reason
+  this game exists, is that a soldier's actions and its health are the
+  same pool of points. Get hit, and you can do less. Hessel's
+  developer's notes, as quoted in a 2018 review: "We do not believe
+  that combat results have been expressed in movement costs before."
+- **What it borrows:**
+  - the task-point pool, with each species rated for aim and
+    recovery;
+  - attack as points spent times aim, against a defence built from
+    terrain, range, movement and evasion;
+  - pre-plotted, simultaneous orders, with opportunity fire;
+  - the original's numbers. The Compact's 9 / 2 / 3 and the Vell's
+    9 / 1 / 1 are the pool, aim and recovery that StarSoldier gave its
+    humans and its Xenophobes;
+  - the lineup of a human force and two alien species, one of them
+    backed from orbit, though with its own species and names.
+- **What changed from the 1977 game.** I couldn't get hold of its
+  rulebook, so this is built from reviews and published play reports:
   - The computer does the bookkeeping. Tracking points and writing
     orders was what reviewers complained about most.
   - Four tasks instead of the original's longer list.
@@ -233,7 +278,7 @@ numbers is a draw.
   - Shots happen before anyone moves, from where everyone starts.
     Overwatch is the only fire during movement, and a hit pins.
   - Single-stage turns only.
-  - Its own species and scenarios. No orbital bombardment, homing
-    missiles or wildlife. **(open: any of these as later additions,
-    for example a one-shot orbital strike, or a neutral predator that
+  - Its own species and scenarios. Orbital support is boiled down to
+    the Orrin's two strikes. No homing missiles or wildlife. **(open:
+    either as a later addition, for example a neutral predator that
     attacks whoever's nearest)**

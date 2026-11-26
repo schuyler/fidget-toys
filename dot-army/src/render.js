@@ -35,6 +35,10 @@ export function createRenderer(canvas) {
   let dpr = 1, cw = 0, ch = 0;
   let size = 8, ox = 0, oy = 0, bw = 0, bh = 0;
   let portrait = false;
+  // Whose screen this is. Shared-screen play: both players, mirrored HUD and
+  // text. Network play: one player, board turned so their home is nearest
+  // them (flip = 180°), one HUD and one copy of each message.
+  let view = { single: false, flip: false, local: 0 };
   /** @type {HTMLCanvasElement|null} */ let staticLayer = null;
   /** @type {Game|null} */ let game = null;
 
@@ -208,6 +212,7 @@ export function createRenderer(canvas) {
     const sy = shake ? (Math.random() - 0.5) * shake * size * 0.8 : 0;
     ctx.save();
     ctx.translate(ox + sx, oy + sy);
+    if (view.flip) { ctx.translate(bw, bh); ctx.rotate(Math.PI); }
 
     ctx.drawImage(staticLayer, 0, 0, staticLayer.width / dpr, staticLayer.height / dpr);
 
@@ -442,7 +447,7 @@ export function createRenderer(canvas) {
       if (ui.hints && ui.human[p]) {
         ctx.save();
         ctx.translate(t.x, t.y);
-        if (portrait && p === 1) ctx.rotate(Math.PI);
+        if (view.single ? view.flip : portrait && p === 1) ctx.rotate(Math.PI);
         ctx.fillStyle = color;
         ctx.globalAlpha = 0.6 + 0.4 * Math.sin(now * 6);
         ctx.font = `600 ${Math.max(12, size * 1.6)}px system-ui, sans-serif`;
@@ -456,16 +461,17 @@ export function createRenderer(canvas) {
   /** Tug-of-war bar of spawn ownership, plus dot counts. */
   function drawHud() {
     if (!game) return;
-    if (portrait) {
-      hudBar(cw / 2, ch - 20, 0);
-      hudBar(cw / 2, 20, Math.PI);
+    if (view.single) hudBar(cw / 2, portrait ? ch - 20 : 22, 0, view.local);
+    else if (portrait) {
+      hudBar(cw / 2, ch - 20, 0, 0);
+      hudBar(cw / 2, 20, Math.PI, 1);
     } else {
-      hudBar(cw / 2, 22, 0);
+      hudBar(cw / 2, 22, 0, 0);
     }
   }
 
-  /** @param {number} x @param {number} y @param {number} rot */
-  function hudBar(x, y, rot) {
+  /** @param {number} x @param {number} y @param {number} rot @param {number} first  player shown on the left */
+  function hudBar(x, y, rot, first) {
     if (!game) return;
     const n = game.spawns.length;
     const blue = game.spawns.filter((s) => s.owner === 0).length;
@@ -475,9 +481,9 @@ export function createRenderer(canvas) {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rot);
-    // In the rotated (red-facing) copy, red reads on the left.
-    const order = rot ? [1, 0] : [0, 1];
-    const counts = rot ? [red, blue] : [blue, red];
+    // Each reader sees their own colour on the left.
+    const order = [first, 1 - first];
+    const counts = first ? [red, blue] : [blue, red];
     for (let i = 0; i < n; i++) {
       const owner = i < counts[0] ? order[0] : i >= n - counts[1] ? order[1] : -1;
       ctx.fillStyle = owner >= 0 ? COLORS.players[owner] : 'rgba(125,133,151,0.35)';
@@ -513,7 +519,9 @@ export function createRenderer(canvas) {
     ctx.fillRect(0, 0, cw, ch);
     // with a stats table underneath, pull the text toward the middle so it fits
     const k = o.stats ? 0.1 : 0;
-    const copies = portrait
+    const copies = view.single
+      ? [[cw / 2, ch * (0.5 - k * 1.5), 0]]
+      : portrait
       ? [[cw / 2, ch * (0.68 - k), 0], [cw / 2, ch * (0.32 + k), Math.PI]]
       : [[cw / 2, ch * (0.5 - k * 1.5), 0]];
     for (const [x, y, rot] of copies) {
@@ -581,7 +589,11 @@ export function createRenderer(canvas) {
     onTick,
     draw,
     /** Screen point → board pixel coords. */
-    toBoard(/** @type {number} */ x, /** @type {number} */ y) { return { x: x - ox, y: y - oy }; },
+    toBoard(/** @type {number} */ x, /** @type {number} */ y) {
+      return view.flip ? { x: bw - (x - ox), y: bh - (y - oy) } : { x: x - ox, y: y - oy };
+    },
+    /** @param {{ single: boolean, flip: boolean, local: number }} v */
+    setView(v) { view = { ...v }; },
     get size() { return size; },
     get portrait() { return portrait; },
     get board() { return { x: ox, y: oy, w: bw, h: bh }; },

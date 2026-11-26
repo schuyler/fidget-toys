@@ -156,8 +156,8 @@ loser still has on the field don't matter.
   are bottom and top in portrait, left and right in landscape.
 - **vs CPU** (easy or hard): you're blue, and the CPU moves red's
   marker under the same rules a human does. It drags the marker at a
-  limited speed rather than jumping it: about 3 cells per second on
-  easy and 6 on hard, at average speed.
+  limited speed rather than jumping it: about 4.4 cells per second on
+  easy and 9 on hard, at average speed.
 - Pause, new game, mute and settings buttons are at the edge of the
   screen. Settings are remembered between visits.
 

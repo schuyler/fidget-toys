@@ -89,8 +89,8 @@ function newGame() {
   });
   ais = [null, settings.mode === '2p' ? null
     : createAI(1, game.params.seed, settings.mode === 'cpu-easy'
-      ? { thinkEvery: 16, aggression: 0.5, noise: 14, dragSpeed: 0.35 }
-      : { dragSpeed: 0.75 })];
+      ? { thinkEvery: 16, aggression: 0.5, noise: 14, dragSpeed: 0.55 }
+      : { dragSpeed: 1.1 })];
   renderer.setGame(game);
   drags.clear();
   targetsPx = [0, 1].map((p) => cellPx(game.targets[p]));

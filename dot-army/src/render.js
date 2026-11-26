@@ -388,21 +388,47 @@ export function createRenderer(canvas) {
       const R = Math.max(12, size * 1.7) * (ui.dragging[p] ? 1.35 : 1) * (1 + 0.06 * Math.sin(now * 5 + p));
       ctx.save();
       ctx.translate(t.x, t.y);
-      ctx.rotate(now * (p ? -0.8 : 0.8));
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2.5;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 10;
-      for (let k = 0; k < 4; k++) {
-        ctx.beginPath();
-        ctx.arc(0, 0, R, k * Math.PI / 2 + 0.25, (k + 1) * Math.PI / 2 - 0.25);
-        ctx.stroke();
-      }
-      ctx.rotate(-now * (p ? -0.8 : 0.8));
+      // 1. Dark backing disc: dims the dots underneath so the marker reads
+      //    even on top of a same-coloured crowd.
+      const back = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R * 1.6);
+      back.addColorStop(0, 'rgba(8,10,22,0.82)');
+      back.addColorStop(0.65, 'rgba(8,10,22,0.6)');
+      back.addColorStop(1, 'rgba(8,10,22,0)');
+      ctx.fillStyle = back;
       ctx.beginPath();
-      ctx.arc(0, 0, R * 0.22, 0, Math.PI * 2);
-      ctx.fillStyle = color;
+      ctx.arc(0, 0, R * 1.6, 0, Math.PI * 2);
       ctx.fill();
+      // 2. Arcs: dark outline with a drop shadow, then the team colour.
+      const spin = now * (p ? -0.8 : 0.8);
+      ctx.rotate(spin);
+      ctx.lineCap = 'round';
+      const arcs = () => {
+        for (let k = 0; k < 4; k++) {
+          ctx.beginPath();
+          ctx.arc(0, 0, R, k * Math.PI / 2 + 0.25, (k + 1) * Math.PI / 2 - 0.25);
+          ctx.stroke();
+        }
+      };
+      ctx.shadowColor = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetY = 2;
+      ctx.strokeStyle = '#05060f';
+      ctx.lineWidth = 7;
+      arcs();
+      ctx.shadowColor = 'transparent';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3.5;
+      arcs();
+      ctx.rotate(-spin);
+      // 3. White centre ringed in the team colour: nothing else is white.
+      const r0 = Math.max(4, R * 0.24);
+      ctx.beginPath();
+      ctx.arc(0, 0, r0, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = color;
+      ctx.stroke();
       ctx.restore();
       if (ui.hints && ui.human[p]) {
         ctx.save();

@@ -112,9 +112,15 @@ Getting upwind of your rival lets you steal their wind. **(open)**
 ## Gunnery
 
 - Each ship carries **4 guns a side** (port and starboard).
-- Each player has two fire buttons, port and starboard. A press fires
-  that side's loaded guns as a quick ripple, bow to stern, 0.1 s apart.
-- A ball leaves the gun at right angles to the hull at `muzzleSpeed`,
+- Each player has two fire buttons, one per broadside (see Controls). A
+  press fires that side's loaded guns as a quick ripple, bow to stern,
+  0.1 s apart. The guns are spaced along the middle 30 m of the hull.
+- **Traverse:** each gun can swing up to `traverse` (20°) forward or aft
+  of square to the hull. When it fires, it aims at the centre of the
+  enemy ship as it is at that moment, with no lead. If the enemy is
+  outside its arc, it aims as close as the arc allows. **(open: in the
+  campaign, which enemy a gun aims at when there are several)**
+- A ball leaves the gun at `muzzleSpeed` in the direction it's aimed,
   plus the ship's own velocity, with a random spread of up to ±3°. It
   flies straight and flat, and it splashes harmlessly after `gunRange`.
   **(open: elevation, or balls skipping off the water)**
@@ -123,14 +129,25 @@ Getting upwind of your rival lets you steal their wind. **(open)**
   An arc beside each button shows its reload.
 - **Hits:** a ball that crosses the other ship's hull (a 40 × 12 m
   capsule) hits it and is removed. A ship can't hit itself.
-  - A normal hit kills 1 crew.
-  - A **raking** hit, from a ball travelling within 30° of the target's
-    fore-aft line (from dead ahead or dead astern), kills 2. A ball
-    fired down the length of a ship travels the whole gun deck, which
-    is why raking was so feared. Crossing your
-    rival's bow or stern while they can't reply is the best move in the
-    game.
-- **Crew is your hit points,** as in Star Control. Losing crew changes
+  Every hit kills 1 crew.
+- **Crossing the T.** Raking needs no special rule. It comes from the
+  geometry:
+  - Broadside to broadside, the target is 40 m long across your line of
+    fire. Every gun that bears can hit it, but every one of its guns
+    can hit you back.
+  - Across its bow or stern, the target is only 12 m wide. Guns firing
+    parallel, 10 m apart, would mostly miss either side of it. Traverse
+    lets all of them converge on it instead, so the whole broadside
+    still lands. Meanwhile its own guns can only aim between 70° and
+    110° off its bow, so from within 70° of dead ahead or dead astern
+    it can't reply at all.
+  - So the best move in the game is to cross your rival's bow or stern
+    at close range: a full broadside in, nothing back. Range still
+    matters, because the ±3° spread is about ±8 m at 150 m but ±16 m at
+    300 m, which is wider than an end-on ship.
+- **Crew is your hit points,** as in Star Control. A ship's crew is
+  `crewPerGun` × its total guns: 3 × 8 = 24 for the duel's ship, so it
+  strikes after about six full broadsides land. Losing crew changes
   nothing until you have none: a short-handed ship sails and shoots as
   well as a full one, so a lead can always be overturned. **(future
   option: damage slows a ship. See Notes)**
@@ -139,16 +156,17 @@ Getting upwind of your rival lets you steal their wind. **(open)**
 
 - **Shallows:** `bowDrag` and `keelDrag` are tripled. You can sail
   through, slowly.
-- **Islands:** a ship that touches an island stops dead, loses 1 crew
-  (at most once a second), and is pushed clear. Balls hit islands and
+- **Islands:** a ship that touches an island stops dead and is pushed
+  clear. It loses no crew. The cost is the speed it lost and the time it
+  takes to get going again. Balls hit islands and
   stop.
-- **Collision:** ships that touch bounce apart, and each loses crew
-  equal to their closing speed ÷ 4 kts, rounded down. Boarding comes
+- **Collision:** ships that touch bounce apart and lose most of their
+  speed. Neither loses crew. Boarding comes
   later (see Embellishments).
 
 ## Winning
 
-- Each ship has **12 crew**. A ship with none left **strikes her
+- Each ship has **24 crew** (see Gunnery). A ship with none left **strikes her
   colours** (surrenders), and the other side wins. Her flag comes down,
   and she drifts.
 - If both strike in the same tick, it's a draw.
@@ -202,7 +220,7 @@ the bottom one.
 | Islands | None, Some, Many |
 | Wind | Steady, Shifty (default), Gusty |
 | Wind shadow | Off, On |
-| Crew | 6, 12, 20 |
+| Crew per gun | 2, 3 (default), 5 |
 
 *Steady* never shifts. *Gusty* shifts twice as often, by up to 45°.
 
@@ -222,8 +240,8 @@ the bottom one.
 | `gunRange` | 300 m | Distance before a ball splashes |
 | `spread` | ±3° | Random error per ball |
 | `reload` | 5 s | Per side, in real seconds |
-| `rakeArc` | 30° | Fore-aft cone for double casualties |
-| `crew` | 12 | Crew per ship; at 0 she strikes |
+| `traverse` | 20° | How far each gun can swing forward or aft of square |
+| `crewPerGun` | 3 | Crew = this × total guns; at 0 she strikes |
 | `seed` | random | Same seed and same inputs = same game |
 
 **Scale.** At real speed, a ship making 10 kts (5 m/s) would take over

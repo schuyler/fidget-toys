@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import net from 'node:net';
 import WebSocket from 'ws';
 import { start } from '../server.js';
 
@@ -53,4 +54,25 @@ test('R3: a second connection for a taken seat is refused with 409', async () =>
 test('R5: a disallowed or missing Origin is refused with 403', async () => {
   assert.equal((await connect('/room/game-a/ORIG?seat=0', 'https://evil.example')).status, 403);
   assert.equal((await connect('/room/game-a/ORIG?seat=0', null)).status, 403);
+});
+
+test('a client that resets the connection after being refused does not crash the server', async () => {
+  // Refused upgrades (bad Origin) followed by a TCP reset at varying moments.
+  // Before the fix this was an uncaught ECONNRESET that killed the process.
+  // Under node:test that shows up as a file-level failure (uncaughtException, blamed on
+  // the `before` hook), not as this test failing.
+  for (let i = 0; i < 30; i++) {
+    await new Promise((done) => {
+      const c = net.connect(server.port, '127.0.0.1', () => {
+        c.write('GET /room/game-a/RST?seat=0 HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
+          + 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: https://evil.example\r\n\r\n');
+        setTimeout(() => { c.resetAndDestroy(); done(); }, i % 5);
+      });
+      c.on('error', () => {});
+    });
+  }
+  await new Promise((r) => setTimeout(r, 200));
+  const ok = await connect('/room/game-a/RST?seat=0');
+  assert.equal(ok.status, 101);
+  ok.ws.close();
 });

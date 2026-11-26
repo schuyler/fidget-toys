@@ -378,6 +378,7 @@ function moveDots(/** @type {Game} */ game) {
     const cur = D[dot.cell];
     let best = -1, bestDist = cur, bestDiff = 9, ties = 0;
     let closerExists = false, closerAllSettled = true, closerAllFriends = true;
+    let enemyDir = -1, enemyDiff = 9; // nearest-to-facing enemy blocking the way
     for (let d = 0; d < 6; d++) {
       const n = nbr[dot.cell * 6 + d];
       if (n < 0 || terrain[n] !== FREE) continue;
@@ -386,7 +387,11 @@ function moveDots(/** @type {Game} */ game) {
       closerExists = true;
       const o = occ[n];
       if (o) {
-        if (o.player !== p) closerAllFriends = false;
+        if (o.player !== p) {
+          closerAllFriends = false;
+          const ed = dirDiff(d, dot.facing);
+          if (ed < enemyDiff) { enemyDiff = ed; enemyDir = d; }
+        }
         if (o.player !== p || !o.settled) closerAllSettled = false;
         continue;
       }
@@ -411,6 +416,12 @@ function moveDots(/** @type {Game} */ game) {
         const en = e2(n, p);
         if (en < bestE) { bestE = en; best = d; }
       }
+    }
+
+    // Blocked by an enemy standing where we want to go: turn on it.
+    if (best < 0 && enemyDir >= 0) {
+      dot.facing = enemyDir;
+      continue;
     }
 
     if (best >= 0) {
@@ -623,10 +634,19 @@ function emitDots(/** @type {Game} */ game) {
 }
 
 /** Phase 7. */
-function checkWin(/** @type {Game} */ game) {
-  if (!game.spawns.length) return;
-  const first = game.spawns[0].owner;
-  if (first >= 0 && game.spawns.every((s) => s.owner === first)) game.winner = first;
+/**
+ * Phase 7: a player with no spawns and no dots is eliminated. Neutral spawns
+ * don't matter. A draw can't happen: owned spawns only ever change hands,
+ * never go neutral, so someone always owns at least one.
+ * @param {Game} game
+ */
+function checkWin(game) {
+  for (let p = 0; p < 2; p++) {
+    if (game.dotCount[p] === 0 && !game.spawns.some((s) => s.owner === p)) {
+      game.winner = 1 - p;
+      return;
+    }
+  }
 }
 
 /** A compact fingerprint of the game state, for determinism tests. */

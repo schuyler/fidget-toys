@@ -82,6 +82,18 @@ export function createAI(player, seed, opts = {}) {
       }
     }
 
+    // The enemy has no spawns left: hunt down their last dots.
+    if (!game.spawns.some((s) => s.owner === enemy)) {
+      goal = -1;
+      let prey = -1, bestD = Infinity;
+      for (const d of game.dots) {
+        if (d.player !== enemy) continue;
+        const dd = hexDist(grid, centre, d.cell);
+        if (dd < bestD) { bestD = dd; prey = d.cell; }
+      }
+      if (prey >= 0) return prey;
+    }
+
     // Keep pressing the current goal while it's making progress.
     if (goal >= 0) {
       const s = game.spawns[goal];

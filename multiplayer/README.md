@@ -44,7 +44,8 @@ PORT=8788 HOST=127.0.0.1 ALLOWED_ORIGINS=https://schuyler.info node multiplayer/
 
 `HOST=0.0.0.0` if the proxy runs on another machine. `ALLOWED_ORIGINS` is
 comma-separated; an entry ending in `:*` allows any port. Unset, it allows
-`https://schuyler.info` and localhost.
+`https://schuyler.info` plus `http://localhost` and `http://127.0.0.1` on
+any port.
 
 **On Cloudflare.** From `multiplayer/`:
 
@@ -62,9 +63,10 @@ Then point the game at it: `?relay=wss://your-host`.
 
 ## The protocol
 
-Connect to `/room/<game>/<code>?seat=<n>`: game is `[a-z0-9-]`, code is
-`[A-Z0-9]` up to 8 characters, seat 0–7. A bad path gets 400, a
-disallowed Origin 403, a taken seat 409.
+Connect to `/room/<game>/<code>?seat=<n>`: game is `[a-z0-9-]`, 1–32
+characters; code is `[A-Z0-9]`, 1–8 characters; seat 0–7. A bad path gets
+400, a request that isn't a WebSocket upgrade 426, a disallowed Origin 403,
+a taken seat 409.
 
 ```
 client → relay   { to?: seat, msg }   to every other seat, or just `to`
@@ -79,7 +81,8 @@ can fake an Origin. Fine among friends; not a security boundary.
 
 `relay.js` is the browser side: `relayTransport(url, game, code, seat)` with
 the same `send` / `onMessage` / `close` as Dot Army's transports. It doesn't
-reconnect, and if the relay refuses it the game just sits on "joining".
+reconnect, and if the relay refuses it the game just keeps waiting for the
+other player, with no error.
 
 ## Dice
 
@@ -88,14 +91,16 @@ import { createDice } from './dice.js';
 const dice = await createDice({ seats: 2, local: mySeat });
 send({ anchor: dice.anchor });          // once, before play
 dice.setAnchor(theirSeat, theirAnchor); // once per other seat
+// rolls are numbered 1, 2, 3…; each seat's must be received in order
 // for roll k: everyone reveals, everyone delivers to everyone
 send({ die: k, v: dice.reveal(k) });
 await dice.receive(theirSeat, k, theirValue); // false if it doesn't check out
-if (dice.ready(k)) rng = createRng(await dice.seed(k));
+if (dice.ready(k)) rng = createRng(await dice.seed(k)); // the game's own seeded RNG
 ```
 
 Each seat commits to a hash chain before play starts and reveals one link
-per roll. A link can't be swapped, because it has to hash to the previous
+per roll (4096 rolls by default; `createDice({ length })` changes it). A
+link can't be swapped, because it has to hash to the previous
 one. The seed hashes every seat's link together, so nobody knows it until
 the last seat reveals. A roll costs one round trip: the roller sends its
 link with its move, and the others answer with theirs.
@@ -188,40 +193,26 @@ fallback. Two options:
 
 ### Self-hosting
 
-The room logic is written against a small interface, so it can run on
-Cloudflare or on a home server:
-
-```js
-// One room. The host calls these and supplies send() and storage.
-export function createRoom({ game, code, send, storage }) {
-  return {
-    onJoin(seat) {},
-    onMessage(seat, msg) {},   // forward to msg.to, or to everyone else
-    onLeave(seat) {},          // tell the others: {k:'peer-left', seat}
-  };
-}
-```
-
-There are two entry points around it:
-
-- **`worker.js`:** the Durable Object class. It uses the hibernation API
-  and passes the object's SQLite storage as `storage`.
-- **`server.js`:** a Node process with a `ws` server and a `Map` of rooms,
-  plus a local SQLite file for the optional log. It holds sockets open the
-  whole time. Hibernation only exists to save money on Cloudflare, and on
-  your own machine idle sockets cost nothing.
+The room logic in `room.js` does no I/O, so it runs on both hosts:
+`worker.js` wraps it in a Durable Object, and `server.js` in a Node
+process with a `ws` server and a `Map` of rooms (see Hosting it, above).
+The Node server holds sockets open the whole time. Hibernation only exists
+to save money on Cloudflare; on your own machine idle sockets cost nothing.
+Neither host stores anything yet. The optional command log (above) would
+go in the Durable Object's SQLite storage on Cloudflare and a local SQLite
+file at home.
 
 Cloudflare's runtime, `workerd`, is open source and runs Durable Objects on
 one machine, so it could run `worker.js` unchanged. I haven't confirmed
-that the hibernation API behaves the same when self-hosted, and a plain Node
-server is less to keep running, so `server.js` is the plan.
+that the hibernation API behaves the same when self-hosted, and a plain
+Node server is less to keep running, which is why `server.js` exists.
 
 On a home server:
 
 - **TLS:** the game is served over HTTPS from GitHub Pages, so browsers
   will only open `wss://`. Put a reverse proxy holding the Let's Encrypt
   certificate in front of `server.js` and forward the WebSocket upgrade.
-- **TURN:** run [coturn](https://github.com/coturn/coturn) next to it as the
+- **TURN** (with step 1b): run [coturn](https://github.com/coturn/coturn) next to it as the
   fallback when P2P fails, instead of relaying game traffic through
   `server.js`. Use its time-limited credentials (`use-auth-secret`):
   `server.js` mints a username and password for each room, so the TURN
@@ -229,11 +220,11 @@ On a home server:
   through the router as well as its listening port. The relay path in
   `server.js` stays as a last resort.
 - **Exposure:** the Origin check and the size and rate caps are the only
-  protection, so `server.js` must enforce them itself.
+  protection, and `server.js` enforces them itself.
 - **Uptime:** if the server is down, nobody can start a game. Games already
   connected P2P keep going.
-- The client picks the server from a constant in `net.js`, overridable
-  with `?relay=wss://...`, so the same build works with either host.
+- The client is pointed at either host with `?relay=wss://...`, so one
+  build works with both.
 
 Turn-based games barely need P2P. Their messages are sparse, so even a
 relayed room hibernates between moves and costs almost nothing. P2P is
@@ -246,12 +237,13 @@ All transports share the interface that `net.js` already defines:
 
 - `p2pTransport`: a WebRTC DataChannel, set up through the Worker. One
   connection to each other seat (a full mesh), fine up to about 4–6 players.
-- `relayTransport`: a WebSocket to the Durable Object, which stays open.
+- `relayTransport`: a WebSocket to the relay (either host), which stays open. Built.
 - `broadcastTransport`: two tabs in one browser, for development. Already
   exists.
 
 The session tries P2P first and falls back to the relay if no channel opens
-within a few seconds. `?via=p2p|relay|bc` forces one, for testing.
+within a few seconds. A query parameter will force one, for testing; today
+`?relay=` picks the relay and leaving it out picks BroadcastChannel.
 
 ### Session
 
@@ -361,7 +353,7 @@ I'd accept the leak. **(open: owner's call)**
    structure fits Coreward well, but its randomness and secret state rely
    on a server that runs the game.
 
-The owner deploys the Worker (`npx wrangler deploy`). The custom-domain
+The owner deploys the Worker (`npx wrangler@4.158.0 deploy` from `multiplayer/`). The custom-domain
 caveat in NETWORK.md still applies: if `schuyler.info`'s DNS moves to
 Cloudflare, the GitHub Pages records must stay DNS-only.
 
@@ -371,7 +363,6 @@ Other libraries in this space: [PartyKit / partyserver](https://github.com/cloud
 (rooms on Durable Objects, Workers only), [Colyseus](https://colyseus.io/) (a Node
 server that runs the game), boardgame.io, Trystero and PeerJS (above).
 None of them does dice without a trusted server.
-
 
 Cloudflare docs, checked November 2026:
 

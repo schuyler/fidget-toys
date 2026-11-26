@@ -28,7 +28,7 @@ compares their state; it needs the static server running on port 8765.
 - The CPU (`src/ai.js`) has its own RNG and only ever moves its target, like
   a human. It must never touch game state directly.
 - `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `lockstep.js`,
-  `net.js`. Keep them type-clean.
+  `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`. Keep them type-clean.
 - A rule change means updating, together: `sim.js`, a test in
   `test/sim.test.js`, `RULES.md`, and the How to play card in `index.html`.
   Then run the headless balance tool to check games still finish.
@@ -50,7 +50,7 @@ compares their state; it needs the static server running on port 8765.
   `git merge -s ours origin/main` so the next PR doesn't conflict.
 - The network relay lives in `multiplayer/` (see its README): a Node server
   for the owner's home host, or a Cloudflare Worker the owner deploys with
-  `npx wrangler deploy`. Games stay dependency-free in the browser;
+  `npx wrangler@4.158.0 deploy`. Games stay dependency-free in the browser;
   `ws` is only for the Node server.
 
 ## Writing

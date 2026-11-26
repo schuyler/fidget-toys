@@ -162,6 +162,8 @@ loser still has on the field don't matter.
   screen. Settings are remembered between visits.
 - The board is laid out for the orientation the game starts in. Turning
   the phone mid-game pauses it until you turn it back.
+- A spawn you own that's being drained by the enemy throbs: its meter
+  ring swells and glows until the attack stops.
 - The win screen shows each side's totals: dots made, kills, losses,
   dots thrown at spawns, spawns captured and biggest army.
 

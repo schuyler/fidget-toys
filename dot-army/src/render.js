@@ -44,7 +44,7 @@ export function createRenderer(canvas) {
   /** @type {ImageData|null} */ let glowData = null;
 
   /** @type {Particle[]} */ let particles = [];
-  /** @type {Map<number, {flash: number, shake: number, wave: number, waveColor: string}>} */
+  /** @type {Map<number, {flash: number, shake: number, wave: number, waveColor: string, alert: number}>} */
   let spawnFx = new Map();
   let shake = 0;
 
@@ -139,6 +139,10 @@ export function createRenderer(canvas) {
       const fx = fxFor(h.spawn);
       fx.flash = 1;
       fx.shake = Math.min(1, fx.shake + 0.25 * h.amount);
+      // Under attack: an owned spawn hit by the other side. (If it just
+      // changed hands, owner is now the attacker and the capture wave shows.)
+      const owner = game.spawns[h.spawn].owner;
+      if (owner >= 0 && h.player !== owner) fx.alert = 1;
     }
     for (const c of ev.captures) {
       const fx = fxFor(c.spawn);
@@ -158,7 +162,7 @@ export function createRenderer(canvas) {
 
   function fxFor(/** @type {number} */ id) {
     let fx = spawnFx.get(id);
-    if (!fx) spawnFx.set(id, (fx = { flash: 0, shake: 0, wave: 0, waveColor: '#fff' }));
+    if (!fx) spawnFx.set(id, (fx = { flash: 0, shake: 0, wave: 0, waveColor: '#fff', alert: 0 }));
     return fx;
   }
 
@@ -237,6 +241,7 @@ export function createRenderer(canvas) {
         fx.flash = Math.max(0, fx.flash - dt * 4);
         fx.shake = Math.max(0, fx.shake - dt * 3);
         fx.wave = Math.max(0, fx.wave - dt * 1.4);
+        fx.alert = s.owner >= 0 ? Math.max(0, fx.alert - dt * 1.2) : 0;
         if (fx.shake) { jx = (Math.random() - 0.5) * fx.shake * size * 0.5; jy = (Math.random() - 0.5) * fx.shake * size * 0.5; }
       }
       const color = s.owner >= 0 ? COLORS.players[s.owner] : COLORS.neutral;
@@ -273,9 +278,12 @@ export function createRenderer(canvas) {
           ctx.fill();
         }
       }
-      // meter ring
-      const R = size * 2.75;
-      ctx.lineWidth = Math.max(2, size * 0.32);
+      // meter ring; while under attack it throbs: bigger, thicker, glowing
+      const alert = fx ? fx.alert : 0;
+      const throb = alert * (0.5 + 0.5 * Math.sin(now * 14));
+      const R = size * 2.75 * (1 + alert * 0.25 + throb * 0.35);
+      ctx.lineWidth = Math.max(2, size * 0.32) * (1 + alert * 0.6 + throb * 0.8);
+      if (alert > 0) { ctx.shadowColor = color; ctx.shadowBlur = size * 2.5 * alert; }
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(255,255,255,0.08)';
       ctx.beginPath();
@@ -288,6 +296,7 @@ export function createRenderer(canvas) {
         ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
         ctx.stroke();
       }
+      ctx.shadowBlur = 0;
       ctx.restore();
       // capture shockwave
       if (fx && fx.wave > 0) {

@@ -15,7 +15,7 @@ should shrink to the Dot Army-specific parts.
 - Works for Dot Army (real-time, 8 ticks/s), Coreward Bound (turn-based,
   dice, hidden information), and whatever comes next that looks like either.
 - Runs on the Cloudflare Workers free plan, which fails rather than bills
-  when you go over.
+  when you go over, or on a home server.
 - Players connect directly to each other wherever they can.
 - No accounts and no strangers: you join by link, QR code or room code, as
   NETWORK.md already decided.
@@ -83,6 +83,55 @@ fallback. Two options:
   storage (free plan: 1 GB per object, 5 GB per account). That allows
   reconnecting from any device and play-by-mail-style async games. Real-time
   games don't need it.
+
+### Self-hosting
+
+The room logic is written against a small interface, so it can run on
+Cloudflare or on a home server:
+
+```js
+// One room. The host calls these and supplies send() and storage.
+export function createRoom({ game, code, send, storage }) {
+  return {
+    onJoin(seat) {},
+    onMessage(seat, msg) {},   // forward to msg.to, or to everyone else
+    onLeave(seat) {},          // tell the others: {k:'peer-left', seat}
+  };
+}
+```
+
+There are two entry points around it:
+
+- **`worker.js`:** the Durable Object class. It uses the hibernation API
+  and passes the object's SQLite storage as `storage`.
+- **`server.js`:** a Node process with a `ws` server and a `Map` of rooms,
+  plus a local SQLite file for the optional log. It holds sockets open the
+  whole time. Hibernation only exists to save money on Cloudflare, and on
+  your own machine idle sockets cost nothing.
+
+Cloudflare's runtime, `workerd`, is open source and runs Durable Objects on
+one machine, so it could run `worker.js` unchanged. I haven't confirmed
+that the hibernation API behaves the same when self-hosted, and a plain Node
+server is less to keep running, so `server.js` is the plan.
+
+On a home server:
+
+- **TLS:** the game is served over HTTPS from GitHub Pages, so browsers
+  will only open `wss://`. Put a reverse proxy holding the Let's Encrypt
+  certificate in front of `server.js` and forward the WebSocket upgrade.
+- **TURN:** run [coturn](https://github.com/coturn/coturn) next to it as the
+  fallback when P2P fails, instead of relaying game traffic through
+  `server.js`. Use its time-limited credentials (`use-auth-secret`):
+  `server.js` mints a username and password for each room, so the TURN
+  server isn't an open relay. coturn needs a range of UDP ports forwarded
+  through the router as well as its listening port. The relay path in
+  `server.js` stays as a last resort.
+- **Exposure:** the Origin check and the size and rate caps are the only
+  protection, so `server.js` must enforce them itself.
+- **Uptime:** if the server is down, nobody can start a game. Games already
+  connected P2P keep going.
+- The client picks the server from a constant in `net.js`, overridable
+  with `?relay=wss://...`, so the same build works with either host.
 
 Turn-based games barely need P2P. Their messages are sparse, so even a
 relayed room hibernates between moves and costs almost nothing. P2P is
@@ -209,9 +258,11 @@ I'd accept the leak. **(open: owner's call)**
 
 ## Order of work
 
-1. **Worker:** game namespace, seats, connection setup, fallback relay,
-   local testing with `npx wrangler dev` and a `?relay=ws://localhost:8787`
-   override.
+1. **Server:** the room logic behind the `createRoom` interface (game
+   namespace, seats, connection setup, fallback relay), then `server.js`
+   and `worker.js` around it. Test locally with `node server.js` and
+   `npx wrangler dev`, pointing the client at each with
+   `?relay=ws://localhost:<port>`.
 2. **Shared client:** transports, session, tick lockstep, in
    `multiplayer/`. Move Dot Army onto them and keep its two-tab e2e test
    passing.

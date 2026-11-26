@@ -21,7 +21,7 @@ export const DEFAULTS = {
   /** ticks per dot from a single spawn with an empty field */
   spawnInterval: 2,
   /** % of a spawn's output each spawn beyond the first adds (100 = linear) */
-  extraSpawnRate: 50,
+  extraSpawnRate: 65,
   /** army size at which production halves (0 = no slowdown) */
   armyHalfRate: 100,
   neutralSpawns: 6,

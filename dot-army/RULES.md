@@ -153,8 +153,8 @@ rate = (1 + extraSpawnRate% × (spawns owned − 1)) / spawnInterval
 ```
 
 With the defaults, one spawn makes a dot every 2 ticks, each further spawn
-adds half that (so four spawns make 2.5× as many dots, not 4×), and an
-army of 100 dots produces at half speed. Capturing spawns still pays, but
+adds 65% of that (so four spawns make about 3× as many dots, not 4×), and
+an army of 100 dots produces at half speed. Capturing spawns still pays, but
 less with each one, and hoarding a huge army slows you down. Spend your
 dots.
 
@@ -225,7 +225,7 @@ table below is fixed at its default.
 | field size | medium | Cells across the short side: 24 / 34 / 46 |
 | `tickRate` | 8 | Ticks per second |
 | `spawnInterval` | 2 | Ticks per dot from a single spawn |
-| `extraSpawnRate` | 50 | % of a spawn's output each further spawn adds (100 = linear) |
+| `extraSpawnRate` | 65 | % of a spawn's output each further spawn adds (100 = linear) |
 | `armyHalfRate` | 100 | Army size at which production halves (0 = off) |
 | `neutralSpawns` | 6 | Neutral spawn points (even) |
 | `meterMax` | 40 | Control meter cap; homes start full |
@@ -259,6 +259,7 @@ table below is fixed at its default.
 - **Why production has diminishing returns.** When every spawn emitted on
   its own clock, production grew linearly with spawns, so whoever got
   ahead snowballed. In 150 CPU-vs-CPU games on a medium board, the shared
-  pool with these defaults stretched games from 41 to 59 seconds on
-  average, raised lead changes from 2.1 to 2.9 per game, and cut the peak
-  army from about 185 dots to about 75.
+  pool with these defaults stretched games from 41 to 57 seconds on
+  average, raised lead changes from 2.1 to 3.3 per game, and cut the peak
+  army from about 185 dots to about 87. A steeper 50% gave about as many
+  lead changes but smaller armies; 80% and up let the snowball back in.

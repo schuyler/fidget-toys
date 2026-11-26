@@ -140,8 +140,8 @@ Getting upwind of your rival lets you steal their wind. **(open)**
   (at most once a second), and is pushed clear. Balls hit islands and
   stop.
 - **Collision:** ships that touch bounce apart, and each takes damage
-  equal to their closing speed ÷ 4 kts, rounded down. **(open:
-  boarding instead, when ships touch at low speed)**
+  equal to their closing speed ÷ 4 kts, rounded down. Boarding comes
+  later (see Embellishments).
 
 ## Winning
 
@@ -259,10 +259,41 @@ the duel shouldn't be built in ways that rule it out:
 - **Hull is state that can persist** between encounters. Damage has no
   effect in the duel, but persistent damage is what would make refitting
   matter. Looting probably needs a way to take a ship rather than sink
-  it, such as striking colours at low hull, or boarding. That ties in
-  with the open question under Collision.
+  it, such as striking colours at low hull, or boarding (see
+  Embellishments).
 - **State can be saved:** the whole sim state is plain data plus the
   seed, so a campaign save is a serialised state.
+
+### Embellishments after the MVP
+
+These are for the episodic game, once the duel is built and playable.
+Each is a sketch, not a rule yet.
+
+- **Shore batteries.** Guns on land at a port or headland: a battery
+  with a fixed arc, longer range than a ship's guns, and its own reload.
+  A battery has hull of its own and goes silent at 0, so bombarding a
+  port means silencing its guns first. Only a fort can hit you out to
+  its full range, so you can't trade broadsides with it. You have to
+  run past it or come in from outside its arc. **(open: whether a
+  silenced battery comes back after a while)**
+- **Boarding.** Ships that touch below a set closing speed grapple
+  instead of bouncing. They stay locked together, and neither can fire
+  into the other. The fight is decided by crew. Crew becomes a
+  ship-type stat, broadsides kill some of it, and the side with more
+  crew left wins over a few seconds. The winner takes the ship: that's
+  how looting works. Either ship can cut free (a button) while the
+  fight is still on. **(open: whether a third ship can fire into a
+  grappled pair, hitting both)**
+- **Running aground.** In the MVP, shallows only slow you and touching
+  an island bounces you off. With grounding, a ship that enters a
+  shallows tile faster than a set speed, or touches a beach, goes
+  aground. It stops, can't steer, and takes damage depending on its
+  speed. Only windage can get it off: it floats free if the apparent
+  wind pushes it back toward deeper water for long enough. Otherwise a
+  **kedge** button frees it slowly. A grounded ship is a sitting target,
+  so the charts suddenly matter. **(open: tides; whether heavier ships
+  draw more water and ground on shallows a light ship can cross, which
+  would give a small ship somewhere to run)**
 
 ## Notes
 

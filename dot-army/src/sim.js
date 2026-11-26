@@ -18,7 +18,7 @@ export const DEFAULTS = {
   width: 60,
   height: 40,
   tickRate: 8,
-  spawnInterval: 1,
+  spawnInterval: 2,
   neutralSpawns: 6,
   meterMax: 40,
   neutralMeter: 10,

@@ -165,7 +165,7 @@ loser still has on the field don't matter.
 |---|---|---|
 | field size | medium | Cells across the short side: 24 / 34 / 46 |
 | `tickRate` | 8 | Ticks per second |
-| `spawnInterval` | 1 | Ticks between emissions from each spawn |
+| `spawnInterval` | 2 | Ticks between emissions from each spawn |
 | `neutralSpawns` | 6 | Neutral spawn points (even) |
 | `meterMax` | 40 | Control meter cap; homes start full |
 | `neutralMeter` | 10 | Starting meter of neutral spawns |

@@ -7,7 +7,8 @@ out of that same pool. Both sides plan their orders in secret, then the
 whole turn plays out at once.
 
 Turn-based. You pick a faction and command its squad; the CPU picks
-another. Built so that pass-and-play and network play can be added later.
+another. The first version is you against the CPU only. Playing another
+person comes later, over the network (see Later).
 
 An homage to Tom Walczyk's *StarSoldier* (SPI, 1977). The factions'
 numbers are the original species' numbers. See the notes at the end for
@@ -285,8 +286,15 @@ None of this is in the first version, but it's the plan.
 - **Breakthrough:** an attacker that must get troopers off the far
   edge.
 - **Wildlife:** a neutral predator that attacks whoever's nearest.
-- **Fog of war,** and **pass-and-play** with a cover screen between the
-  two players' plotting.
+- **Fog of war.**
+- **Network play against another person,** using the shared network
+  play support being built for this repo. Each player is on their own
+  device; Fidget Toys games never put two players on one screen, so
+  there's no pass-and-play. Simultaneous orders suit this well: each
+  side sends only its committed orders for the turn, and both devices
+  run the same deterministic turn from them. Neither side sees the
+  other's orders until both have committed. **(open: what happens when
+  one player is slow to commit, such as a plotting timer)**
 
 ## Notes
 

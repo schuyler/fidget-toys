@@ -28,6 +28,9 @@ export function start(opts = {}) {
   });
 
   server.on('upgrade', (req, socket, head) => {
+    // Node drops its own error handler before 'upgrade'; without one, a client that
+    // resets the connection after being refused crashes the whole process.
+    socket.on('error', () => {});
     const r = parseRequest(new URL(req.url ?? '/', 'http://x'));
     if (!r) return refuse(socket, 400);
     if (!originAllowed(req.headers.origin ?? null, allow)) return refuse(socket, 403);

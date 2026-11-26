@@ -11,13 +11,14 @@ import { createRng } from './rng.js';
 /**
  * @param {number} player
  * @param {number} seed
- * @param {{ thinkEvery?: number, aggression?: number, noise?: number, dragSpeed?: number }} [opts]
+ * @param {{ thinkEvery?: number, caution?: number, noise?: number, dragSpeed?: number }} [opts]
+ *   caution: extra reluctance (in cells of distance) to attack spawns the enemy owns
  *   dragSpeed: cells per tick the marker moves toward where the CPU wants it (Infinity = jump)
  */
 export function createAI(player, seed, opts = {}) {
   const rng = createRng(seed ^ 0x9e3779b9);
   const thinkEvery = opts.thinkEvery ?? 6;
-  const aggression = opts.aggression ?? 1;
+  const caution = opts.caution ?? 0;
   const noise = opts.noise ?? 6;
   let goal = -1;        // spawn id we're going after
   let goalSince = 0;
@@ -101,7 +102,7 @@ export function createAI(player, seed, opts = {}) {
       let defenders = 0;
       for (const d of game.dots) if (d.player === enemy && hexDist(grid, d.cell, s.center) < 6) defenders++;
       let score = hexDist(grid, centre, s.center) + s.meter * 0.8 + defenders * 0.6;
-      if (s.owner === enemy) score += (myCount > theirCount * 1.2 ? -4 : 8) / aggression;
+      if (s.owner === enemy) score += (myCount > theirCount * 1.2 ? -4 : 8) + caution;
       score += rng.next() * noise;
       if (score < bestScore) { bestScore = score; best = s.id; }
     }

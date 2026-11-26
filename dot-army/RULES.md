@@ -160,6 +160,10 @@ loser still has on the field don't matter.
   easy and 18 on hard, at average speed.
 - Pause, new game, mute and settings buttons are at the edge of the
   screen. Settings are remembered between visits.
+- The board is laid out for the orientation the game starts in. Turning
+  the phone mid-game pauses it until you turn it back.
+- The win screen shows each side's totals: dots made, kills, losses,
+  dots thrown at spawns, spawns captured and biggest army.
 
 ## Settings
 

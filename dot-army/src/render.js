@@ -500,9 +500,13 @@ export function createRenderer(canvas) {
   /** @param {{lines: string[], color?: string, sub?: string}} o */
   function drawOverlay(o) {
     ctx.save();
-    ctx.fillStyle = 'rgba(13,16,32,0.35)';
+    ctx.fillStyle = o.stats ? 'rgba(13,16,32,0.78)' : 'rgba(13,16,32,0.35)';
     ctx.fillRect(0, 0, cw, ch);
-    const copies = portrait ? [[cw / 2, ch * 0.68, 0], [cw / 2, ch * 0.32, Math.PI]] : [[cw / 2, ch / 2, 0]];
+    // with a stats table underneath, pull the text toward the middle so it fits
+    const k = o.stats ? 0.1 : 0;
+    const copies = portrait
+      ? [[cw / 2, ch * (0.68 - k), 0], [cw / 2, ch * (0.32 + k), Math.PI]]
+      : [[cw / 2, ch * (0.5 - k * 1.5), 0]];
     for (const [x, y, rot] of copies) {
       ctx.save();
       ctx.translate(x, y);
@@ -523,10 +527,43 @@ export function createRenderer(canvas) {
         ctx.globalAlpha = 0.75;
         ctx.font = `500 ${Math.round(big * 0.3)}px system-ui, sans-serif`;
         ctx.fillText(o.sub, 0, (o.lines.length / 2) * big * 1.1 + big * 0.3);
+        ctx.globalAlpha = 1;
       }
+      if (o.stats) drawStats(o.stats, (o.lines.length / 2) * big * 1.1 + big * 0.85);
       ctx.restore();
     }
     ctx.restore();
+  }
+
+  /**
+   * Two-column stats table, drawn in the current (possibly rotated) frame.
+   * @param {{names: string[], rows: [string, number, number][]}} st @param {number} top
+   */
+  function drawStats(st, top) {
+    const fs = Math.max(12, Math.min(15, cw * 0.036));
+    const lh = fs * 1.55;
+    const xl = -fs * 7.8, xb = fs * 3.4, xr = fs * 7.8;
+    ctx.shadowBlur = 0;
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 ${fs}px system-ui, sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.fillStyle = COLORS.players[0];
+    ctx.fillText(st.names[0], xb, top);
+    ctx.fillStyle = COLORS.players[1];
+    ctx.fillText(st.names[1], xr, top);
+    st.rows.forEach(([label, b, r], i) => {
+      const y = top + lh * (i + 1);
+      ctx.font = `500 ${fs}px system-ui, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(232,236,255,0.7)';
+      ctx.fillText(label, xl, y);
+      ctx.font = `600 ${fs}px system-ui, sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.fillStyle = COLORS.players[0];
+      ctx.fillText(String(b), xb, y);
+      ctx.fillStyle = COLORS.players[1];
+      ctx.fillText(String(r), xr, y);
+    });
   }
 
   return {

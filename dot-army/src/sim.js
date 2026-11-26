@@ -80,6 +80,17 @@ export const DEFAULTS = {
  * @property {number} nextId
  * @property {number} winner       -1 while playing
  * @property {Events} events       what happened in the last tick
+ * @property {Stats} stats         running totals per player, for the end screen
+ */
+
+/**
+ * @typedef {Object} Stats  each entry is [blue, red]
+ * @property {number[]} spawned   dots emitted
+ * @property {number[]} kills     enemy dots destroyed
+ * @property {number[]} lost      own dots destroyed in combat
+ * @property {number[]} spent     own dots used up attacking or reinforcing spawns
+ * @property {number[]} captures  spawns taken
+ * @property {number[]} peak      largest army on the field at once
  */
 
 const FREE = 0, WALL = 1, SPAWN = 2;
@@ -118,6 +129,7 @@ export function createGame(overrides = {}, layout) {
     nextId: 1,
     winner: -1,
     events: emptyEvents(),
+    stats: { spawned: [0, 0], kills: [0, 0], lost: [0, 0], spent: [0, 0], captures: [0, 0], peak: [0, 0] },
   };
   if (layout) {
     for (const s of layout.spawns) addSpawn(game, s.center, s.owner, s.meter ?? params.meterMax, !!s.home);
@@ -294,6 +306,7 @@ export function step(/** @type {Game} */ game) {
   regenMeters(game);
   emitDots(game);            // phase 6
   checkWin(game);            // phase 7
+  for (let p = 0; p < 2; p++) game.stats.peak[p] = Math.max(game.stats.peak[p], game.dotCount[p]);
   return game.events;
 }
 
@@ -486,7 +499,11 @@ function resolveCombat(/** @type {Game} */ game) {
       if (n < 0) continue;
       const b = occ[n];
       if (b && b.player !== a.player && !faces(game, b, (d + 3) % 6)) {
-        if (!dead.has(b)) game.events.kills.push({ cell: b.cell, victim: b.player, killerCell: a.cell });
+        if (!dead.has(b)) {
+          game.events.kills.push({ cell: b.cell, victim: b.player, killerCell: a.cell });
+          game.stats.kills[a.player]++;
+          game.stats.lost[b.player]++;
+        }
         dead.add(b);
       }
     }
@@ -568,6 +585,8 @@ function resolveSpawnAttacks(/** @type {Game} */ game) {
     }
   }
   game.events.consumed = used.size;
+  for (const d of used) game.stats.spent[d.player]++;
+  for (const c of game.events.captures) game.stats.captures[c.to]++;
   removeDots(game, used);
 }
 
@@ -599,7 +618,7 @@ function emitDots(/** @type {Game} */ game) {
     if (best < 0) continue;
     const facing = dirToward(grid, s.center, best);
     const dot = placeDot(game, s.owner, best, facing);
-    if (dot) { dot.prevCell = s.center; game.events.spawned++; }
+    if (dot) { dot.prevCell = s.center; game.events.spawned++; game.stats.spawned[s.owner]++; }
   }
 }
 

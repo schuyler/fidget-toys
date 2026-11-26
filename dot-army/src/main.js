@@ -55,6 +55,10 @@ let acc = 0;
 let overAt = 0;
 let lastCount = 0;
 let hintsUntil = 0;
+let gamePortrait = false;
+const screenPortrait = () => window.innerHeight > window.innerWidth;
+/** The phone was turned since this game's board was laid out. */
+const rotated = () => screenPortrait() !== gamePortrait;
 
 /** pointerId → player being dragged */
 const drags = new Map();
@@ -64,7 +68,8 @@ let targetsPx = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
 /** @param {boolean} [start] false: set up the board but wait at the start menu */
 function newGame(start = true) {
   const short = CHOICES.size[/** @type {keyof typeof CHOICES.size} */ (settings.size)];
-  const portrait = window.innerHeight > window.innerWidth;
+  const portrait = screenPortrait();
+  gamePortrait = portrait;
   // Match the board's aspect ratio to the screen (hex rows are 1.5 radii
   // tall, columns sqrt(3) wide), leaving room for the HUD.
   const availW = window.innerWidth - 20;
@@ -90,7 +95,7 @@ function newGame(start = true) {
   });
   ais = [null, settings.mode === '2p' ? null
     : createAI(1, game.params.seed, settings.mode === 'cpu-easy'
-      ? { thinkEvery: 16, aggression: 0.5, noise: 14, dragSpeed: 1.1 }
+      ? { thinkEvery: 16, caution: 8, noise: 14, dragSpeed: 1.1 }
       : { dragSpeed: 2.2 })];
   renderer.setGame(game);
   drags.clear();
@@ -127,7 +132,10 @@ canvas.addEventListener('pointerdown', (e) => {
     if (performance.now() - overAt > 900) newGame();
     return;
   }
-  if (paused) { paused = false; return; }
+  if (paused) {
+    if (!rotated()) paused = false; // can't resume until the phone is turned back
+    return;
+  }
   const b = renderer.toBoard(e.clientX, e.clientY);
   const human = humanPlayers();
   const grab = Math.max(40, renderer.size * 3.5);
@@ -236,7 +244,10 @@ function tick() {
 }
 
 function overlay() {
-  if (phase === 'countdown') {
+  if (rotated() && phase !== 'menu' && phase !== 'over') {
+    return { lines: ['ROTATE BACK'], sub: `this game is laid out for ${gamePortrait ? 'portrait' : 'landscape'} · ↻ starts a new one` };
+  }
+  if (phase === 'countdown' && !paused) {
     const c = Math.ceil(countdown);
     return { lines: [String(c)], sub: settings.mode === '2p' ? 'blue vs red' : 'you are blue' };
   }
@@ -247,9 +258,27 @@ function overlay() {
       lines: [cpuWon ? 'CPU WINS' : `${game.winner === 0 ? 'BLUE' : 'RED'} WINS`],
       color: COLORS.players[game.winner],
       sub: `${Math.round(game.tick / game.params.tickRate)}s · tap to play again`,
+      stats: statRows(),
     };
   }
   return null;
+}
+
+/** End-of-game table: [label, blue, red]. */
+function statRows() {
+  const st = game.stats;
+  const names = settings.mode === '2p' ? ['Blue', 'Red'] : ['You', 'CPU'];
+  return {
+    names,
+    rows: /** @type {[string, number, number][]} */ ([
+      ['Dots made', st.spawned[0], st.spawned[1]],
+      ['Kills', st.kills[0], st.kills[1]],
+      ['Lost in battle', st.lost[0], st.lost[1]],
+      ['Thrown at spawns', st.spent[0], st.spent[1]],
+      ['Spawns captured', st.captures[0], st.captures[1]],
+      ['Biggest army', st.peak[0], st.peak[1]],
+    ]),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -292,8 +321,13 @@ form.addEventListener('submit', (e) => {
 });
 
 window.addEventListener('resize', () => {
+  if (phase === 'menu' && rotated()) {
+    newGame(false); // nothing has started yet: rebuild the board for the new orientation
+    return;
+  }
   renderer.layout();
   targetsPx = [0, 1].map((p) => cellPx(game.targets[p]));
+  if (rotated() && (phase === 'countdown' || phase === 'play')) paused = true;
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && phase === 'play') paused = true;

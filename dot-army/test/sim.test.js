@@ -254,3 +254,22 @@ test('dense rocks stay symmetric and leave every spawn reachable', () => {
     for (const s of game.spawns) assert.ok(s.exits.some((e) => game.dist[BLUE][e] < 1e9), `spawn ${s.id} reachable`);
   }
 });
+
+test('stats track kills, losses, spawning and spending', () => {
+  const game = createGame({ seed: 21 });
+  const ais = [createAI(0, 1), createAI(1, 2)];
+  let kills = 0, spawned = 0, consumed = 0;
+  for (let i = 0; i < 600 && game.winner < 0; i++) {
+    for (const ai of ais) { const t = ai.think(game); if (t !== null) setTarget(game, ai.player, t); }
+    const ev = step(game);
+    kills += ev.kills.length; spawned += ev.spawned; consumed += ev.consumed;
+  }
+  const st = game.stats;
+  assert.equal(st.kills[0] + st.kills[1], kills);
+  assert.deepEqual(st.lost, [st.kills[1], st.kills[0]]);
+  assert.equal(st.spawned[0] + st.spawned[1], spawned);
+  assert.equal(st.spent[0] + st.spent[1], consumed);
+  for (let p = 0; p < 2; p++) {
+    assert.equal(st.spawned[p] - st.lost[p] - st.spent[p], game.dotCount[p], 'every dot accounted for');
+  }
+});

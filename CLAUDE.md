@@ -8,7 +8,8 @@ before touching game logic, and `NETWORK.md` for online play.
 
 ```
 python3 -m http.server 8000      # then http://localhost:8000/dot-army/
-npm test                          # node:test, no dependencies
+npm install                       # once: the relay's one dependency (ws)
+npm test                          # node:test
 npm run typecheck                 # tsc --checkJs on files marked // @ts-check
 node dot-army/tools/headless.js 20 [key=value ...]   # CPU-vs-CPU balance runs
 ```
@@ -47,8 +48,10 @@ compares their state; it needs the static server running on port 8765.
   next PR, confirm `git diff origin/main HEAD` is empty for already-merged
   work, then record main in the branch with
   `git merge -s ours origin/main` so the next PR doesn't conflict.
-- The network relay (`relay/`, phase 2) is a Cloudflare Worker that the
-  owner deploys themselves with `npx wrangler deploy`.
+- The network relay lives in `multiplayer/` (see its README): a Node server
+  for the owner's home host, or a Cloudflare Worker the owner deploys with
+  `npx wrangler deploy`. Games stay dependency-free in the browser;
+  `ws` is only for the Node server.
 
 ## Writing
 

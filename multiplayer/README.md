@@ -1,14 +1,116 @@
 # multiplayer
 
-A plan for one network layer that every game in this repo can share: a
-Cloudflare Worker introduces the players, then they talk to each other directly.
+A room relay for this repo's network games, plus networked dice that no
+player can predict or steer. The same relay runs as a Node server at home or
+as a Cloudflare Worker.
 
-Status: **design only, no code yet.** It builds on the Dot Army networking on
-the `claude/dot-army-fidget-game-47u0tu` branch. That branch has
-deterministic lockstep (`dot-army/src/lockstep.js`), a two-tab transport, and
-`dot-army/NETWORK.md`, a design for a relay that hasn't been written. This
-plan replaces that relay design. Once the shared code exists, `dot-army/NETWORK.md`
-should shrink to the Dot Army-specific parts.
+Status: **step 1 of the plan below.** The relay works: Dot Army plays
+through it with `?relay=`. Peer-to-peer comes next, so for now every game
+message goes through the relay. The dice are built and unit-tested but no
+game uses them yet. Nothing here is on `main`.
+
+## Try it
+
+```
+npm install                                  # once, from the repo root: installs ws
+node multiplayer/server.js                   # relay on ws://127.0.0.1:8788
+python3 -m http.server 8765 --bind 127.0.0.1
+```
+
+Then open these two, ideally on different browsers or devices:
+
+```
+http://127.0.0.1:8765/dot-army/?room=TEST&host&relay=ws://127.0.0.1:8788
+http://127.0.0.1:8765/dot-army/?room=TEST&relay=ws://127.0.0.1:8788
+```
+
+Leave out `relay=` and Dot Army falls back to talking between tabs of one
+browser, as before.
+
+Checks: `npm test` covers the room logic, the Node server and the dice.
+`RELAY=ws://127.0.0.1:8788 node multiplayer/tools/e2e-relay.cjs` plays a
+game between two isolated browser contexts and compares their state; it
+needs the static server above and a running relay.
+
+## Hosting it
+
+**At home.** `server.js` speaks plain `ws://`; put it behind a reverse
+proxy that holds the TLS certificate and forwards the WebSocket upgrade,
+because a page served over https can only open `wss://`.
+
+```
+PORT=8788 HOST=127.0.0.1 ALLOWED_ORIGINS=https://schuyler.info node multiplayer/server.js
+```
+
+`HOST=0.0.0.0` if the proxy runs on another machine. `ALLOWED_ORIGINS` is
+comma-separated; an entry ending in `:*` allows any port. Unset, it allows
+`https://schuyler.info` and localhost.
+
+**On Cloudflare.** From `multiplayer/`:
+
+```
+npx wrangler@4.158.0 dev       # local, ws://localhost:8787
+npx wrangler@4.158.0 deploy
+```
+
+One Durable Object per room, using the hibernation API, so an idle room
+costs nothing. The free plan only offers SQLite-backed objects; the relay
+doesn't store anything, but `wrangler.toml` declares the class that way. To
+change the allowed origins, set `ALLOWED_ORIGINS` under `[vars]`.
+
+Then point the game at it: `?relay=wss://your-host`.
+
+## The protocol
+
+Connect to `/room/<game>/<code>?seat=<n>`: game is `[a-z0-9-]`, code is
+`[A-Z0-9]` up to 8 characters, seat 0–7. A bad path gets 400, a
+disallowed Origin 403, a taken seat 409.
+
+```
+client → relay   { to?: seat, msg }   to every other seat, or just `to`
+relay → client   { from: seat, msg }
+relay → client   { from: -1, msg: { k: 'peer-left', seat } }
+```
+
+The relay never looks inside `msg`. Frames over 4 KB close the socket (1009),
+and so do more than 60 in a second (1008). Those limits and the Origin check
+are all that stop a public relay from being used by strangers, and a script
+can fake an Origin. Fine among friends; not a security boundary.
+
+`relay.js` is the browser side: `relayTransport(url, game, code, seat)` with
+the same `send` / `onMessage` / `close` as Dot Army's transports. It doesn't
+reconnect, and if the relay refuses it the game just sits on "joining".
+
+## Dice
+
+```js
+import { createDice } from './dice.js';
+const dice = await createDice({ seats: 2, local: mySeat });
+send({ anchor: dice.anchor });          // once, before play
+dice.setAnchor(theirSeat, theirAnchor); // once per other seat
+// for roll k: everyone reveals, everyone delivers to everyone
+send({ die: k, v: dice.reveal(k) });
+await dice.receive(theirSeat, k, theirValue); // false if it doesn't check out
+if (dice.ready(k)) rng = createRng(await dice.seed(k));
+```
+
+Each seat commits to a hash chain before play starts and reveals one link
+per roll. A link can't be swapped, because it has to hash to the previous
+one. The seed hashes every seat's link together, so nobody knows it until
+the last seat reveals. A roll costs one round trip: the roller sends its
+link with its move, and the others answer with theirs.
+
+The hole: the last seat to reveal can work out the result first and
+refuse to send. Nothing short of a trusted server prevents that, so a game
+should treat a stall as leaving. The dice also need Web Crypto, which
+browsers only provide on https and localhost; a page on plain http at a LAN
+address won't have it.
+
+# The plan
+
+This is the design for the whole layer. It builds on Dot Army's
+deterministic lockstep (`dot-army/src/lockstep.js`) and replaces the relay
+design in `dot-army/NETWORK.md`.
 
 ## Goals
 
@@ -214,26 +316,14 @@ Each device holds the seed and the full state, so a player can copy the
 state in devtools, try jumps, and find the ones that won't scatter.
 Coreward's scatter preview ("exact odds") would become a known outcome.
 
-The fix is **commit-reveal randomness** for each random event:
+The fix is the dice in `dice.js` (see Dice, above): every seat contributes
+to every roll from a hash chain it committed to before play, so no single
+seat can predict or steer a roll. An earlier version of this plan used a
+fresh commit-reveal for each roll; hash chains give the same guarantees at
+one round trip per roll instead of one and a half.
 
-1. The jumping seat sends the jump along with `hash(a)`, a commitment to a
-   secret random value `a`.
-2. The other seat replies with its own random value `b`.
-3. The jumping seat reveals `a`. Everyone checks it against the commitment
-   and seeds the roll from `H(a, b)`.
-
-Neither side can steer the roll: `a` is fixed before anyone sees `b`, and
-`b` is chosen without knowing `a`. It costs one round trip per random event,
-which a turn-based game can afford. The opponent can't supply the
-randomness alone: they know the state, so they could pick a `b` that
-makes you scatter.
-
-**Secret simultaneous stances** use the same tool: every seat commits a
-hash, then every seat reveals. So the shared code should have a
-`commitReveal` helper, not two separate mechanisms.
-
-With more than two seats, every seat contributes a value, and the roll is
-seeded from all of them.
+**Secret simultaneous stances** need a commit-reveal of the choices
+themselves. That waits for turn lockstep.
 
 ### Fog of war leaks
 
@@ -258,22 +348,30 @@ I'd accept the leak. **(open: owner's call)**
 
 ## Order of work
 
-1. **Server:** the room logic behind the `createRoom` interface (game
-   namespace, seats, connection setup, fallback relay), then `server.js`
-   and `worker.js` around it. Test locally with `node server.js` and
-   `npx wrangler dev`, pointing the client at each with
-   `?relay=ws://localhost:<port>`.
+1. **Relay (done):** `room.js` behind `server.js` and `worker.js`, the
+   `relay.js` transport, and the dice. Peer-to-peer connection setup is
+   step 1b. Before writing it, try [Trystero](https://github.com/dmotz/trystero),
+   which does WebRTC introductions over public trackers with no server of
+   ours. [PeerJS](https://peerjs.com/) is the self-hostable alternative.
 2. **Shared client:** transports, session, tick lockstep, in
    `multiplayer/`. Move Dot Army onto them and keep its two-tab e2e test
    passing.
-3. **Turn lockstep and `commitReveal`**, once Coreward Bound has a
-   simulation to sync.
+3. **Turn lockstep**, once Coreward Bound has a simulation to sync.
+   Look hard at [boardgame.io](https://github.com/boardgameio/boardgame.io) first. Its game
+   structure fits Coreward well, but its randomness and secret state rely
+   on a server that runs the game.
 
 The owner deploys the Worker (`npx wrangler deploy`). The custom-domain
 caveat in NETWORK.md still applies: if `schuyler.info`'s DNS moves to
 Cloudflare, the GitHub Pages records must stay DNS-only.
 
 ## References
+
+Other libraries in this space: [PartyKit / partyserver](https://github.com/cloudflare/partykit)
+(rooms on Durable Objects, Workers only), [Colyseus](https://colyseus.io/) (a Node
+server that runs the game), boardgame.io, Trystero and PeerJS (above).
+None of them does dice without a trusted server.
+
 
 Cloudflare docs, checked November 2026:
 

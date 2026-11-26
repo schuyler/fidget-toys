@@ -80,6 +80,10 @@ marker.
 
 ## Phase 2: relay and lobby (next)
 
+> **The relay is built, in `multiplayer/`, and its README replaces the relay
+> design below.** Dot Army uses it with `?relay=wss://...`. The lobby (Play
+> online, QR code, Join with code) is still to do.
+
 ### The relay: `relay/` (new)
 
 A Worker plus a Durable Object class, about 50 lines:

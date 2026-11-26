@@ -48,22 +48,30 @@ const audio = createAudio();
 let game;
 /** @type {(ReturnType<typeof createAI>|null)[]} */
 let ais = [null, null];
-let phase = 'countdown'; // 'countdown' | 'play' | 'over'
+let phase = 'menu'; // 'menu' | 'countdown' | 'play' | 'over'
 let countdown = 0;
 let paused = false;
 let acc = 0;
 let overAt = 0;
 let lastCount = 0;
 let hintsUntil = 0;
+let gamePortrait = false;
+let gameSerial = 0;
+const screenPortrait = () => window.innerHeight > window.innerWidth;
+/** The phone was turned since this game's board was laid out. */
+const rotated = () => screenPortrait() !== gamePortrait;
 
 /** pointerId → player being dragged */
 const drags = new Map();
 /** @type {{x: number, y: number}[]} smoothed on-screen target positions (board px) */
 let targetsPx = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
 
-function newGame() {
+/** @param {boolean} [start] false: set up the board but wait at the start menu */
+function newGame(start = true) {
+  gameSerial++;
   const short = CHOICES.size[/** @type {keyof typeof CHOICES.size} */ (settings.size)];
-  const portrait = window.innerHeight > window.innerWidth;
+  const portrait = screenPortrait();
+  gamePortrait = portrait;
   // Match the board's aspect ratio to the screen (hex rows are 1.5 radii
   // tall, columns sqrt(3) wide), leaving room for the HUD.
   const availW = window.innerWidth - 20;
@@ -89,17 +97,17 @@ function newGame() {
   });
   ais = [null, settings.mode === '2p' ? null
     : createAI(1, game.params.seed, settings.mode === 'cpu-easy'
-      ? { thinkEvery: 16, aggression: 0.5, noise: 14, dragSpeed: 0.55 }
-      : { dragSpeed: 1.1 })];
+      ? { thinkEvery: 16, caution: 8, noise: 14, dragSpeed: 1.1 }
+      : { dragSpeed: 2.2 })];
   renderer.setGame(game);
   drags.clear();
   targetsPx = [0, 1].map((p) => cellPx(game.targets[p]));
-  phase = 'countdown';
+  phase = start ? 'countdown' : 'menu';
   countdown = 3.2;
   lastCount = 4;
   paused = false;
   acc = 0;
-  hintsUntil = performance.now() + 7000;
+  hintsUntil = start ? performance.now() + 7000 : 0;
 }
 
 function cellPx(/** @type {number} */ cell) {
@@ -126,7 +134,10 @@ canvas.addEventListener('pointerdown', (e) => {
     if (performance.now() - overAt > 900) newGame();
     return;
   }
-  if (paused) { paused = false; return; }
+  if (paused) {
+    if (!rotated()) paused = false; // can't resume until the phone is turned back
+    return;
+  }
   const b = renderer.toBoard(e.clientX, e.clientY);
   const human = humanPlayers();
   const grab = Math.max(40, renderer.size * 3.5);
@@ -235,7 +246,10 @@ function tick() {
 }
 
 function overlay() {
-  if (phase === 'countdown') {
+  if (rotated() && phase !== 'menu' && phase !== 'over') {
+    return { lines: ['ROTATE BACK'], sub: `this game is laid out for ${gamePortrait ? 'portrait' : 'landscape'} · ↻ starts a new one` };
+  }
+  if (phase === 'countdown' && !paused) {
     const c = Math.ceil(countdown);
     return { lines: [String(c)], sub: settings.mode === '2p' ? 'blue vs red' : 'you are blue' };
   }
@@ -246,35 +260,43 @@ function overlay() {
       lines: [cpuWon ? 'CPU WINS' : `${game.winner === 0 ? 'BLUE' : 'RED'} WINS`],
       color: COLORS.players[game.winner],
       sub: `${Math.round(game.tick / game.params.tickRate)}s · tap to play again`,
+      stats: statRows(),
     };
   }
   return null;
 }
 
+/** End-of-game table: [label, blue, red]. */
+function statRows() {
+  const st = game.stats;
+  const names = settings.mode === '2p' ? ['Blue', 'Red'] : ['You', 'CPU'];
+  return {
+    names,
+    rows: /** @type {[string, number, number][]} */ ([
+      ['Dots made', st.spawned[0], st.spawned[1]],
+      ['Kills', st.kills[0], st.kills[1]],
+      ['Lost in battle', st.lost[0], st.lost[1]],
+      ['Thrown at spawns', st.spent[0], st.spent[1]],
+      ['Spawns captured', st.captures[0], st.captures[1]],
+      ['Biggest army', st.peak[0], st.peak[1]],
+    ]),
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Toolbar and settings
+// Settings
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
-$('btn-pause').addEventListener('click', () => {
-  if (phase !== 'over') paused = !paused;
-});
-$('btn-restart').addEventListener('click', () => newGame());
-const muteBtn = $('btn-mute');
-const syncMute = () => { muteBtn.textContent = audio.muted ? '🔇' : '🔊'; };
-syncMute();
-muteBtn.addEventListener('click', () => { audio.unlock(); audio.setMuted(!audio.muted); syncMute(); });
-
 const dialog = /** @type {HTMLDialogElement} */ ($('settings'));
 const form = /** @type {HTMLFormElement} */ ($('settings-form'));
-$('btn-settings').addEventListener('click', () => {
-  paused = phase !== 'over';
+function openSettings() {
   for (const [k, v] of Object.entries(settings)) {
     const el = /** @type {RadioNodeList|null} */ (form.elements.namedItem(k)); // radio group: setting .value checks the match
     if (el) el.value = v;
   }
   dialog.showModal();
-});
+}
 form.addEventListener('submit', (e) => {
   const submitter = /** @type {HTMLButtonElement|null} */ (/** @type {SubmitEvent} */ (e).submitter);
   if (submitter?.value === 'reset') {
@@ -282,20 +304,87 @@ form.addEventListener('submit', (e) => {
   } else if (submitter?.value === 'apply') {
     settings = sanitize(Object.fromEntries(new FormData(form)));
   } else {
-    paused = false;
-    return;
+    return; // cancel: the close handler below goes back to whichever menu opened it
   }
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ignore */ }
   newGame();
 });
 
 window.addEventListener('resize', () => {
+  if (phase === 'menu' && rotated()) {
+    newGame(false); // nothing has started yet: rebuild the board for the new orientation
+    return;
+  }
   renderer.layout();
   targetsPx = [0, 1].map((p) => cellPx(game.targets[p]));
+  if (rotated() && (phase === 'countdown' || phase === 'play')) paused = true;
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && phase === 'play') paused = true;
 });
 
-newGame();
+// ---------------------------------------------------------------------------
+// Start menu (every page load), pause menu (☰), and the how-to-play card.
+// Settings and Rules can be opened from either menu; closing them without
+// starting a new game returns to that menu.
+
+const startDialog = /** @type {HTMLDialogElement} */ ($('start'));
+const pauseDialog = /** @type {HTMLDialogElement} */ ($('pause'));
+const rulesDialog = /** @type {HTMLDialogElement} */ ($('rules'));
+/** @type {HTMLDialogElement|null} */ let returnTo = null;
+let openedAtGame = 0;
+
+/** Leave a menu for Settings or Rules, remembering where to come back to. */
+function detour(/** @type {HTMLDialogElement} */ from, /** @type {() => void} */ open) {
+  audio.unlock(); // any tap: browsers allow sound from here on
+  returnTo = from;
+  openedAtGame = gameSerial;
+  from.close();
+  open();
+}
+for (const d of [dialog, rulesDialog]) {
+  d.addEventListener('close', () => {
+    const back = returnTo;
+    returnTo = null;
+    if (back && gameSerial === openedAtGame && !back.open) back.showModal();
+  });
+}
+
+$('start-new').addEventListener('click', () => {
+  audio.unlock();
+  startDialog.close();
+  newGame();
+});
+$('start-settings').addEventListener('click', () => detour(startDialog, openSettings));
+$('start-rules').addEventListener('click', () => detour(startDialog, () => rulesDialog.showModal()));
+// Escape on the start menu means "just play".
+startDialog.addEventListener('cancel', (e) => {
+  e.preventDefault();
+  $('start-new').click();
+});
+
+const muteBtn = $('pause-sound');
+const syncMute = () => { muteBtn.textContent = audio.muted ? 'Sound: off' : 'Sound: on'; };
+syncMute();
+
+$('btn-menu').addEventListener('click', () => {
+  audio.unlock();
+  if (phase === 'countdown' || phase === 'play') paused = true;
+  $('pause-resume').hidden = phase === 'over';
+  syncMute();
+  pauseDialog.showModal();
+});
+function resume() {
+  pauseDialog.close();
+  if (!rotated()) paused = false;
+}
+$('pause-resume').addEventListener('click', resume);
+pauseDialog.addEventListener('cancel', (e) => { e.preventDefault(); resume(); });
+$('pause-new').addEventListener('click', () => { pauseDialog.close(); newGame(); });
+$('pause-settings').addEventListener('click', () => detour(pauseDialog, openSettings));
+$('pause-rules').addEventListener('click', () => detour(pauseDialog, () => rulesDialog.showModal()));
+muteBtn.addEventListener('click', () => { audio.setMuted(!audio.muted); syncMute(); });
+
+newGame(false);
+startDialog.showModal();
 requestAnimationFrame(frame);

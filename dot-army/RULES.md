@@ -156,10 +156,18 @@ loser still has on the field don't matter.
   are bottom and top in portrait, left and right in landscape.
 - **vs CPU** (easy or hard): you're blue, and the CPU moves red's
   marker under the same rules a human does. It drags the marker at a
-  limited speed rather than jumping it: about 4.4 cells per second on
-  easy and 9 on hard, at average speed.
-- Pause, new game, mute and settings buttons are at the edge of the
-  screen. Settings are remembered between visits.
+  limited speed rather than jumping it: about 9 cells per second on
+  easy and 18 on hard, at average speed.
+- Every page load opens a start menu (New game, Settings, Rules). The ☰
+  button in a corner of the HUD pauses and opens a menu with Resume,
+  New game, Settings, Rules and Sound. Settings are remembered between
+  visits.
+- The board is laid out for the orientation the game starts in. Turning
+  the phone mid-game pauses it until you turn it back.
+- A spawn you own that's being drained by the enemy throbs: its meter
+  ring swells and glows until the attack stops.
+- The win screen shows each side's totals: dots made, kills, losses,
+  dots thrown at spawns, spawns captured and biggest army.
 
 ## Settings
 

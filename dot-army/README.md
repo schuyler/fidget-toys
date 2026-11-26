@@ -29,3 +29,5 @@ node dot-army/tools/headless.js 20   # CPU-vs-CPU games, for tuning
 The simulation in `src/sim.js` is deterministic: integer state, a seeded RNG, and nothing else. Rendering, input, sound and the CPU player all sit on top and never feed back in. Pathfinding is one breadth-first search per player per tick (a flow field), which costs well under a millisecond, and the hex grid uses a precomputed neighbour table, so it's no more expensive than a square grid would be.
 
 Claude wrote most of the code from a rules discussion with me. The tests in `test/sim.test.js` pin down the combat and movement rules, if you want to check its work.
+
+It's MIT licensed, like the rest of the repo. See [LICENSE](../LICENSE).

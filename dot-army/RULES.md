@@ -87,7 +87,10 @@ shuffle. For each dot:
    processed nearest-first, "settled" spreads outward from the target,
    and a group that arrives becomes an outward-facing hedgehog. A column
    held up by a fight up front isn't settled, because its leader is
-   locked, not settled, so it keeps facing forward.
+   locked, not settled, so it keeps facing forward. A settled dot that
+   touches an enemy or neutral spawn turns to face it instead, so a
+   hedgehog parked beside a spawn grows until it reaches the blob and
+   then starts eating it.
 6. Otherwise the dot waits and tries again next tick.
 
 ### 4. Combat
@@ -106,13 +109,18 @@ A dot can only harm what it faces. One dot can destroy several enemies in
 a tick, and can be destroyed in the same tick it destroys something else.
 
 ### 5. Spawn attacks
-A spawn only reacts to dots whose player's target is on it. Walking past
-an enemy spawn does nothing. Each such dot that survived combat and faces
-the blob is **used up**:
+A dot that survived combat and faces a spawn blob is **used up** if
+either of these is true:
+
+- its player's target is on that spawn, or
+- the dot is settled and the spawn is enemy or neutral.
+
+Dots that are just walking past a spawn leave it alone. What happens to
+the meter:
 
 - **Enemy or neutral spawn:** the meter drops by 1.
-- **Friendly spawn:** the meter rises by 1. Only as many dots are used up
-  as are needed to refill it.
+- **Friendly spawn** (only when your target is on it): the meter rises
+  by 1. Only as many dots are used up as are needed to refill it.
 
 All changes in a tick are applied together:
 

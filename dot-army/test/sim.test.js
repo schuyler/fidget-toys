@@ -162,6 +162,31 @@ test('attacking a neutral spawn drains its meter, then captures it with overflow
   assert.equal(s.meter, 2);
 });
 
+test('a dot settled next to a neutral spawn attacks it without targeting it', () => {
+  const game = board({ spawns: [{ center: at(game0(), 0, 0), owner: NEUTRAL, meter: 5 }] }, { spawnInterval: 1000 });
+  const s = game.spawns[0];
+  const e = s.exits[0];
+  placeDot(game, BLUE, e, dirToward(game.grid, s.center, e)); // facing away from the blob
+  setTarget(game, BLUE, e); // target beside the spawn, not on it
+  setTarget(game, RED, at(game, -9, -5));
+  step(game);
+  assert.equal(s.meter, 4);
+  assert.equal(game.dotCount[BLUE], 0);
+});
+
+test('dots walking past a spawn leave it alone', () => {
+  const game = board({ spawns: [{ center: at(game0(), 0, 0), owner: NEUTRAL, meter: 5 }] }, { spawnInterval: 1000 });
+  const s = game.spawns[0];
+  // a dot on the ring, facing into the blob, but with somewhere else to be
+  const [e, d] = exitFacingBlob(game, s)[0];
+  placeDot(game, BLUE, e, d);
+  setTarget(game, BLUE, at(game, 9, 5));
+  setTarget(game, RED, at(game, -9, -5));
+  step(game);
+  assert.equal(s.meter, 5);
+  assert.equal(game.dotCount[BLUE], 1);
+});
+
 test('owning every spawn wins', () => {
   const game = board({ spawns: [{ center: at(game0(), -5, 0), owner: BLUE }, { center: at(game0(), 5, 0), owner: NEUTRAL, meter: 1 }] }, { spawnInterval: 1000 });
   const s = game.spawns[1];

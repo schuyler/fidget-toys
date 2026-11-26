@@ -425,7 +425,11 @@ function moveDots(/** @type {Game} */ game) {
       }
     }
 
-    if (cur === 0) { dot.settled = true; continue; }
+    if (cur === 0) {
+      dot.settled = true;
+      faceHostileSpawn(game, dot);
+      continue;
+    }
 
     // Clustering: packed in behind friends that have already arrived, turn to
     // face away from the target. Because dots are processed nearest-first,
@@ -433,12 +437,35 @@ function moveDots(/** @type {Game} */ game) {
     // outward-facing hedgehog, while a column held up by a fight up front
     // (whose leader is locked, not settled) keeps facing forward.
     if (cur < INF && closerExists && closerAllSettled) {
+      dot.settled = true;
+      // Settled against an enemy or neutral spawn: attack it instead.
+      if (faceHostileSpawn(game, dot)) continue;
       const from = ts >= 0 ? game.spawns[ts].center : game.targets[p];
       const away = dirToward(grid, from, dot.cell);
       if (away >= 0) dot.facing = away;
-      dot.settled = true;
     }
   }
+}
+
+/**
+ * If the dot touches a spawn it doesn't own, turn to face it (choosing the
+ * smallest turn) and return true.
+ * @param {Game} game @param {Dot} dot
+ */
+function faceHostileSpawn(game, dot) {
+  const nbr = game.grid.nbr;
+  let faceDir = -1, faceDiff = 9;
+  for (let d = 0; d < 6; d++) {
+    const n = nbr[dot.cell * 6 + d];
+    if (n < 0) continue;
+    const sid = game.spawnOf[n];
+    if (sid < 0 || game.spawns[sid].owner === dot.player) continue;
+    const diff = dirDiff(d, dot.facing);
+    if (diff < faceDiff) { faceDiff = diff; faceDir = d; }
+  }
+  if (faceDir < 0) return false;
+  dot.facing = faceDir;
+  return true;
 }
 
 /** Phase 4: judge every contact from one snapshot, then remove all losers together. */
@@ -471,7 +498,11 @@ function removeDots(game, gone) {
   game.dots = game.dots.filter((d) => !gone.has(d));
 }
 
-/** Phase 5: dots facing the spawn their player is targeting throw themselves at it. */
+/**
+ * Phase 5: dots throw themselves at a spawn they face if it's the one their
+ * player is targeting (attack or reinforce), or if they've settled against
+ * an enemy or neutral spawn (attack only). Dots merely passing by don't.
+ */
 function resolveSpawnAttacks(/** @type {Game} */ game) {
   const { grid, params } = game;
   const nbr = grid.nbr;
@@ -479,13 +510,15 @@ function resolveSpawnAttacks(/** @type {Game} */ game) {
   const contacts = new Map();
   for (const dot of game.dots) {
     const ts = targetSpawn(game, dot.player);
-    if (ts < 0) continue;
     for (let d = 0; d < 6; d++) {
       if (!faces(game, dot, d)) continue;
       const n = nbr[dot.cell * 6 + d];
-      if (n >= 0 && game.spawnOf[n] === ts) {
-        let entry = contacts.get(ts);
-        if (!entry) contacts.set(ts, (entry = [[], []]));
+      if (n < 0) continue;
+      const sid = game.spawnOf[n];
+      if (sid < 0) continue;
+      if (sid === ts || (dot.settled && game.spawns[sid].owner !== dot.player)) {
+        let entry = contacts.get(sid);
+        if (!entry) contacts.set(sid, (entry = [[], []]));
         entry[dot.player].push(dot);
         break;
       }

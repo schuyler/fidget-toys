@@ -3,34 +3,40 @@
 Two players, blue and red, each command a swarm of dots. Dots stream out of
 spawn points and march toward their player's target. Nobody controls individual
 dots: you drag your target, and the swarm follows. Fights are decided by which
-way each dot is facing.
+way each dot is facing. Capture every spawn point to win.
 
 ## The field
 
-- The field is a rectangle of hexagonal cells (default **60 × 40**).
-- Each cell holds at most one thing: a dot, part of a spawn point, or an
-  obstacle. Dots never overlap.
-- Obstacles are impassable cells. The MVP has none. The pathfinding already
-  routes around them, so adding layouts later only means designing maps.
+- A rectangle of hexagonal cells, sized to fill the screen. The short side
+  is 24, 34 or 46 cells (small, medium, large), and the long side
+  stretches to match the screen's shape.
+- Each cell holds at most one thing: a dot, part of a spawn point, or a
+  rock. Dots never overlap.
+- The layout is point-symmetric (rotated 180° about the centre), so
+  neither side has an advantage. In portrait, blue is at the bottom and
+  red at the top, so two people can face each other across a phone.
+- **Terrain:** open field (the default), or scattered rocks. Rocks are
+  impassable, and dots path around them. Every spawn point is always
+  reachable.
 
 ## Spawn points
 
-- A spawn point is a blob of **7 cells**: a centre cell plus the six around
-  it. Dots can't enter it.
-- Its **exits** are the 12 free cells in the ring just outside the blob.
+- A blob of **7 cells**: a centre cell plus the six around it. Dots can't
+  enter it.
+- Its **exits** are the 12 cells in the ring just outside the blob.
 - Each spawn point is neutral, blue, or red, and has a **control meter**
-  from 0 up to `meterMax` (default 20).
+  from 0 up to `meterMax`.
 - At the start, each player owns one home spawn at full meter. There are
-  `neutralSpawns` neutral spawns (default 6), each starting at
-  `neutralMeter` (default 5). The layout is mirrored, rotated 180° about
-  the centre, so neither side has an advantage.
+  `neutralSpawns` neutral spawns (always an even number, placed in
+  mirrored pairs), each starting at `neutralMeter`.
 
 ## Dots
 
 - A dot belongs to one player and has a **facing**: one of the six hex
   directions.
-- A dot **faces** a neighbouring cell when that cell is directly ahead
-  (`facingArc = 1`, the default). See open question 1.
+- A dot **faces** the neighbouring cell directly ahead of it. A
+  `facingArc` setting widens this to the front three neighbours, but
+  that version gridlocks: see Notes.
 - A dot that moves turns to face the direction it moved.
 
 ## Targets
@@ -38,12 +44,11 @@ way each dot is facing.
 - Each player has one target marker, which they drag around the field.
 - Dots path toward their own player's target.
 - If the target sits on a spawn point, the whole spawn blob counts as the
-  target, and dots swarm to its edge.
+  target.
 
 ## A tick
 
-The game runs in discrete ticks (default **8 per second**, `tickRate`).
-Each tick runs these phases in order:
+Each tick runs these phases in order.
 
 ### 1. Input
 Each player's target position is updated from their drag.
@@ -51,30 +56,39 @@ Each player's target position is updated from their drag.
 ### 2. Pathfinding
 For each player, a breadth-first search outward from the target gives
 every passable cell its distance from that target. This is a **flow
-field**. Obstacles and spawn blobs block the search. Dots do not. That's
+field**. Rocks and spawn blobs block the search. Dots do not. That's
 deliberate: dots can stand in the way, but the route still goes through
 them, so crowds pile up and jostle instead of taking huge detours.
 
 ### 3. Movement
-Each dot does at most one step:
+Dots closest to their own target move first, with ties broken by a seeded
+shuffle. For each dot:
 
-- **Locked dots don't move.** A dot is locked when it's in a
-  *stalemate*: an adjacent enemy and the dot face each other. It stays
-  locked, without moving or turning, until that enemy dies or moves off.
-- Otherwise the dot steps into the free neighbouring cell with the
-  **lowest distance**, as long as that's strictly lower than the distance
-  of the cell it's standing on. If several cells tie, it picks the one
-  nearest its current facing, which gives dots some momentum, and breaks
-  any remaining tie with a seeded random choice.
-- **Clustering:** if the dot can't get closer because friendly dots fill
-  every closer cell, it turns to **face directly away from its target**
-  and stays put. A clump at the target ends up as an outward-facing
-  hedgehog.
-- Any other dot that can't move this tick (for example, it lost a race
-  for a cell) just waits and tries again next tick.
-- **Movement order:** dots closest to their own target move first, and
-  ties are broken by a seeded shuffle. That way a column flows forward as
-  a unit instead of moving like an accordion (see Notes).
+1. **Locked dots don't move.** A dot is locked when it's in a stalemate:
+   an adjacent enemy and the dot face each other. It stays locked, without
+   moving or turning, until that enemy dies.
+2. **Advance:** step into the free neighbouring cell with the lowest
+   distance, as long as that's strictly lower than the distance of the
+   cell it's on. If several cells tie, it picks the one nearest its
+   current facing (momentum). Any remaining tie is a seeded random pick.
+3. **Sidestep:** if the dot can't advance and every closer cell is held
+   by a *friendly* dot, it may step sideways to a free cell at the same
+   distance, but only if that cell is nearer the target in a straight
+   line. Crowds then spread around the target instead of queueing back
+   along the path. The straight-line distance falls with every sidestep,
+   so dots can't oscillate. A dot held up by an *enemy* holds its ground.
+4. **Touching the spawn it's targeting:** if the spawn is enemy or
+   neutral, or is friendly with a meter below max, the dot turns to face
+   it (to attack or reinforce it). If it's friendly and full, the dot
+   turns to face away from it, to guard it.
+5. **Clustering:** a dot that has reached its target is *settled*. So is
+   a dot whose every closer cell is held by settled friends; such a dot
+   turns to face directly away from the target. Because dots are
+   processed nearest-first, "settled" spreads outward from the target,
+   and a group that arrives becomes an outward-facing hedgehog. A column
+   held up by a fight up front isn't settled, because its leader is
+   locked, not settled, so it keeps facing forward.
+6. Otherwise the dot waits and tries again next tick.
 
 ### 4. Combat
 Combat is judged from a single snapshot of the board after movement, and
@@ -89,80 +103,86 @@ dots A and B:
 | no  | no  | Nothing |
 
 A dot can only harm what it faces. One dot can destroy several enemies in
-a single tick, and can be destroyed in the same tick it destroys
-something else.
+a tick, and can be destroyed in the same tick it destroys something else.
 
 ### 5. Spawn attacks
-For each dot that survived combat and faces a spawn cell:
+A spawn only reacts to dots whose player's target is on it. Walking past
+an enemy spawn does nothing. Each such dot that survived combat and faces
+the blob is **used up**:
 
-- **Enemy spawn** (neutral, or owned by the other player): the dot is
-  used up, and the meter drops by 1.
-- **Friendly spawn** below `meterMax`: the dot is used up, and the meter
-  rises by 1. A full friendly spawn ignores it.
+- **Enemy or neutral spawn:** the meter drops by 1.
+- **Friendly spawn:** the meter rises by 1. Only as many dots are used up
+  as are needed to refill it.
 
-All changes in a tick are applied together. When an **owned** spawn's
-meter hits 0, it flips straight to the attacker at meter 1, without going
-neutral first. When a **neutral** spawn's meter hits 0, it goes to the
-player who used up more dots on it this tick, at meter 1. If both used up
-the same number, it stays neutral at 0 and the next tick decides.
+All changes in a tick are applied together:
 
-### 6. Spawning
-Every `spawnInterval` ticks (default 1), each owned spawn emits **one
-dot** at its free exit closest to the owner's target, using the flow
-field. The new dot faces outward, away from the spawn's centre. If every
-exit is blocked, nothing comes out. If `maxDotsPerPlayer` is set and the
-player is at the cap, nothing comes out either.
+- **Owned spawn** reaching 0 or below: it flips to the attacker. Any
+  overshoot becomes the new owner's meter (minimum 1). For example,
+  5 attackers against a meter of 3 leave the attacker owning it at
+  meter 2.
+- **Neutral spawn** reaching 0 or below: it goes to whichever player used
+  up more dots on it this tick, with the overshoot as its meter. If both
+  used up the same number, it stays neutral at 0, and the next hit
+  decides.
 
-### 7. Win check
+### 6. Meter regen
+Every `meterRegen` ticks, each owned spawn's meter rises by 1, up to max.
+A freshly captured spawn is fragile at first, then digs in.
+
+### 7. Spawning
+Every `spawnInterval` ticks, each owned spawn emits **one dot** at its free
+exit closest to the owner's target. The new dot faces outward, away from
+the spawn's centre. If every exit is blocked, nothing comes out, so you
+can choke a spawn by camping on its exits. If `maxDotsPerPlayer` is set,
+a player at the cap gets nothing either.
+
+### 8. Win check
 If one player owns **every** spawn point, they win immediately. Dots the
 loser still has on the field don't matter.
 
-## Controls (MVP)
+## Controls
 
-- Two humans share one touch screen. Each player drags their own colour's
-  marker, and multitouch lets both drag at once. A mouse also works, one
-  marker at a time.
-- A pause/reset control, and a settings panel for the parameters below.
+- **Two players, one screen** (the default): each player drags their own
+  colour's marker, and multitouch lets both drag at once. Tapping empty
+  space in your own half of the screen jumps your marker there. Halves
+  are bottom and top in portrait, left and right in landscape.
+- **vs CPU** (normal or easy): you're blue, and the CPU moves red's
+  marker under exactly the same rules a human does.
+- Pause, new game, mute and settings buttons are at the edge of the
+  screen. Settings are remembered between visits.
 
 ## Parameters
 
 | Name | Default | Meaning |
 |---|---|---|
-| `width` × `height` | 60 × 40 | Field size in hexes |
+| field size | medium | Cells across the short side: 24 / 34 / 46 |
 | `tickRate` | 8 | Ticks per second |
-| `spawnInterval` | 1 | Ticks between emissions from each spawn |
-| `neutralSpawns` | 6 | Neutral spawn points |
-| `meterMax` | 20 | Control meter cap |
-| `neutralMeter` | 5 | Starting meter of neutral spawns |
-| `facingArc` | 1 | Neighbours a dot faces: 1 = dead ahead, 3 = front three |
-| `maxDotsPerPlayer` | none | Optional cap on each player's dots |
-| `seed` | random | Random seed (same seed and same inputs = same game) |
+| `spawnInterval` | 2 | Ticks between emissions from each spawn |
+| `neutralSpawns` | 6 | Neutral spawn points (even) |
+| `meterMax` | 40 | Control meter cap; homes start full |
+| `neutralMeter` | 10 | Starting meter of neutral spawns |
+| `meterRegen` | 8 | Ticks per +1 meter on owned spawns (0 = off) |
+| `facingArc` | 1 | 1 = dead ahead, 3 = front three |
+| `maxDotsPerPlayer` | 0 | Optional cap on each player's dots (0 = none) |
+| `terrain` | open | `open` or `rocks` |
+| `seed` | random | Same seed and same inputs = same game |
 
 ## Notes
 
-- **Deterministic core.** The simulation uses only a seeded random
-  generator and a list of input commands, each stamped with its tick.
-  Rendering and input sit on top. That's what makes AI opponents and
-  lockstep network play straightforward to add later.
-- **Movement isn't purely simultaneous.** We agreed earlier that two dots
-  wanting the same cell would be settled by a random winner. With a purely
-  simultaneous move, though, a dot can only step into a cell that was
-  empty at the start of the tick. A packed column would then advance one
-  gap at a time, at about half speed. Moving front-first fixes that.
-  Combat is still fully simultaneous.
-
-## Open questions
-
-1. **Facing arc.** On a hex grid the neighbours sit at exactly 0°, 60°,
-   120° and so on from a dot's facing. So "< 60°" means **dead ahead
-   only**, while "≤ 60°" means the **front three**. These play very
-   differently. With dead ahead only, flanking is easy and stalemates are
-   rare. With the front three, dots are deadlier and lock up in
-   stalemates much more often. The default is dead ahead, it's available
-   as `facingArc`, and we can tune it by playing.
-2. **Spawn attacks by accident.** Under rule 5, a dot marching past an
-   enemy spawn and happening to face it will throw itself at it. That
-   might be fine, since spawns attract fights, or attacks might need to
-   be limited to dots whose target is that spawn.
-3. **Board size, layout, defaults.** These are first guesses, to be tuned
-   in play.
+- **Deterministic core.** The simulation uses only integers, a seeded
+  random generator and the players' target positions. Same seed and
+  same inputs give the same game in any browser. That's what will make
+  lockstep network play (each side exchanging only inputs) and replays
+  straightforward later.
+- **Why movement isn't simultaneous.** If every dot moved at once, a dot
+  could only step into a cell that was empty at the start of the tick.
+  A packed column would then advance one gap at a time, at about half
+  speed. Moving nearest-first lets a column flow as a unit. Combat is
+  still fully simultaneous.
+- **Why dead-ahead facing.** In CPU-vs-CPU test runs with the front-three
+  arc, 9 of 12 games never finished: dots lock into stalemates far too
+  easily, and the front line becomes a permanent wall. With dead-ahead
+  facing, every game finished, typically in under a minute.
+- **Tuning.** `node dot-army/tools/headless.js 20 key=value ...` plays
+  CPU-vs-CPU games without a browser and prints how long they took, who
+  won, kills and captures. Human games run longer than CPU ones.

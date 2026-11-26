@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1020">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Dot Army</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="toolbar">
+    <button id="btn-pause" title="Pause" aria-label="Pause">⏸</button>
+    <button id="btn-restart" title="New game" aria-label="New game">↻</button>
+    <button id="btn-mute" title="Sound" aria-label="Toggle sound">🔊</button>
+    <button id="btn-settings" title="Settings" aria-label="Settings">⚙</button>
+  </div>
+
+  <dialog id="settings">
+    <form id="settings-form" method="dialog">
+      <h2>Dot Army</h2>
+      <label>Opponent
+        <select name="mode">
+          <option value="cpu-easy">Easy CPU (you're blue)</option>
+          <option value="cpu">CPU (you're blue)</option>
+          <option value="2p">Two players, one screen</option>
+        </select>
+      </label>
+      <label>Field
+        <select name="size">
+          <option value="small">Small</option>
+          <option value="medium">Medium</option>
+          <option value="large">Large</option>
+        </select>
+      </label>
+      <label>Terrain
+        <select name="terrain">
+          <option value="open">Open field</option>
+          <option value="rocks">Rocks</option>
+        </select>
+      </label>
+      <label>Neutral spawns <input name="neutralSpawns" type="number" min="0" max="16" step="2"></label>
+      <label>Ticks per second <input name="tickRate" type="number" min="1" max="30"></label>
+      <label>Ticks between spawns <input name="spawnInterval" type="number" min="1" max="20"></label>
+      <label>Spawn meter max <input name="meterMax" type="number" min="1" max="200"></label>
+      <label>Neutral starting meter <input name="neutralMeter" type="number" min="1" max="200"></label>
+      <label>Ticks per meter regen <input name="meterRegen" type="number" min="0" max="200" title="0 = no regen"></label>
+      <label>Facing arc
+        <select name="facingArc">
+          <option value="1">Dead ahead</option>
+          <option value="3">Front three</option>
+        </select>
+      </label>
+      <p class="hint">Drag your marker; your dots follow. A dot destroys an enemy it's facing, unless that enemy faces it back. Park your marker on a spawn point to attack it. Capture every spawn to win. <a href="RULES.md">Full rules</a></p>
+      <menu>
+        <button value="reset" formnovalidate>Defaults</button>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="apply" class="primary">New game</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

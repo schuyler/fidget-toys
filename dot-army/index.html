@@ -11,12 +11,7 @@
 <body>
   <canvas id="game"></canvas>
 
-  <div id="toolbar">
-    <button id="btn-pause" title="Pause" aria-label="Pause">⏸</button>
-    <button id="btn-restart" title="New game" aria-label="New game">↻</button>
-    <button id="btn-mute" title="Sound" aria-label="Toggle sound">🔊</button>
-    <button id="btn-settings" title="Settings" aria-label="Settings">⚙</button>
-  </div>
+  <button id="btn-menu" title="Menu" aria-label="Menu">☰</button>
 
   <dialog id="start" class="menu">
     <h1>Dot Army</h1>
@@ -25,6 +20,17 @@
       <button id="start-new" class="pill primary" autofocus>New game</button>
       <button id="start-settings" class="pill">Settings</button>
       <button id="start-rules" class="pill">Rules</button>
+    </div>
+  </dialog>
+
+  <dialog id="pause" class="menu">
+    <h1>Paused</h1>
+    <div class="pills">
+      <button id="pause-resume" class="pill primary" autofocus>Resume</button>
+      <button id="pause-new" class="pill">New game</button>
+      <button id="pause-settings" class="pill">Settings</button>
+      <button id="pause-rules" class="pill">Rules</button>
+      <button id="pause-sound" class="pill">Sound: on</button>
     </div>
   </dialog>
 

@@ -27,29 +27,15 @@ canvas {
   touch-action: none;
 }
 
-#toolbar {
+/* One menu button, tucked into a corner of the HUD strip so it never
+   covers the board: top-right in landscape, bottom-right in portrait. */
+#btn-menu {
   position: fixed;
-  top: max(6px, env(safe-area-inset-top));
+  top: max(4px, env(safe-area-inset-top));
   right: max(6px, env(safe-area-inset-right));
-  display: flex;
-  gap: 4px;
-  opacity: 0.55;
-  transition: opacity 0.2s;
-}
-#toolbar:hover, #toolbar:focus-within { opacity: 1; }
-
-@media (orientation: portrait) {
-  #toolbar {
-    top: 50%;
-    right: max(4px, env(safe-area-inset-right));
-    transform: translateY(-50%);
-    flex-direction: column;
-  }
-}
-
-#toolbar button {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border-radius: 8px;
   border: 1px solid var(--edge);
   background: var(--panel);
@@ -57,6 +43,14 @@ canvas {
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
+  opacity: 0.7;
+}
+#btn-menu:hover, #btn-menu:focus-visible { opacity: 1; }
+@media (orientation: portrait) {
+  #btn-menu {
+    top: auto;
+    bottom: max(3px, env(safe-area-inset-bottom));
+  }
 }
 
 dialog {
@@ -158,8 +152,8 @@ dialog.menu {
   text-align: center;
   padding: 28px 22px 24px;
 }
-dialog.menu h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: 0.5px; }
-.tagline { margin: 0 0 22px; color: var(--muted); font-size: 14px; }
+dialog.menu h1 { margin: 0 0 18px; font-size: 30px; letter-spacing: 0.5px; }
+.tagline { margin: -12px 0 22px; color: var(--muted); font-size: 14px; }
 .pills { display: flex; flex-direction: column; gap: 10px; }
 .pill {
   padding: 12px 16px;

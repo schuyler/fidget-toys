@@ -158,8 +158,10 @@ loser still has on the field don't matter.
   marker under the same rules a human does. It drags the marker at a
   limited speed rather than jumping it: about 9 cells per second on
   easy and 18 on hard, at average speed.
-- Pause, new game, mute and settings buttons are at the edge of the
-  screen. Settings are remembered between visits.
+- Every page load opens a start menu (New game, Settings, Rules). The ☰
+  button in a corner of the HUD pauses and opens a menu with Resume,
+  New game, Settings, Rules and Sound. Settings are remembered between
+  visits.
 - The board is laid out for the orientation the game starts in. Turning
   the phone mid-game pauses it until you turn it back.
 - A spawn you own that's being drained by the enemy throbs: its meter

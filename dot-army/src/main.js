@@ -56,6 +56,7 @@ let overAt = 0;
 let lastCount = 0;
 let hintsUntil = 0;
 let gamePortrait = false;
+let gameSerial = 0;
 const screenPortrait = () => window.innerHeight > window.innerWidth;
 /** The phone was turned since this game's board was laid out. */
 const rotated = () => screenPortrait() !== gamePortrait;
@@ -67,6 +68,7 @@ let targetsPx = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
 
 /** @param {boolean} [start] false: set up the board but wait at the start menu */
 function newGame(start = true) {
+  gameSerial++;
   const short = CHOICES.size[/** @type {keyof typeof CHOICES.size} */ (settings.size)];
   const portrait = screenPortrait();
   gamePortrait = portrait;
@@ -282,30 +284,19 @@ function statRows() {
 }
 
 // ---------------------------------------------------------------------------
-// Toolbar and settings
+// Settings
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
-
-$('btn-pause').addEventListener('click', () => {
-  if (phase !== 'over') paused = !paused;
-});
-$('btn-restart').addEventListener('click', () => newGame());
-const muteBtn = $('btn-mute');
-const syncMute = () => { muteBtn.textContent = audio.muted ? '🔇' : '🔊'; };
-syncMute();
-muteBtn.addEventListener('click', () => { audio.unlock(); audio.setMuted(!audio.muted); syncMute(); });
 
 const dialog = /** @type {HTMLDialogElement} */ ($('settings'));
 const form = /** @type {HTMLFormElement} */ ($('settings-form'));
 function openSettings() {
-  paused = phase === 'countdown' || phase === 'play';
   for (const [k, v] of Object.entries(settings)) {
     const el = /** @type {RadioNodeList|null} */ (form.elements.namedItem(k)); // radio group: setting .value checks the match
     if (el) el.value = v;
   }
   dialog.showModal();
 }
-$('btn-settings').addEventListener('click', openSettings);
 form.addEventListener('submit', (e) => {
   const submitter = /** @type {HTMLButtonElement|null} */ (/** @type {SubmitEvent} */ (e).submitter);
   if (submitter?.value === 'reset') {
@@ -313,8 +304,7 @@ form.addEventListener('submit', (e) => {
   } else if (submitter?.value === 'apply') {
     settings = sanitize(Object.fromEntries(new FormData(form)));
   } else {
-    paused = false;
-    return;
+    return; // cancel: the close handler below goes back to whichever menu opened it
   }
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ignore */ }
   newGame();
@@ -334,36 +324,66 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Start menu (shown on every page load) and the how-to-play card
+// Start menu (every page load), pause menu (☰), and the how-to-play card.
+// Settings and Rules can be opened from either menu; closing them without
+// starting a new game returns to that menu.
 
 const startDialog = /** @type {HTMLDialogElement} */ ($('start'));
+const pauseDialog = /** @type {HTMLDialogElement} */ ($('pause'));
 const rulesDialog = /** @type {HTMLDialogElement} */ ($('rules'));
+/** @type {HTMLDialogElement|null} */ let returnTo = null;
+let openedAtGame = 0;
+
+/** Leave a menu for Settings or Rules, remembering where to come back to. */
+function detour(/** @type {HTMLDialogElement} */ from, /** @type {() => void} */ open) {
+  audio.unlock(); // any tap: browsers allow sound from here on
+  returnTo = from;
+  openedAtGame = gameSerial;
+  from.close();
+  open();
+}
+for (const d of [dialog, rulesDialog]) {
+  d.addEventListener('close', () => {
+    const back = returnTo;
+    returnTo = null;
+    if (back && gameSerial === openedAtGame && !back.open) back.showModal();
+  });
+}
+
 $('start-new').addEventListener('click', () => {
-  audio.unlock(); // a tap: browsers allow sound from here on
+  audio.unlock();
   startDialog.close();
   newGame();
 });
-$('start-settings').addEventListener('click', () => {
-  audio.unlock();
-  startDialog.close();
-  openSettings();
-});
-$('start-rules').addEventListener('click', () => {
-  audio.unlock();
-  startDialog.close();
-  rulesDialog.showModal();
-});
-// Escape on the menu means "just play".
+$('start-settings').addEventListener('click', () => detour(startDialog, openSettings));
+$('start-rules').addEventListener('click', () => detour(startDialog, () => rulesDialog.showModal()));
+// Escape on the start menu means "just play".
 startDialog.addEventListener('cancel', (e) => {
   e.preventDefault();
   $('start-new').click();
 });
-// Leaving settings or rules without starting a game goes back to the menu.
-for (const d of [dialog, rulesDialog]) {
-  d.addEventListener('close', () => {
-    if (phase === 'menu' && !startDialog.open) startDialog.showModal();
-  });
+
+const muteBtn = $('pause-sound');
+const syncMute = () => { muteBtn.textContent = audio.muted ? 'Sound: off' : 'Sound: on'; };
+syncMute();
+
+$('btn-menu').addEventListener('click', () => {
+  audio.unlock();
+  if (phase === 'countdown' || phase === 'play') paused = true;
+  $('pause-resume').hidden = phase === 'over';
+  syncMute();
+  pauseDialog.showModal();
+});
+function resume() {
+  pauseDialog.close();
+  if (!rotated()) paused = false;
 }
+$('pause-resume').addEventListener('click', resume);
+pauseDialog.addEventListener('cancel', (e) => { e.preventDefault(); resume(); });
+$('pause-new').addEventListener('click', () => { pauseDialog.close(); newGame(); });
+$('pause-settings').addEventListener('click', () => detour(pauseDialog, openSettings));
+$('pause-rules').addEventListener('click', () => detour(pauseDialog, () => rulesDialog.showModal()));
+muteBtn.addEventListener('click', () => { audio.setMuted(!audio.muted); syncMute(); });
 
 newGame(false);
 startDialog.showModal();

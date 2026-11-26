@@ -120,7 +120,7 @@ function exitFacingBlob(game, spawn) {
 }
 
 test('an owned spawn emits one dot per interval at the free exit nearest the target', () => {
-  const game = board({ spawns: [{ center: at(game0(), 0, 0), owner: BLUE }, { center: at(game0(), -7, 0), owner: NEUTRAL }] }, { spawnInterval: 2 });
+  const game = board({ spawns: [{ center: at(game0(), 0, 0), owner: BLUE }, { center: at(game0(), -7, 0), owner: NEUTRAL }, { center: at(game0(), 7, 0), owner: RED }] }, { spawnInterval: 2 });
   const s = game.spawns[0];
   setTarget(game, BLUE, at(game, 6, 0));
   step(game);
@@ -145,7 +145,7 @@ test('a spawn with every exit blocked emits nothing; guarding dots face outward'
 });
 
 test('attacking a neutral spawn drains its meter, then captures it with overflow', () => {
-  const game = board({ spawns: [{ center: at(game0(), 0, 0), owner: NEUTRAL, meter: 3 }] }, { spawnInterval: 1000 });
+  const game = board({ spawns: [{ center: at(game0(), 0, 0), owner: NEUTRAL, meter: 3 }, { center: at(game0(), -7, 0), owner: BLUE }, { center: at(game0(), 7, 0), owner: RED }] }, { spawnInterval: 1000 });
   const s = game.spawns[0];
   setTarget(game, BLUE, s.center);
   setTarget(game, RED, at(game, -9, -5));
@@ -187,14 +187,64 @@ test('dots walking past a spawn leave it alone', () => {
   assert.equal(game.dotCount[BLUE], 1);
 });
 
-test('owning every spawn wins', () => {
-  const game = board({ spawns: [{ center: at(game0(), -5, 0), owner: BLUE }, { center: at(game0(), 5, 0), owner: NEUTRAL, meter: 1 }] }, { spawnInterval: 1000 });
+test("taking the last enemy spawn wins once the enemy has no dots; neutrals don't matter", () => {
+  const game = board({ spawns: [
+    { center: at(game0(), -6, 0), owner: BLUE },
+    { center: at(game0(), 6, 0), owner: RED, meter: 1 },
+    { center: at(game0(), 0, -5), owner: NEUTRAL },
+  ] }, { spawnInterval: 1000 });
   const s = game.spawns[1];
   setTarget(game, BLUE, s.center);
+  setTarget(game, RED, s.center);
   const [e, d] = exitFacingBlob(game, s)[0];
   placeDot(game, BLUE, e, d);
   step(game);
+  assert.equal(s.owner, BLUE);
+  assert.equal(game.spawns[2].owner, NEUTRAL);
   assert.equal(game.winner, BLUE);
+});
+
+test('a player with no spawns but some dots is still alive', () => {
+  const game = board({ spawns: [
+    { center: at(game0(), -6, 0), owner: BLUE },
+    { center: at(game0(), 6, 0), owner: BLUE },
+  ] }, { spawnInterval: 1000 });
+  placeDot(game, RED, at(game, 0, 5), E);
+  setTarget(game, RED, at(game, 0, 5));
+  setTarget(game, BLUE, game.spawns[0].center);
+  step(game);
+  assert.equal(game.winner, -1, 'red survives on its one dot');
+});
+
+test('owning every spawn is not enough while the enemy has dots', () => {
+  const game = board({ spawns: [
+    { center: at(game0(), -6, 0), owner: BLUE },
+    { center: at(game0(), 6, 0), owner: RED, meter: 1 },
+  ] }, { spawnInterval: 1000 });
+  const s = game.spawns[1];
+  setTarget(game, BLUE, s.center);
+  setTarget(game, RED, at(game, 0, 6));
+  const [e, d] = exitFacingBlob(game, s)[0];
+  placeDot(game, BLUE, e, d);
+  placeDot(game, RED, at(game, 0, 6), E);
+  step(game);
+  assert.equal(s.owner, BLUE);
+  assert.equal(game.winner, -1);
+});
+
+test('dots blocked by an enemy turn on it, so a locked straggler gets flanked', () => {
+  const game = board();
+  const r = at(game, 0, 0);
+  placeDot(game, RED, r, E);                 // red faces east...
+  placeDot(game, BLUE, nb(game, r, E), W);   // ...locked head-on with this blue dot
+  const flank = nb(game, r, NE);
+  placeDot(game, BLUE, flank, NE);           // facing away, but red is where it wants to go
+  setTarget(game, BLUE, r);
+  setTarget(game, RED, r);
+  const ev = step(game);
+  assert.equal(game.occ[flank]?.facing, SW, 'flanker turned to face red');
+  assert.equal(ev.kills.length, 1);
+  assert.equal(game.dotCount[RED], 0);
 });
 
 test('same seed and same inputs give the same game', () => {

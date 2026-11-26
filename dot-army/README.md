@@ -2,7 +2,7 @@
 
 Two swarms of little arrowheads fight over spawn points, and all you control is where they're headed.
 
-Drag your marker and your dots stream after it. A dot destroys any enemy it's facing, unless that enemy is facing it back, in which case they're stuck glaring at each other until someone circles round behind. Park your marker on a spawn point and your dots throw themselves at it until it's yours. Take every spawn point to win.
+Drag your marker and your dots stream after it. A dot destroys any enemy it's facing, unless that enemy is facing it back, in which case they're stuck glaring at each other until someone circles round behind. Park your marker on a spawn point and your dots throw themselves at it until it's yours. Take all of your opponent's spawn points and mop up their last dots to win.
 
 It's built for two people sharing one phone (multitouch, so you can both drag at once), but there's a CPU opponent too. The [full rules](RULES.md) are short and worth a skim, because the facing rule is the whole game.
 

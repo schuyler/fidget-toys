@@ -3,7 +3,8 @@
 Two players, blue and red, each command a swarm of dots. Dots stream out of
 spawn points and march toward their player's target. Nobody controls individual
 dots: you drag your target, and the swarm follows. Fights are decided by which
-way each dot is facing. Capture every spawn point to win.
+way each dot is facing. Win by taking all your opponent's spawn points
+and destroying their last dot.
 
 ## The field
 
@@ -77,11 +78,15 @@ shuffle. For each dot:
    line. Crowds then spread around the target instead of queueing back
    along the path. The straight-line distance falls with every sidestep,
    so dots can't oscillate. A dot held up by an *enemy* holds its ground.
-4. **Touching the spawn it's targeting:** if the spawn is enemy or
+4. **Blocked by an enemy:** if the dot can't advance and an enemy holds a
+   closer cell, it turns to face that enemy. That's how a crowd finishes
+   off a straggler that's locked head-on with one of its dots: the others
+   turn on it from the side.
+5. **Touching the spawn it's targeting:** if the spawn is enemy or
    neutral, or is friendly with a meter below max, the dot turns to face
    it (to attack or reinforce it). If it's friendly and full, the dot
    turns to face away from it, to guard it.
-5. **Clustering:** a dot that has reached its target is *settled*. So is
+6. **Clustering:** a dot that has reached its target is *settled*. So is
    a dot whose every closer cell is held by settled friends; such a dot
    turns to face directly away from the target. Because dots are
    processed nearest-first, "settled" spreads outward from the target,
@@ -91,7 +96,7 @@ shuffle. For each dot:
    touches an enemy or neutral spawn turns to face it instead, so a
    hedgehog parked beside a spawn grows until it reaches the blob and
    then starts eating it.
-6. Otherwise the dot waits and tries again next tick.
+7. Otherwise the dot waits and tries again next tick.
 
 ### 4. Combat
 Combat is judged from a single snapshot of the board after movement, and
@@ -145,8 +150,14 @@ can choke a spawn by camping on its exits. If `maxDotsPerPlayer` is set,
 a player at the cap gets nothing either.
 
 ### 8. Win check
-If one player owns **every** spawn point, they win immediately. Dots the
-loser still has on the field don't matter.
+A player who owns **no spawn points and has no dots left** is eliminated,
+and the other player wins. Neutral spawns don't count either way: you
+never need to capture them.
+
+So losing your last spawn isn't the end. While you still have dots on the
+field you're alive, and they can retake a spawn by attacking it. A draw
+can't happen: once a spawn has an owner it only ever changes hands and
+never goes back to neutral, so at least one player always owns a spawn.
 
 ## Controls
 

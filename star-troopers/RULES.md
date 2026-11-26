@@ -33,9 +33,12 @@ what it borrows and what it changes.
   | **Rock** | impassable | — | blocks |
 
 - Some cells are **victory hexes** (see Scenarios).
-- In Meeting games the map is point-symmetric (rotated 180° about the
-  centre), so neither side has an advantage. Assault maps have a
-  defender's half and an attacker's half.
+- Maps are mirror images top to bottom, reflected across the centre
+  row, so in Meeting games neither side has an advantage. (Not rotated
+  180°: on this grid a rotated map has no cell at its centre, so it
+  couldn't have three victory hexes on its centre line.) Assault maps
+  use the same mirrored terrain, but have a defender's half and an
+  attacker's half.
 - Each squad starts in a deployment zone along its own edge (the three
   rows nearest it). Troopers are placed automatically, mirrored where the
   map is. **(open: let the player place them)**
@@ -150,8 +153,9 @@ orders.
      troopers, is blocked, and that trooper stops for the rest of the
      turn. Following right behind a moving friend is fine.
    - **Overwatch:** after each step, every trooper with overwatch
-     points that hasn't fired yet shoots the nearest enemy that ended
-     that step in its line of sight, within 6 cells. All overwatch in a
+     points that hasn't fired yet shoots the nearest enemy that moved
+     that step and ended it in its line of sight, within 6 cells.
+     Enemies standing still don't set it off. All overwatch in a
      step resolves together, at `overwatch points × Aim`, against the
      usual defence. Each trooper's overwatch fires once per turn.
    - **Pinned:** a trooper that takes shock from overwatch stops where
@@ -252,6 +256,8 @@ In any scenario, a side with no troopers left loses at once.
 | `holdToWin` | 2 | Victory hexes the attacker needs in Assault |
 | `turnLimit` | 12 | Turns before a scenario is decided |
 | `noise` | 0 | 0 = off, 1 = ±1 on shots that land |
+| `coverScale` | 1 | Tuning: multiplies every cover value |
+| `recoverWhenHit` | 0 | Tuning: 1 = troopers recover every turn, hit or not |
 | `seed` | random | Same seed and same orders = same game |
 
 ## Later
@@ -303,6 +309,13 @@ None of this is in the first version, but it's the plan.
   else. With simultaneous orders this pays off twice: each side only
   ever needs to send its orders, which makes lockstep network play
   simple, and the headless tuner can run thousands of turns.
+- **Tuning.** `node star-troopers/tools/headless.js 100 key=value ...`
+  plays CPU-vs-CPU games without a browser and prints win rates, game
+  length, how often a single shot takes down an unhurt trooper, how
+  often shots can't beat defence, and how often games stall. A comma
+  list sweeps a parameter, so `faction0=compact,orrin,vell
+  faction1=compact,orrin,vell` plays every pairing. The CPU is crude,
+  so these numbers find broken settings, not good ones.
 - **Tune the formulas, not the factions.** The faction numbers are the
   original's and stay put. What the original turned into damage with
   dice and a results table, this game does with a fixed formula, and

@@ -1,20 +1,21 @@
 # Star Troopers — Rules (draft)
 
 Two small squads fight over a patch of a colony world, one soldier at a
-time. Every trooper has a pool of nine task points per turn to spend on
+time. Every trooper has a pool of task points per turn to spend on
 moving, shooting, dodging and keeping watch, and every hit it takes comes
 out of that same pool. Both sides plan their orders in secret, then the
 whole turn plays out at once.
 
-Turn-based. You command one squad; the CPU commands the other. Built so
-that pass-and-play and network play can be added later.
+Turn-based. You pick a faction and command its squad; the CPU picks
+another. Built so that pass-and-play and network play can be added later.
 
-An homage to Tom Walczyk's *StarSoldier* (SPI, 1977). See the notes at
-the end for what it borrows and what it changes.
+An homage to Tom Walczyk's *StarSoldier* (SPI, 1977). The factions'
+numbers are the original species' numbers. See the notes at the end for
+what it borrows and what it changes.
 
-> **Draft.** *Star Troopers* is a working title. Every number here is a
-> starting guess, to be tuned with headless CPU-vs-CPU games. Questions
-> still open are marked **(open)**.
+> **Draft.** *Star Troopers* is a working title. Apart from the faction
+> numbers, every number here is a starting guess, to be tuned with
+> headless CPU-vs-CPU games. Questions still open are marked **(open)**.
 
 ## The field
 
@@ -30,54 +31,48 @@ the end for what it borrows and what it changes.
   | **High ground** | 2 to climb onto, 1 along or off | 1 | clear; see below |
   | **Rock** | impassable | — | blocks |
 
-- In scenarios where both sides have the same goal, the map is
-  point-symmetric (rotated 180° about the centre), so neither squad has
-  an advantage. Other scenarios have their own layouts.
+- Some cells are **victory hexes** (see Scenarios).
+- In Meeting games the map is point-symmetric (rotated 180° about the
+  centre), so neither side has an advantage. Assault maps have a
+  defender's half and an attacker's half.
 - Each squad starts in a deployment zone along its own edge (the three
   rows nearest it). Troopers are placed automatically, mirrored where the
   map is. **(open: let the player place them)**
 
 ## Troopers
 
-- Each side fields one squad of troopers, all of one species.
+- Each side fields a squad of troopers from one faction.
 - A trooper has:
-  - a **pool** of 9 task points;
+  - a **pool** of task points, set by its faction;
   - **shock**, starting at 0. Hits add shock. A trooper's usable points
-    each turn are `9 − shock`. A trooper whose shock reaches 9 is
-    **down** and out of the game;
-  - its species' **Aim** and **Recovery** (below).
+    each turn are `pool − shock`. A trooper whose shock reaches its
+    pool is **down** and out of the game;
+  - its faction's **Aim** and **Recovery**.
 - Each cell holds at most one trooper.
 
-### Species
+### Factions
 
-| Species | Squad | Aim | Recovery | Special |
-|---|---|---|---|---|
-| **Compact** (human) | 4 | 2 | 3 | — |
-| **Vell** | 6 | 1 | 1 | Every cell costs 1 to enter (except rock) |
-| **Orrin** | 4 | 2 | 2 | Orbital strikes (below) |
+Each player picks one at game start. Any pairing is allowed, including
+mirror matches.
 
-- **The Compact:** human colonial troopers. They shoot and dodge twice
-  as well as the Vell, and shake off hits quickly.
-- **The Vell:** worse at both, but there are more of them, they ignore
-  rough ground, and they don't stop coming.
-- **The Orrin:** a little slower to recover than the Compact, but they
-  have a ship overhead.
+| Faction | Homage to | Pool | Aim | Recovery | Value |
+|---|---|---|---|---|---|
+| **Compact** | Humans | 9 | 2 | 3 | 14 |
+| **Orrin** | L'Chal Dah | 12 | 2 | 1 | 15 |
+| **Vell** | Rame | 6 | 4 | 2 | 14 |
 
-Mirror matches (Compact against Compact) are the default.
-**(open: whether the three are fair matches for each other)**
+- **The Compact** are middling at everything except bouncing back.
+  Recovery 3 is a third of their pool, so a trooper that gets out of
+  the line of fire is soon back in the fight.
+- **The Orrin** have the deepest pool, so they can do more in a turn
+  and take more punishment. But they barely recover, so every hit they
+  take sticks around.
+- **The Vell** have the smallest pool, and the best Aim by far, which
+  makes both their shots and their dodging count double. A Vell that's
+  seen and isn't dodging is in trouble.
 
-### Orbital strikes
-
-- An Orrin squad has **2 strikes** per game.
-- To call one, an Orrin trooper spends **3 points** during plotting and
-  picks a target cell in its line of sight.
-- The strike lands **at the end of the Move phase**, on the target cell
-  and the six around it, so anyone who guessed it was coming has had
-  the turn to get clear.
-- It hits every trooper in those cells, Orrin included, at **attack
-  12**, against the usual defence without the range term.
-- If the calling trooper goes down before the strike lands, the strike
-  still lands. **(open)**
+**Value** is pool + Aim + Recovery, and it's how forces are measured
+against each other. A standard squad is **4 troopers**.
 
 ## Orders
 
@@ -92,9 +87,10 @@ split between four tasks, and points left unspent are wasted:
   make every shot at this trooper harder this turn.
 - **Overwatch:** points held back to shoot the first enemy that shows
   itself during movement (see A turn).
-- **Strike** (Orrin only): 3 points to call an orbital strike.
 
 A trooper can do all four in one turn, as long as the points add up.
+**(open: a cap on points per shot, like the original's limit of 6
+points per stage of a turn)**
 
 ## Shooting
 
@@ -104,6 +100,7 @@ defence = cover            (of the cell the target is in when shot)
         + floor(range / 3)
         + floor(cells the target plotted to move / 2)
         + dodge points × Aim
+        + 1 if the target is dug in (see Assault)
 ```
 
 - If `attack < defence`, the shot misses.
@@ -117,9 +114,9 @@ defence = cover            (of the cell the target is in when shot)
   their shock adds up.
 
 For example, a fresh Compact trooper puts 5 points into a shot (attack
-10) at another standing in the open 4 cells away (range 1). With no dodge,
-that's `floor(9 / 2) = 4` shock. If the target had put 3 points into
-dodging (+6), it would have taken `floor(3 / 2) = 1`.
+10) at another standing in the open 4 cells away (range 1). With no
+dodge, that's `floor(9 / 2) = 4` shock. If the target had put 3 points
+into dodging (+6), it would have taken `floor(3 / 2) = 1`.
 
 ### Line of sight
 
@@ -160,31 +157,59 @@ orders.
      it is.
    - A trooper that goes down stops and is removed at the end of the
      step.
-4. **Strikes:** orbital strikes called this turn land, all at once.
-5. **Recovery:** every trooper that took no shock this turn removes
+4. **Recovery:** every trooper that took no shock this turn removes
    shock equal to its Recovery. A hurt trooper that gets into cover and
    keeps its head down will get back into the fight; one that's still
-   being shot at won't. Shock from a strike counts as being hit.
+   being shot at won't.
+5. **Control:** victory hexes change hands (see below).
 6. **Win check.**
 
 ## Scenarios
 
-- **Skirmish:** last squad standing. Symmetric map.
-- **Hold:** three objective cells across the middle of a symmetric map.
-  From turn 4, at the end of each turn, each side scores 1 point per
-  objective it holds a trooper on. First to 8 points wins.
-- **Breakthrough:** one squad attacks and must get half its starting
-  troopers (rounded up) off the defender's edge. The defender wins by
-  stopping it. Asymmetric map. **(open: whether you can pick the side)**
+### Victory hexes
 
-Any scenario also ends after **12 turns**. Unless the scenario says
-otherwise, the side with more troopers left standing wins, and equal
-numbers is a draw.
+- A victory hex becomes yours at the end of a turn if one of your
+  troopers is on it and no enemy trooper is next to it.
+- It stays yours after you leave, until the enemy takes it the same way.
+  Holding a hex means taking it and keeping it, not standing on it at
+  the right moment.
+
+### Meeting
+
+Equal squads, symmetric map. Three victory hexes on the centre line,
+starting neutral.
+
+- Hold all three at the end of a turn to win.
+- At the end of turn 12, whoever holds more wins. Equal holdings are a
+  draw.
+
+### Assault
+
+One side attacks and the other defends. Either faction can take either
+role; you pick yours in settings.
+
+- **The defender** fields a standard squad and starts holding three
+  victory hexes in its half. Its troopers start **dug in**: +1 defence
+  while they're still in their deployment zone and haven't left it.
+- **The attacker** fields the fewest troopers whose total value is at
+  least **1.2 ×** the defender's. For example, against 4 Compact (56),
+  that's 5 Compact (70) or 5 Orrin (75).
+- The attacker wins at the end of any turn in which it holds **two** of
+  the three victory hexes. It doesn't need to be stronger everywhere,
+  just in the right two places, so the defender has to guess where the
+  push is coming.
+- The defender wins if turn 12 ends without that.
+- **(open: the surplus, somewhere around 1.2–1.5 ×, and the turn
+  limit, around 10–14, both tuned headlessly)**
+
+### Elimination
+
+In any scenario, a side with no troopers left loses at once.
 
 ## Controls
 
-- **Plotting:** tap one of your troopers. Its pool appears as nine pips,
-  with lost points shown as shock.
+- **Plotting:** tap one of your troopers. Its pool appears as a row of
+  pips, with lost points shown as shock.
   - Drag from the trooper to plot a path. Its cost fills pips as you go.
   - Tap an enemy to aim at it, then use + and − to set fire points. The
     preview sits beside the target.
@@ -193,6 +218,8 @@ numbers is a draw.
 - **Watching:** the turn plays back as shots first, then movement step
   by step, with overwatch shots as they happen. A **Replay** button runs
   the last turn again.
+- Victory hexes show their owner's colour. The turn counter shows how
+  many turns are left.
 - Everything on the field is visible, including enemy shock. Only
   orders are secret. **(open: fog of war)**
 - Pan by dragging and pinch to zoom, as in Coreward Bound.
@@ -201,9 +228,10 @@ numbers is a draw.
 
 | Setting | Choices |
 |---|---|
-| Your squad | Compact, Vell, Orrin |
-| Enemy squad | Compact, Vell, Orrin |
-| Scenario | Skirmish, Hold, Breakthrough |
+| Your faction | Compact, Orrin, Vell |
+| Enemy faction | Compact, Orrin, Vell |
+| Scenario | Meeting, Assault |
+| Your role (Assault) | Attacker, Defender |
 | CPU | Easy, Hard |
 | Map | Small, Medium, Large |
 | Terrain | Open, Some, Dense |
@@ -213,17 +241,52 @@ numbers is a draw.
 
 | Name | Default | Meaning |
 |---|---|---|
-| `pool` | 9 | Task points per trooper; shock at this level is down |
+| `squad` | 4 | Troopers in a standard squad |
 | `rangeStep` | 3 | Cells per +1 defence from range |
 | `motionStep` | 2 | Plotted cells moved per +1 defence |
 | `damageDivisor` | 2 | Shock = margin ÷ this, rounded down |
+| `maxShot` | 0 | Most points in one shot (0 = no cap) |
 | `overwatchRange` | 6 | How far overwatch reaches |
-| `strikes` | 2 | Orbital strikes per Orrin squad per game |
-| `strikeCost` | 3 | Task points to call a strike |
-| `strikeAttack` | 12 | Attack of a strike against each trooper it hits |
+| `surplusPct` | 120 | Attacker's value as a percentage of the defender's |
+| `holdToWin` | 2 | Victory hexes the attacker needs in Assault |
+| `turnLimit` | 12 | Turns before a scenario is decided |
 | `noise` | 0 | 0 = off, 1 = ±1 on shots that land |
-| `turnLimit` | 12 | Turns before a scenario is decided on troopers left |
 | `seed` | random | Same seed and same orders = same game |
+
+## Later
+
+None of this is in the first version, but it's the plan.
+
+- **The Xenos**, homage to the Xenophobes: pool 9, Aim 1, Recovery 1,
+  value 11. Bad at everything, and they make up for it with neutron
+  bombs and numbers.
+- **Neutron bombs** (Xenos only): plot a target cell. The bomb lands at
+  the end of movement, may scatter a cell or two, and wrecks whatever it
+  hits, leaving a crater. The only defence is not being there.
+  **(open: numbers)**
+- **Killer Swarm** (Vell only): up to three adjacent Vell merge into a
+  single piece that pools their points and acts as one trooper, as in
+  the original, where three Rame made a soldier with a pool of 18. It
+  can also split again. **(open: how merging and splitting work)**
+- **Orbital support.** An Assault attacker has a ship overhead, but only
+  on a schedule, when its orbit brings it past:
+  - The ship is overhead for 2 turns out of every 5. The first pass
+    falls on turn 2, 3 or 4, chosen by the seed, and the whole schedule
+    is shown on a turn strip from the start. Both sides know when it's
+    coming.
+  - During a pass, the attacker can call **one strike**. A trooper
+    spends 3 points and picks a target cell in its line of sight.
+  - The strike lands at the end of movement, on the target cell and
+    the six around it, so anyone who saw it coming has had the turn to
+    get clear. It hits every trooper there, the attacker's included, at
+    attack 12, against the usual defence without the range term.
+  - The game then has a rhythm: the defender spreads out and digs in
+    before a pass, and the attacker times its push for one.
+- **Breakthrough:** an attacker that must get troopers off the far
+  edge.
+- **Wildlife:** a neutral predator that attacks whoever's nearest.
+- **Fog of war,** and **pass-and-play** with a cover screen between the
+  two players' plotting.
 
 ## Notes
 
@@ -232,6 +295,15 @@ numbers is a draw.
   else. With simultaneous orders this pays off twice: each side only
   ever needs to send its orders, which makes lockstep network play
   simple, and the headless tuner can run thousands of turns.
+- **Tune the formulas, not the factions.** The faction numbers are the
+  original's and stay put. What the original turned into damage with
+  dice and a results table, this game does with a fixed formula, and
+  that changes the balance. Run the Vell through it: 6 points of fire
+  at Aim 4 is attack 24. Against a Compact trooper in the open 3 cells
+  away (defence 1), that's 11 shock, dead from full. A Compact trooper
+  putting all 9 points into a shot (attack 18) at a Vell that isn't
+  dodging deals 8, more than the Vell's whole pool. If everything kills
+  everything, the fix is in `damageDivisor`, `rangeStep` and `maxShot`.
 - **Why noise starts off.** Not knowing the other side's orders is
   already plenty of uncertainty, and the interesting kind. The worry
   with pure arithmetic is that defence can become absolute: two squads
@@ -246,8 +318,6 @@ numbers is a draw.
   random (from the seeded generator), rather than always making the
   single best reply. A CPU that always makes the best reply to its
   prediction is easy to bait.
-- **Pass-and-play,** when it comes, needs a cover screen between the
-  two players' plotting.
 - **Homage.** Tom Walczyk's *StarSoldier* (SPI, 1977; developed by
   B.E. Hessel, art by Redmond A. Simonsen) was the tactical volume of
   SPI's StarForce trilogy, alongside StarForce and Outreach. Outreach is
@@ -257,28 +327,34 @@ numbers is a draw.
   developer's notes, as quoted in a 2018 review: "We do not believe
   that combat results have been expressed in movement costs before."
 - **What it borrows:**
-  - the task-point pool, with each species rated for aim and
-    recovery;
-  - attack as points spent times aim, against a defence built from
-    terrain, range, movement and evasion;
+  - the task-point pool, with each species rated for Efficiency (our
+    Aim) and Recovery;
+  - the species' numbers. Humans 9 / 2 / 3, L'Chal Dah 12 / 2 / 1,
+    Rame 6 / 4 / 2 and Xenophobes 9 / 1 / 1, as given in Steve List's
+    "StarSoldier: Doctrine, Tactics, and Capabilities" (*Moves* #32).
+    As List put it, each species "has some weakness, but most have a
+    particular strength to make up for it";
+  - List's "Specific Tactical Value" (pool + Efficiency + Recovery) as
+    the measure of a force, and his 120-to-100 split between the two
+    sides of a first-contact scenario as the starting attacker surplus;
+  - attack as points spent times Efficiency, against a defence built
+    from terrain, range, movement and countermeasures;
   - pre-plotted, simultaneous orders, with opportunity fire;
-  - the original's numbers. The Compact's 9 / 2 / 3 and the Vell's
-    9 / 1 / 1 are the pool, aim and recovery that StarSoldier gave its
-    humans and its Xenophobes;
-  - the lineup of a human force and two alien species, one of them
-    backed from orbit, though with its own species and names.
-- **What changed from the 1977 game.** I couldn't get hold of its
-  rulebook, so this is built from reviews and published play reports:
+  - the four-species lineup, under our own names, with the Rame's
+    Killer Swarm and the Xenophobes' neutron bombs planned for later.
+- **What changed from the 1977 game:**
   - The computer does the bookkeeping. Tracking points and writing
     orders was what reviewers complained about most.
-  - Four tasks instead of the original's longer list.
+  - Four tasks instead of the original's longer list (grounding,
+    altitude, launched weapons, search and so on).
   - Damage is half the margin by which attack beats defence, with
-    optional ±1 noise.
+    optional ±1 noise, instead of dice and a results table.
+  - Single-stage turns, with no per-stage spending limit (yet).
   - Recovery only happens in a turn the trooper wasn't hit.
   - Shots happen before anyone moves, from where everyone starts.
     Overwatch is the only fire during movement, and a hit pins.
-  - Single-stage turns only.
-  - Its own species and scenarios. Orbital support is boiled down to
-    the Orrin's two strikes. No homing missiles or wildlife. **(open:
-    either as a later addition, for example a neutral predator that
-    attacks whoever's nearest)**
+  - No heavy-weapons troopers, androids or support platforms.
+  - Victory hexes held at a deadline, instead of the original's
+    victory points for casualties inflicted.
+  - Orbital support, when it arrives, belongs to the attacker's role
+    and only works when the ship is overhead.

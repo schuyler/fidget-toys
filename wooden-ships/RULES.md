@@ -123,7 +123,7 @@ Getting upwind of your rival lets you steal their wind. **(open)**
 - A ball leaves the gun at `muzzleSpeed` in the direction it's aimed,
   plus the ship's own velocity, with a random spread of up to ±3°. It
   flies straight and flat, and it splashes harmlessly after `gunRange`.
-  **(open: elevation, or balls skipping off the water)**
+  Elevation comes later (see Embellishments: charged shots).
 - A side reloads in `reload` seconds after it fires. Each side has its
   own reload, so you can fire one broadside, turn, and fire the other.
   An arc beside each button shows its reload.
@@ -322,6 +322,27 @@ Each is a sketch, not a rule yet.
   draw more water and ground on shallows a light ship can cross, which
   would give a small ship somewhere to run)**
 
+- **Charged shots (elevation).** Holding a fire button raises the guns.
+  The longer you hold, the higher the arc and the longer the range, up
+  to a maximum. Let go to fire.
+  - Each ball flies a real arc (a parabola, which keeps the sim to plain
+    arithmetic) and can only hit a ship where it's low enough to strike
+    the hull. That means along most of a short, flat shot, but only
+    near the end of a long, lofted one. So a broadside can overshoot
+    (sail clean over the target) or undershoot (splash short), and
+    judging the range becomes the gunner's skill. Traverse still
+    handles direction automatically, so the player decides only *when*
+    and *how far*.
+  - A tap fires the flattest arc, which is the MVP's flat shot. Charging
+    is something you choose to do, not a step every shot needs.
+  - Holding the button costs time. A ship you're about to rake may get
+    out of your arc while you charge.
+  - Lofted shots could clear low islands, and later could be how chain
+    shot reaches rigging.
+  - The ball's height shows as its shadow on the water pulling away
+    from it. **(open: whether charging also shows where the shots will
+    land, or only a gauge. A landing line makes range easy to judge,
+    and may take the skill out)**
 - **Magazine explosions** (optional): a hit that kills the last of a
   ship's crew has a small chance of blowing her up instead of making her
   strike. That brings back a dramatic sinking without a second damage

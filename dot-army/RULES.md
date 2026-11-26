@@ -144,11 +144,27 @@ Every `meterRegen` ticks, each owned spawn's meter rises by 1, up to max.
 A freshly captured spawn is fragile at first, then digs in.
 
 ### 7. Spawning
-Every `spawnInterval` ticks, each owned spawn emits **one dot** at its free
-exit closest to the owner's target. The new dot faces outward, away from
-the spawn's centre. If every exit is blocked, nothing comes out, so you
-can choke a spawn by camping on its exits. If `maxDotsPerPlayer` is set,
-a player at the cap gets nothing either.
+Each player has one **production pool** shared by all their spawns. Every
+tick it fills by:
+
+```
+rate = (1 + extraSpawnRate% × (spawns owned − 1)) / spawnInterval
+       × armyHalfRate / (armyHalfRate + dots on the field)
+```
+
+With the defaults, one spawn makes a dot every 2 ticks, each further spawn
+adds half that (so four spawns make 2.5× as many dots, not 4×), and an
+army of 100 dots produces at half speed. Capturing spawns still pays, but
+less with each one, and hoarding a huge army slows you down. Spend your
+dots.
+
+Each time the pool holds a whole dot, one dot comes out of the **next
+owned spawn in turn** (round robin), at its free exit closest to the
+owner's target. The new dot faces outward, away from the spawn's centre.
+A spawn with every exit blocked is skipped and the next one gets the dot,
+so camping a spawn's exits stops dots coming out *there*, not overall. If
+every spawn is blocked, the pool keeps at most one dot's worth waiting.
+If `maxDotsPerPlayer` is set, a player at the cap gets nothing.
 
 ### 8. Win check
 A player who owns **no spawn points and has no dots left** is eliminated,
@@ -208,7 +224,9 @@ table below is fixed at its default.
 |---|---|---|
 | field size | medium | Cells across the short side: 24 / 34 / 46 |
 | `tickRate` | 8 | Ticks per second |
-| `spawnInterval` | 2 | Ticks between emissions from each spawn |
+| `spawnInterval` | 2 | Ticks per dot from a single spawn |
+| `extraSpawnRate` | 50 | % of a spawn's output each further spawn adds (100 = linear) |
+| `armyHalfRate` | 100 | Army size at which production halves (0 = off) |
 | `neutralSpawns` | 6 | Neutral spawn points (even) |
 | `meterMax` | 40 | Control meter cap; homes start full |
 | `neutralMeter` | 10 | Starting meter of neutral spawns |
@@ -236,4 +254,11 @@ table below is fixed at its default.
   facing, every game finished, typically in under a minute.
 - **Tuning.** `node dot-army/tools/headless.js 20 key=value ...` plays
   CPU-vs-CPU games without a browser and prints how long they took, who
-  won, kills and captures. Human games run longer than CPU ones.
+  won, kills, captures and how often the lead in spawns changed hands.
+  Human games run longer than CPU ones.
+- **Why production has diminishing returns.** When every spawn emitted on
+  its own clock, production grew linearly with spawns, so whoever got
+  ahead snowballed. In 150 CPU-vs-CPU games on a medium board, the shared
+  pool with these defaults stretched games from 41 to 59 seconds on
+  average, raised lead changes from 2.1 to 2.9 per game, and cut the peak
+  army from about 185 dots to about 75.

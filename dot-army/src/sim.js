@@ -18,7 +18,12 @@ export const DEFAULTS = {
   width: 60,
   height: 40,
   tickRate: 8,
+  /** ticks per dot from a single spawn with an empty field */
   spawnInterval: 2,
+  /** % of a spawn's output each spawn beyond the first adds (100 = linear) */
+  extraSpawnRate: 50,
+  /** army size at which production halves (0 = no slowdown) */
+  armyHalfRate: 100,
   neutralSpawns: 6,
   meterMax: 40,
   neutralMeter: 10,
@@ -77,6 +82,8 @@ export const DEFAULTS = {
  * @property {number[]} targets    target cell per player
  * @property {Int32Array[]} dist   flow field per player
  * @property {number[]} dotCount   per player
+ * @property {number[]} production per player: fixed-point credit toward the next dot (PROD_UNIT = one dot)
+ * @property {number[]} nextSpawn  per player: spawn id the round robin tries first
  * @property {number} nextId
  * @property {number} winner       -1 while playing
  * @property {Events} events       what happened in the last tick
@@ -126,6 +133,8 @@ export function createGame(overrides = {}, layout) {
     targets: [0, 0],
     dist: [new Int32Array(N), new Int32Array(N)],
     dotCount: [0, 0],
+    production: [0, 0],
+    nextSpawn: [0, 0],
     nextId: 1,
     winner: -1,
     events: emptyEvents(),
@@ -303,9 +312,9 @@ export function step(/** @type {Game} */ game) {
   moveDots(game);            // phase 3
   resolveCombat(game);       // phase 4
   resolveSpawnAttacks(game); // phase 5
-  regenMeters(game);
-  emitDots(game);            // phase 6
-  checkWin(game);            // phase 7
+  regenMeters(game);         // phase 6
+  emitDots(game);            // phase 7
+  checkWin(game);            // phase 8
   for (let p = 0; p < 2; p++) game.stats.peak[p] = Math.max(game.stats.peak[p], game.dotCount[p]);
   return game.events;
 }
@@ -612,30 +621,67 @@ function regenMeters(/** @type {Game} */ game) {
   for (const s of game.spawns) if (s.owner >= 0 && s.meter < meterMax) s.meter++;
 }
 
-/** Phase 6: each owned spawn emits one dot at its free exit nearest the owner's target. */
-function emitDots(/** @type {Game} */ game) {
-  const { params, rng, grid } = game;
-  if (game.tick % params.spawnInterval !== 0) return;
-  for (const s of game.spawns) {
-    if (s.owner < 0) continue;
-    if (params.maxDotsPerPlayer > 0 && game.dotCount[s.owner] >= params.maxDotsPerPlayer) continue;
-    const D = game.dist[s.owner];
-    let best = -1, bestD = Infinity, ties = 0;
-    for (const e of s.exits) {
-      if (game.occ[e] || game.terrain[e] !== FREE) continue;
-      if (D[e] < bestD) { best = e; bestD = D[e]; ties = 1; }
-      else if (D[e] === bestD && rng.int(++ties) === 0) best = e;
+/** One dot's worth of production credit. Integer maths keeps the sim deterministic. */
+export const PROD_UNIT = 1 << 16;
+
+/**
+ * Production credit a player earns per tick: one dot per spawnInterval from
+ * the first spawn, each further spawn adding extraSpawnRate% of that, all
+ * scaled down by armyHalfRate / (armyHalfRate + army size).
+ * @param {Game} game @param {number} player
+ */
+export function productionRate(game, player) {
+  const { spawnInterval, extraSpawnRate, armyHalfRate } = game.params;
+  let owned = 0;
+  for (const s of game.spawns) if (s.owner === player) owned++;
+  if (!owned) return 0;
+  const k = armyHalfRate > 0 ? armyHalfRate : 1;
+  const army = armyHalfRate > 0 ? game.dotCount[player] : 0;
+  return Math.floor((PROD_UNIT * (100 + extraSpawnRate * (owned - 1)) * k) / (100 * spawnInterval * (k + army)));
+}
+
+/**
+ * Phase 7: each player's production pool fills every tick; each full unit
+ * emits one dot from the next owned spawn in turn (round robin), at its free
+ * exit nearest the owner's target. A spawn whose exits are all blocked is
+ * skipped. If every owned spawn is blocked, at most one dot's credit waits.
+ * @param {Game} game
+ */
+function emitDots(game) {
+  const { params, rng, grid, spawns } = game;
+  for (let p = 0; p < 2; p++) {
+    game.production[p] += productionRate(game, p);
+    while (game.production[p] >= PROD_UNIT) {
+      if (params.maxDotsPerPlayer > 0 && game.dotCount[p] >= params.maxDotsPerPlayer) break;
+      let emitted = false;
+      for (let i = 0; i < spawns.length && !emitted; i++) {
+        const s = spawns[(game.nextSpawn[p] + i) % spawns.length];
+        if (s.owner !== p) continue;
+        const D = game.dist[p];
+        let best = -1, bestD = Infinity, ties = 0;
+        for (const e of s.exits) {
+          if (game.occ[e] || game.terrain[e] !== FREE) continue;
+          if (D[e] < bestD) { best = e; bestD = D[e]; ties = 1; }
+          else if (D[e] === bestD && rng.int(++ties) === 0) best = e;
+        }
+        if (best < 0) continue;
+        const dot = placeDot(game, p, best, dirToward(grid, s.center, best));
+        if (!dot) continue;
+        dot.prevCell = s.center;
+        game.events.spawned++;
+        game.stats.spawned[p]++;
+        game.nextSpawn[p] = (s.id + 1) % spawns.length;
+        emitted = true;
+      }
+      if (!emitted) break;
+      game.production[p] -= PROD_UNIT;
     }
-    if (best < 0) continue;
-    const facing = dirToward(grid, s.center, best);
-    const dot = placeDot(game, s.owner, best, facing);
-    if (dot) { dot.prevCell = s.center; game.events.spawned++; game.stats.spawned[s.owner]++; }
+    if (game.production[p] > PROD_UNIT) game.production[p] = PROD_UNIT;
   }
 }
 
-/** Phase 7. */
 /**
- * Phase 7: a player with no spawns and no dots is eliminated. Neutral spawns
+ * Phase 8: a player with no spawns and no dots is eliminated. Neutral spawns
  * don't matter. A draw can't happen: owned spawns only ever change hands,
  * never go neutral, so someone always owns at least one.
  * @param {Game} game
@@ -656,6 +702,7 @@ export function stateHash(/** @type {Game} */ game) {
   mix(game.tick);
   for (const d of game.dots) { mix(d.id); mix(d.player); mix(d.cell); mix(d.facing); }
   for (const s of game.spawns) { mix(s.owner + 1); mix(s.meter); }
+  for (let p = 0; p < 2; p++) { mix(game.production[p]); mix(game.nextSpawn[p]); }
   mix(game.rng.state());
   return h >>> 0;
 }

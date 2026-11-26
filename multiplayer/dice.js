@@ -70,7 +70,6 @@ export async function createDice({ seats, local, length = 4096 }) {
 
     /** The local element for roll k, to send to the other seats. */
     reveal(/** @type {number} */ k) {
-      if (!(k >= 1 && k <= length)) throw new RangeError(`roll ${k} out of range 1..${length}`);
       record(local, k, chain[k]);
       return toHex(chain[k]);
     },

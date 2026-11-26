@@ -12,7 +12,7 @@ export default {
   async fetch(request, env) {
     const r = parseRequest(new URL(request.url));
     if (!r) return new Response(null, { status: 400 });
-    if (request.headers.get('Upgrade') !== 'websocket') return new Response(null, { status: 426 });
+    if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response(null, { status: 426 });
     if (!originAllowed(request.headers.get('Origin'), parseOrigins(env.ALLOWED_ORIGINS))) return new Response(null, { status: 403 });
     return env.ROOMS.get(env.ROOMS.idFromName(`${r.game}/${r.code}`)).fetch(request);
   },
@@ -30,6 +30,8 @@ export class Room extends DurableObject {
   async fetch(request) {
     const r = /** @type {{ seat: number }} */ (parseRequest(new URL(request.url)));
     const tag = String(r.seat);
+    // Either can hold the seat: a CLOSING socket stays in getWebSockets(), and a seat freed by
+    // getWebSockets() may still be in the room until its close event arrives.
     if (this.ctx.getWebSockets(tag).length || this.room.has(r.seat)) return new Response(null, { status: 409 });
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server, [tag]);

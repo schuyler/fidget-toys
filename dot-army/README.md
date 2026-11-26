@@ -16,6 +16,10 @@ python3 -m http.server 8000
 
 Then open <http://localhost:8000/dot-army/>. To play on a phone, use your computer's LAN address instead of `localhost`.
 
+## Online play
+
+Half built. Two tabs in one browser can already play each other in perfect sync (`?room=TEST&host` in one, `?room=TEST` in the other), but there's no relay server yet, so two phones can't. [NETWORK.md](NETWORK.md) has the design and the plan.
+
 ## Tests
 
 ```

@@ -91,6 +91,8 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
         check(s1.selected === u.lead && s1.reach.length > 0 && s1.pop === null, `tapping a trooper selects it and shows its move range (${s1.reach.length} cells)`);
         // and a popover never outlives a change of selection
         await p.mouse.click(pos[0], pos[1]);
+        await p.waitForTimeout(30);
+        check((await dbg(p)).pop === 'unit' && !(await p.$eval('#popover', (e) => e.hidden)), 'a second tap opens its popover');
         const other = s0.units.find((x) => x.lead !== u.lead);
         await p.click(`.unit-chip[data-lead="${other.lead}"]`);
         await p.waitForTimeout(30);

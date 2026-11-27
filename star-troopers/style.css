@@ -116,8 +116,6 @@ button:disabled { opacity: 0.4; cursor: default; }
 .pip.dodge { background: var(--dodge); border-color: var(--dodge); }
 .pip.watch { background: var(--watch); border-color: var(--watch); }
 .pip.bomb { background: var(--bomb); border-color: var(--bomb); }
-.pip.later { border-style: dashed; opacity: 0.5; }
-.pip.shock { background: var(--red); border-color: var(--red); opacity: 0.35; }
 
 /* Popovers sit next to the cell they're about. */
 #popover {

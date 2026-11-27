@@ -62,6 +62,7 @@ function newGame(start = true) {
   stats = { plots: 0, ms: 0, taps: 0 };
   show = null;
   renderer.effects.clear();
+  caption.hidden = true;
   hideOver();
   if (start) beginPlot(); else { phase = 'menu'; units = plot.unitsFor(game, ME); drafts = new Map(); updateUI(); }
 }
@@ -301,7 +302,7 @@ function renderPopover() {
       ${stepper('Watch', 'overwatch', d.overwatch)}
       ${(d.launch ?? 0) > 0 ? stepper('Bomb', 'launch', d.launch ?? 0) : ''}
       <div class="presets">
-        <button data-act="bomb">${(d.launch ?? 0) > 0 ? 'Re-aim bomb' : 'Bomb…'}</button>
+        <button data-act="bomb" ${plot.bombAt(game, u, d, u.cell) ? '' : 'disabled'}>${(d.launch ?? 0) > 0 ? 'Re-aim bomb' : 'Bomb…'}</button>
         ${presets.map(([k, label, v]) => `<button data-preset="${k}" ${v ? '' : 'disabled'}>${label}</button>`).join('')}
         <button data-act="clear">Clear</button>
       </div>
@@ -504,6 +505,7 @@ $('btn-commit').addEventListener('click', () => {
 });
 confirmDialog.addEventListener('close', () => {
   const v = confirmDialog.returnValue;
+  if (v) plotTaps++;
   if (v === 'repeat') {
     for (const u of units) {
       if (drafts.has(u.lead)) continue;
@@ -622,7 +624,7 @@ function startBeat(/** @type {Beat} */ b, /** @type {number} */ now) {
   } else if (b.kind === 'blast') {
     caption.textContent = 'Bombs go off';
     for (const l of b.launches) {
-      if (l.landed !== l.aimed) fx.arrow(l.aimed, l.landed >= 0 ? l.landed : l.aimed, now);
+      if (l.landed >= 0 && l.landed !== l.aimed) fx.arrow(l.aimed, l.landed, now);
       if (l.landed >= 0) fx.blast(blastCells(game, l.landed).map((x) => x.cell), l.landed, now + 200);
     }
     b.shots.forEach(shotFx);

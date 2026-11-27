@@ -383,7 +383,7 @@ export function createRenderer(canvas) {
     drawPlans(scene);
     drawPieces(scene.pieces);
     fx = fx.filter((f) => now - f.t0 < f.life);
-    for (const f of fx) f.draw(Math.min(1, (now - f.t0) / f.life));
+    for (const f of fx) if (now >= f.t0) f.draw(Math.min(1, (now - f.t0) / f.life));
     drawDrag(scene);
   }
 

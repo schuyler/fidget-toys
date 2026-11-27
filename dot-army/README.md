@@ -18,7 +18,7 @@ Then open <http://localhost:8000/dot-army/>. To play on a phone, use your comput
 
 ## Online play
 
-Works between two devices through the relay in [`multiplayer/`](../multiplayer/), deployed on Cloudflare. Start from Play online or Join with code. Not there yet: a QR code, reconnecting after a reload, and a pause that pauses both sides. For development, `?room=TEST&host&relay=bc` and `?room=TEST&relay=bc` in two tabs of one browser play each other with no server. [NETWORK.md](NETWORK.md) has the design and what's left.
+Works between two devices through the relay in [`multiplayer/`](../multiplayer/), deployed on Cloudflare. Start from Play online or Join with code. Join a code nobody is hosting and after five seconds the game says so, then keeps waiting in case the host is just late. Not there yet: a QR code, reconnecting after a reload, and a pause that pauses both sides. For development, `?room=TEST&host&relay=bc` and `?room=TEST&relay=bc` in two tabs of one browser play each other with no server. [NETWORK.md](NETWORK.md) has the design and what's left.
 
 ## Tests
 

@@ -72,6 +72,31 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     check(before !== after && after !== undefined, `top-half tap moves blue's target (${before} → ${after})`);
   }
 
+  // 5. Layout: in portrait the board starts near the top (no empty band where a
+  // second HUD used to be) and ends above the HUD and ☰; landscape is unchanged.
+  {
+    const p = await page({ width: 390, height: 844 });
+    await p.click('#start-new');
+    await p.waitForTimeout(500);
+    const b = await p.evaluate(() => dotArmyDebug().board);
+    const menuTop = await p.evaluate(() => document.getElementById('btn-menu').getBoundingClientRect().top);
+    check(!!b && b.y <= 12, `portrait: board top ${b?.y?.toFixed(1)} is at most 12 px (was ~34)`);
+    check(!!b && b.y + b.h <= menuTop, `portrait: board bottom ${(b?.y + b?.h)?.toFixed(1)} is above ☰ (${menuTop})`);
+  }
+  {
+    const cw = 844, ch = 390;
+    const p = await page({ width: cw, height: ch });
+    await p.click('#start-new');
+    await p.waitForTimeout(500);
+    const b = await p.evaluate(() => dotArmyDebug().board);
+    const near = (x, y) => Math.abs(x - y) < 0.01;
+    // Before: fitted into (cw - 20) × (ch - 56), centred horizontally, and
+    // vertically in the space below the 38 px HUD strip.
+    const fits = !!b && b.w <= cw - 20 + 0.01 && b.h <= ch - 56 + 0.01 && (near(b.w, cw - 20) || near(b.h, ch - 56));
+    const placed = !!b && near(b.x, (cw - b.w) / 2) && near(b.y, 38 + (ch - 38 - b.h) / 2);
+    check(fits && placed, `landscape: board placed as before (${JSON.stringify(b)})`);
+  }
+
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join('; ') : ''}`);
   await browser.close();
   console.log(failures.length ? 'FAIL' : 'PASS');

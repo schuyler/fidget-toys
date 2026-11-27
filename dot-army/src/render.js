@@ -23,6 +23,30 @@ export const COLORS = {
 const SQRT3 = Math.sqrt(3);
 
 /**
+ * Where the board may go on a cw × ch screen: it is scaled to fit w × h and
+ * centred on (cx, cy). Landscape keeps a HUD strip on top; portrait keeps
+ * one at the bottom, where the ☰ button also sits, and stays clear of the
+ * notch and home indicator.
+ * @param {number} cw @param {number} ch
+ * @param {{ top: number, bottom: number }} safe  safe-area insets in px
+ * @returns {{ w: number, h: number, cx: number, cy: number }}
+ */
+export function boardArea(cw, ch, safe) {
+  if (ch <= cw) return { w: cw - 20, h: ch - 56, cx: cw / 2, cy: 38 + (ch - 38) / 2 };
+  const top = 10 + safe.top, bottom = 34 + safe.bottom;
+  const h = ch - top - bottom;
+  return { w: cw - 20, h, cx: cw / 2, cy: top + h / 2 };
+}
+
+/** Safe-area insets, read from the #safe-probe element (JS can't read env()). */
+function safeInsets() {
+  const probe = document.getElementById('safe-probe');
+  if (!probe) return { top: 0, bottom: 0 };
+  const st = getComputedStyle(probe);
+  return { top: parseFloat(st.paddingTop) || 0, bottom: parseFloat(st.paddingBottom) || 0 };
+}
+
+/**
  * @typedef {Object} Particle
  * @property {number} x @property {number} y @property {number} vx @property {number} vy
  * @property {number} life @property {number} max @property {string} color @property {number} size
@@ -73,13 +97,12 @@ export function createRenderer(canvas) {
     canvas.style.height = ch + 'px';
     portrait = ch > cw;
     if (!game) return;
-    const hud = portrait ? 34 : 38;
-    const padX = 10, padY = portrait ? hud * 2 : hud + 10;
-    size = fitSize(game.grid, cw - padX * 2, ch - padY - (portrait ? 0 : 8));
+    const a = boardArea(cw, ch, safeInsets());
+    size = fitSize(game.grid, a.w, a.h);
     const b = boardSize(game.grid, size);
     bw = b.w; bh = b.h;
-    ox = (cw - bw) / 2;
-    oy = portrait ? (ch - bh) / 2 : hud + (ch - hud - bh) / 2;
+    ox = a.cx - bw / 2;
+    oy = a.cy - bh / 2;
     buildStatic();
   }
 
@@ -578,6 +601,8 @@ export function createRenderer(canvas) {
     setView(v) { view = { ...v }; },
     get size() { return size; },
     get board() { return { x: ox, y: oy, w: bw, h: bh }; },
+    /** The space the board gets on the current screen; newGame shapes the board to it. */
+    area() { return boardArea(window.innerWidth, window.innerHeight, safeInsets()); },
   };
 }
 

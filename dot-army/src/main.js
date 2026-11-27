@@ -75,7 +75,7 @@ const rotated = () => !net && screenPortrait() !== gamePortrait;
  *   role: 'host'|'guest', local: number, room: string,
  *   transport: import('./net.js').Transport,
  *   ls: ReturnType<typeof createLockstep> | null,
- *   gameNo: number, waitingSince: number,
+ *   gameNo: number, waitingSince: number, joinedAt: number,
  *   status: 'lobby'|'playing'|'version'|'desync'|'left'|'full'|'unreachable'|'lost',
  * }}
  */
@@ -100,10 +100,9 @@ function newGame(start = true, fixed) {
   const short = CHOICES.size[/** @type {keyof typeof CHOICES.size} */ (settings.size)];
   const portrait = screenPortrait();
   gamePortrait = portrait;
-  // Match the board's aspect ratio to the screen (hex rows are 1.5 radii
-  // tall, columns sqrt(3) wide), leaving room for the HUD.
-  const availW = window.innerWidth - 20;
-  const availH = window.innerHeight - (portrait ? 68 : 56);
+  // Match the board's aspect ratio to the space it will be drawn in (hex rows
+  // are 1.5 radii tall, columns sqrt(3) wide).
+  const { w: availW, h: availH } = renderer.area();
   const aspect = availW / availH;
   let width, height;
   if (portrait) {
@@ -288,7 +287,9 @@ function overlay() {
     if (net.status === 'lobby') {
       return net.role === 'host'
         ? { lines: [net.room], sub: 'waiting for the other player to join…' }
-        : { lines: ['JOINING'], sub: `room ${net.room} · waiting for the host…` };
+        : performance.now() - net.joinedAt > NO_HOST_MS
+          ? { lines: ['NO ONE', 'HERE YET'], sub: `room ${net.room} has no host · check the code, or ☰ to leave` }
+          : { lines: ['JOINING'], sub: `room ${net.room} · waiting for the host…` };
     }
     if (phase === 'play' && net.waitingSince && performance.now() - net.waitingSince > 600) {
       return { lines: ['WAITING'], sub: 'for the other player…' };
@@ -443,6 +444,9 @@ muteBtn.addEventListener('click', () => { audio.setMuted(!audio.muted); syncMute
 // Network play: the host (blue) picks the board and settings and sends them
 // to the guest (red); after that only lockstep inputs and hashes flow.
 
+/** How long a guest waits on JOINING before being told no one is hosting. */
+const NO_HOST_MS = 5000;
+
 /** Statuses that end a network session, and what they say. */
 const NET_ERRORS = /** @type {Record<string, string[] | undefined>} */ ({
   left: ['OPPONENT LEFT'],
@@ -466,7 +470,7 @@ function startNet(room, role) {
   const transport = relayParam === 'bc'
     ? broadcastTransport(room, role)
     : relayTransport(relayParam || DEFAULT_RELAY, 'dot-army', room, seat, { ping: debug });
-  const session = { role, local: seat, room, transport, ls: null, gameNo: 0, waitingSince: 0, status: 'lobby' };
+  const session = { role, local: seat, room, transport, ls: null, gameNo: 0, waitingSince: 0, joinedAt: performance.now(), status: 'lobby' };
   net = session;
   transport.onMessage(onNetMessage);
   transport.onEvent(onNetEvent);
@@ -589,6 +593,8 @@ if (debug) {
   /** @type {any} */ (window).dotArmyDebug = () => ({
     tick: game.tick, hash: stateHash(game), status: net?.status, desync: net?.ls?.desyncAt ?? -1,
     winner: game.winner, targets: [...game.targets], net: net?.transport.stats() ?? null,
+    overlay: (() => { const o = overlay(); return o ? { lines: o.lines, sub: o.sub } : null; })(),
+    board: renderer.board,
   });
 }
 requestAnimationFrame(frame);

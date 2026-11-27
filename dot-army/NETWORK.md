@@ -156,6 +156,10 @@ then gets a custom domain in `wrangler.toml`
 - **Peer left.** Done, without the grace period (there's no reconnect yet):
   OPPONENT LEFT, and a tap goes back to the menu. ROOM FULL, CAN'T REACH THE
   SERVER and CONNECTION LOST work the same way.
+- **No host.** Done. A guest still on JOINING after 5 s sees NO ONE HERE YET
+  with the room code and "☰ to leave". It keeps sending `hello`, so a host
+  who opens the room late still starts the game. The relay doesn't say who
+  is in a room, so a host slower than 5 s to answer also gets the message.
 - **Reconnect.** A guest who reloads sends `hello` mid-game. The host replies
   with `start` plus the input log and current tick, and the guest replays to
   catch up (the sim runs about 5,000 ticks/s, so a 10-minute game replays in

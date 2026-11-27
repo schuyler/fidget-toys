@@ -115,6 +115,13 @@ periphery hexes were ever visited.
   copies the tech, so both sides keep it. Trades can be uneven: a tech
   for a tech, or a tech for RP.
 
+## The map
+
+- **Map size, number of beacons, and how much dust.** Still guesses,
+  carried over from RULES.md's open questions. Worth revisiting once
+  games stop being a straight race, since then the middle of the arms
+  matters.
+
 ## Interface
 
 - **Next counts only what's easy to forget** (jumping, settling, building

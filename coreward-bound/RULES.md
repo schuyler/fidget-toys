@@ -4,8 +4,9 @@ Two civilizations spread across a spiral galaxy by jumping their fleets
 from star to star. Jumps are instant but inaccurate: the farther you
 jump, the more likely you are to land somewhere you didn't mean to go,
 and a fleet that strays too far from home can be lost for good. At the
-centre of the galaxy lie relics of some older civilization. Bring three
-of them home, or take every one of your rival's settlements, to win.
+centre of the galaxy lie relics of some older civilization. Carry three
+of them back to your settlements, or take every one of your rival's
+settlements, to win.
 
 Turn-based. You play one civ; the CPU plays the other. Built so that more
 civs and network play can be added later (see Later).
@@ -24,23 +25,24 @@ civs and network play can be added later (see Later).
   neither civ has an advantage. Each civ starts at the outer end of one
   arm.
 - Every hex is one of:
-  - **Arm core:** rich. Potential value 3–5.
-  - **Arm edge:** middling. Potential value 1–3.
-  - **Void:** the space between arms. Potential value 0–1.
-  - **Nucleus:** every hex within 2 of the centre. Can't be settled. A
-    jump into or out of the nucleus that scatters destroys the stack.
-  - **Core:** three hexes in a line through the centre. Nucleus rules
-    apply, and each one holds a relic.
+  - **Arm:** rich. Potential value 3–5.
+  - **Periphery:** the arm's fringe. Potential value 1–3.
+  - **Void:** the space between arms. Worth nothing and can't be
+    settled, though stacks can jump through it and stand in it.
+  - **Core:** every hex within 2 of the centre. Can't be settled. A
+    jump into or out of the core that scatters destroys the stack, and
+    the core's glare destroys fleets that end a turn there (see The
+    core). Relics appear on the centre hex and the six around it.
 - **Beacons:** two very bright stars on each arm. Jumps aimed at a
   beacon hex get +1.
-- **Dust lanes** run along stretches of the arms' edges, between the arm
+- **Dust lanes** run along stretches of the periphery, between the arm
   and the void. Dust blocks line of sight. A jump whose straight line
   crosses a dust edge is allowed only if it's one hex long, or goes from
   one of your settlements to another.
 - **Potential values are hidden.** A hex's value is revealed to you the
   first time one of your stacks lands in it. Your rival learns it only by
   going there too.
-- The nucleus blocks line of sight through it (not into or out of it).
+- The core blocks line of sight through it (not into or out of it).
 
 ## Pieces
 
@@ -64,9 +66,11 @@ send its fleets to different places.
 
 - **Safe range** = 2 + Reach, in hexes.
 - **Chaining:** fleets that land *on target*, within safe range, at one
-  of your own settlements may jump again. Inside a connected network of
+  of your own settlements may jump again. A settlement founded or taken
+  this turn doesn't count until your next turn. Inside a connected network of
   settlements a stack can travel any distance in one turn.
-- **Over-range jumps** are allowed only *from* your own settlement. They
+- **Over-range jumps** are allowed only *from* your own settlement (not
+  one founded or taken this turn). They
   scatter more often and more severely, and always end the move.
 - Landing anywhere else ends the move.
 - A stack carrying a relic never chains.
@@ -91,14 +95,14 @@ need = 2 + floor(distance / 3)
   - It loses one fleet for every 2 hexes of scatter (rounded down).
     Losses double on an over-range jump.
 - **Lost in space:** a scattered stack is destroyed if it lands off the
-  map, in the nucleus, or somewhere not in sight of any of your
+  map, in the core, or somewhere not in sight of any of your
   settlements. In sight means within **sight range** (5 + Reach) and with
   a clear line of sight. A stack whose losses use up all its fleets is
   gone too.
 - **Exception:** a jump aimed at your own settlement is never lost to
-  the map edge, the nucleus or sight. It falls short of the edge or the
-  nucleus instead. It can still lose fleets. (A jump out of the nucleus
-  that scatters is fatal regardless.)
+  the map edge, the core or sight. It falls short of the edge or the
+  core instead. It can still lose fleets. (A jump out of the core that
+  scatters is fatal regardless.)
 - **Preview:** before you confirm a jump, the game shows the exact odds
   of landing on target and every hex you might scatter to, marking any
   where you'd be lost. Scatter is a risk you choose, never a surprise.
@@ -115,7 +119,7 @@ hits     = floor(strength * d6 / 10), minimum 1
 
 - Both sides roll and deal hits at the same time, round after round,
   until one side (or both) is gone. Each hit destroys one fleet.
-- A stack carrying relics that's destroyed drops them in that hex.
+- A stack carrying a relic that's destroyed drops it in that hex.
 
 ### Taking settlements
 
@@ -126,7 +130,9 @@ hits     = floor(strength * d6 / 10), minimum 1
 - A settlement with a rival stack in it is **besieged**: it produces no
   RP and nothing can be built there.
 - A taken settlement becomes yours, with its value lowered by 1
-  (minimum 0).
+  (minimum 0). Like a new one, it isn't working until your next turn:
+  it can't build, anchor chain or over-range jumps, or take delivery of
+  a relic.
 - **Conquest roll:** each successful take also rolls for a tech. On a 5
   or 6 you copy one random tech of the loser's that you don't already
   have. Relics can't be taken this way.
@@ -159,23 +165,46 @@ There's no tech tree and no prerequisites.
   Songs*, *Long Sight*, *Borrowed Memory*, *Lattice Dreaming*, *The
   Patient Map*, and so on.
 
+## The core
+
+- At the end of your turn, every one of your fleets in the core rolls a
+  d6 and is destroyed on a 1, whether it moved this turn or not.
+- A stack wiped out this way drops its relic where it stood.
+- The danger of getting there is separate: a jump into or out of the
+  core that scatters destroys the stack.
+
 ## Relics
 
-- Each core hex starts with one relic.
+- Three relics are on the board at the start: on the centre hex and on
+  two opposite hexes next to it.
 - A stack that lands in a hex with a relic and **holds it through the
   rival's turn** picks it up at the start of its owner's next turn. The
   rival gets one turn to knock it out.
+- **A stack carries one relic at most.** It picks up one at a time and
+  leaves any others lying there, and a stack already carrying one can't
+  pick up another. Whoever jumps carries the relic with them. A jump that
+  would put two of your relics in one hex isn't allowed, unless it's into
+  one of your settlements, where the relic is delivered on arrival.
 - A stack carrying a relic must reach one of your settlements (that
-  isn't besieged) to deliver it. Founding a settlement where the carrier
-  stands counts.
-  - If the stack is destroyed in combat, the relic drops in that hex.
-    Anyone can pick it up the same way: hold the hex for a turn.
-  - If the stack is lost in space, the relic returns to the core.
+  isn't besieged, and wasn't founded or taken this turn) to deliver it.
+  - Founding a settlement where the carrier stands, or taking one, works
+    too: the relic is delivered at the start of your next turn if the
+    carrier is still there. Founding or researching can't spend a
+    carrier's last fleets.
+  - If the stack is destroyed in combat or by the core's glare, the
+    relic drops in that hex. Anyone can pick it up the same way: hold the
+    hex for a turn.
+  - If the stack is lost in space, the relic goes back to a free hex at
+    the centre.
 - A **delivered relic** counts as a tech that gives +1 to all four types,
   and it counts toward a relic win.
 - Delivered relics can't be shared, traded or taken by conquest.
-- Three rounds after a core hex's relic is picked up, a new one appears
-  there.
+- **Respawns.** Three rounds after a relic is picked up, a new one
+  appears on a random hex among the centre and the six around it, never
+  where a stack stands or a relic already lies. If none is free, it waits
+  for one. A relic that comes back onto the board (dropped, or lost in
+  space) cancels a pending respawn, so there are normally three relics
+  out there.
 
 ## A turn
 
@@ -184,24 +213,27 @@ with 1 extra RP to make up for it.
 
 At the start of your turn:
 
-1. Relics in core hexes appear (once per round).
+1. Pending relics appear (once per round).
 2. **Income and upkeep:** gain RP equal to the total value of your
    settlements that aren't besieged. Pay 1 RP for each fleet beyond the
    third in any one hex. Fleets you can't pay for are lost, from your
    biggest stacks.
-3. Stacks holding a relic's hex pick it up.
-4. Stacks in rival settlements try again to take them.
+3. Carriers at your settlements deliver their relics.
+4. Stacks holding a relic's hex pick one up.
+5. Stacks in rival settlements try again to take them.
 
 Then, in any order:
 
 - **Jump** fleets.
 - **Build**, using only fleets that began the turn in the hex (fleets
   that jumped in this turn have to wait until next turn):
-  - **New fleet:** 3 RP, at a settlement of value 1 or more. Up to
+  - **New fleet:** 3 RP, at a settlement of value 1 or more, not founded
+    or taken this turn. Up to
     1 + Industry per settlement per turn. A new fleet can't jump until
     next turn.
   - **Found a settlement:** spend 2 fleets in a hex whose potential
-    you've seen and that has no settlement. The new settlement has value
+    you've seen and that has no settlement, outside the void and the
+    core. Fleets that jumped in this turn can found it straight away. The new settlement has value
     1 (or 0 if that's the hex's potential).
   - **Grow:** spend 1 fleet for +1 value, up to the hex's potential. You
     can't grow a settlement in the turn it was founded, and you can't
@@ -209,7 +241,7 @@ Then, in any order:
     turn you built there).
   - **Research:** see Techs.
 
-Then end your turn.
+Then end your turn. Your fleets in the core roll for the glare.
 
 ## Winning
 
@@ -230,15 +262,23 @@ Then end your turn.
 
 ## Controls
 
-- **Pan** by dragging, **pinch** or scroll to zoom. **Home** recentres
-  on your home; **Next stack** cycles through stacks that can still
-  jump.
+- **Pan** by dragging, **pinch** or scroll to zoom. At the start of your
+  turn the map fits your settlements and stacks. **Home** recentres on
+  your home. **Next** visits each stack and settlement that can still do
+  something (jump, settle, build, grow, research) that you haven't looked
+  at this turn; it goes grey, and End turn pulses, once you've seen them
+  all.
 - **Jumping:** tap a stack (blue hexes are in safe range, gold ones over
   range), use − and + to choose how many fleets to send, tap a target
-  to see the odds and scatter preview, then tap it again or press Jump.
+  to see the odds and scatter preview, then press Jump. Tapping the
+  target again cancels the aim. Selecting a stack moves the map just
+  enough to show where it can reach; aiming never moves it.
 - **Settlement actions:** tap one of your settlements to build, grow or
   research there. Tap a stack on an empty hex to settle it.
-- **End turn.** It pulses when every stack has moved.
+- **Status bar:** for each side, banked RP (coin), techs researched
+  (flask) and relics delivered (◆ n/3). Tap either side to compare the
+  two civs' tech levels.
+- **End turn.** It pulses when you've seen everything that can still act.
 - During the CPU's turn the camera follows its jumps if they're off
   screen. Arrows at the screen edge point to rival stacks near your
   settlements that you can't see.
@@ -283,33 +323,27 @@ and why:
   rather than in a separate phase.
 - **Turn limit** of 60 rounds, so a stalemate ends.
 
+After the first playtests:
+
+- **The core is dangerous to stay in.** The CPU won early by sitting in
+  the core and carrying relics out, and the player won by doing the same.
+  Fleets that end a turn there now risk the glare, moved or not (a rule
+  only for stacks that stayed put could be dodged by hopping one hex,
+  which never scatters).
+- **Relics appear around the centre, never under a stack.** The old three
+  fixed relic hexes let a stack wait for a relic to reappear under it.
+- **One relic per stack.** The player won by carrying two out at once.
+- **Settle on arrival.** Waiting a turn to found was tedium with little
+  point. To keep a new settlement from becoming an instant road or
+  delivery point, it doesn't work until your next turn.
+- **Voids can't be settled.**
+- **Names.** Nucleus is now the core, arm core is the arm, arm edge is
+  the periphery; the old "core" relic hexes are gone.
+
 ## Later
 
-- **Stances** (more civs, or network play, make these matter): each civ
-  holds a stance toward each other civ, **Cooperate**, **Neutral** or
-  **Hostile**. Everyone starts Neutral. You can change your stance only
-  while in contact (stacks or settlements in the same or neighbouring
-  hexes). Changes are chosen secretly and revealed together.
-
-  | You | Them | Effect |
-  |---|---|---|
-  | Cooperate | Cooperate | **Allied.** Each can chain-jump through the other's settlements and gets the settlement bonus when aiming at them. Neither can attack the other. Tech sharing is open. |
-  | Cooperate | Neutral | They can use your settlements as if allied; you can't use theirs. Neither can attack. |
-  | Neutral | Neutral | Either side may attack the other. |
-  | Hostile | Neutral | You may attack at +1 to your combat rolls. |
-  | Hostile | Cooperate | You may attack at +2, and they can't hit back. Betrayal pays. |
-  | Hostile | Hostile | Fighting is mandatory wherever you meet. |
-
-- **Tech sharing:** allied civs in contact can share techs. Sharing
-  copies the tech, so both sides keep it. Trades can be uneven: a tech
-  for a tech, or a tech for RP.
-- **Network play**, by lockstep as in Dot Army. The simulation is
-  already deterministic and every move is an action (`act` in
-  `src/sim.js`), so a turn can be sent as its list of actions.
-- **(open)** Whether the relic snowball (+1 to everything) needs a
-  brake, and whether games are long enough. CPU games end in about 11
-  rounds.
-- **(open)** Map size, number of beacons, and how much dust.
+Ideas that came up and were set aside, including stances, tech sharing,
+network play and more civs, are in [IDEAS.md](IDEAS.md).
 
 ## Notes
 

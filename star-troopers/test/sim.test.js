@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createGame, resolveTurn, checkOrder, squadSizes, los, preview, stateHash, idle, spendable, blastCells,
-  fireLoss, meanFireShock, blastLoss, landChance, defenceOf, FIRE_CRT, inCommand, canShare,
+  fireLoss, meanFireShock, blastLoss, landChance, defenceOf, FIRE_CRT, LW_CRT, inCommand, canShare,
   cellAt, ROCK, RUINS, HIGH, BRUSH, BUILDING, DRAW, DEFAULTS,
 } from '../src/sim.js';
 import { createGrid, reflect, axialToIndex, linePairs } from '../src/hex.js';
@@ -306,7 +306,7 @@ test('a guided bomb that lands: 30 on the hex, 15 next door, 5 two away, friends
     { side: 0, cell: C(5, 9) },            // a friend, adjacent: 6
   ], {}, { blastOddsCap: 0 });
   const ev = resolveTurn(game, orders(game, { 0: { launch: 5, launchAt: C(6, 9) } }));
-  assert.deepEqual(ev.launches, [{ from: 0, aimed: C(6, 9), landed: C(6, 9), sd: 10 - 1 }]);
+  assert.deepEqual(ev.launches, [{ from: 0, aimed: C(6, 9), landed: C(6, 9), sd: 10 - 1, die: 0 }]);
   assert.equal(game.troopers[1].down, true);
   assert.deepEqual([2, 3, 4].map((i) => game.troopers[i].shock), [6, 2, 6]);
 });
@@ -359,7 +359,7 @@ test('bombs only scatter when the scatter differential is negative', () => {
 test('the 1977 fire table: averages in mean mode, a column value in dice mode, nothing under +1', () => {
   const mean = createGame({ combat: 'mean' }, { troopers: [] });
   assert.deepEqual([1, 3, 5, 9, 14].map((d) => fireLoss(mean, 10 + d, 10).shock), [1, 4, 6, 9, 9]);
-  assert.deepEqual(fireLoss(mean, 10, 10), { shock: 0, miss: true });
+  assert.deepEqual(fireLoss(mean, 10, 10), { shock: 0, miss: true, roll: 0 });
   assert.ok(Math.abs(meanFireShock({ ...DEFAULTS, combat: 'dice' }, 13, 10) - 155 / 36) < 1e-9);
   const dice = createGame({ combat: 'dice', seed: 3 }, { troopers: [] });
   const column = new Set(FIRE_CRT.map((row) => row[2]));
@@ -578,4 +578,72 @@ test('no side advantage: identical CPUs on a mirrored map play mirror-image game
       }
     }
   }
+});
+
+// ---- R14: dice rolls are recorded in the events, without changing the game ----
+
+test('R14: a dice shot that hits records its two-dice roll, and the shock is that row of the table', () => {
+  const rolls = new Set();
+  for (let seed = 1; seed <= 40; seed++) {
+    // 6 points at Aim 2 = 12 against open ground (1) at range 4 (1): differential +10, column +9
+    const g = board([{ side: 0, cell: C(6, 12) }, { side: 1, cell: C(6, 8) }], {}, { combat: 'dice', defence: 'original', seed });
+    const ev = resolveTurn(g, orders(g, { 0: { target: 1, fire: 6 } }));
+    const shot = ev.shots[0];
+    assert.ok(Number.isInteger(shot.roll) && shot.roll >= 2 && shot.roll <= 12, `roll ${shot.roll}`);
+    assert.equal(shot.shock, FIRE_CRT[shot.roll - 2][8]);
+    rolls.add(shot.roll);
+  }
+  assert.ok(rolls.size > 3);
+});
+
+test('R14: no dice, no roll: a miss under dice, and any shot under the formula, record roll 0', () => {
+  // 1 point at Aim 2 = 2 against open (1) + range (1) + 3 dodge at Aim 2 (6): a miss
+  const miss = board([{ side: 0, cell: C(6, 12) }, { side: 1, cell: C(6, 8) }], {}, { combat: 'dice', defence: 'original' });
+  const ev = resolveTurn(miss, orders(miss, { 0: { target: 1, fire: 1 }, 1: { dodge: 3 } }));
+  assert.equal(ev.shots[0].miss, true);
+  assert.equal(ev.shots[0].roll, 0);
+  const formula = board([{ side: 0, cell: C(6, 12) }, { side: 1, cell: C(6, 8) }]);
+  assert.equal(resolveTurn(formula, orders(formula, { 0: { target: 1, fire: 6 } })).shots[0].roll, 0);
+});
+
+test('R14: blast shots record their roll and whether they stunned', () => {
+  let stuns = 0;
+  for (let seed = 1; seed <= 80; seed++) {
+    // a direct hit on brush (terrain 3): 30 / 3 = 10 to 1, column 6-10
+    const g = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], { terrain: [[C(6, 9), BRUSH]] }, { combat: 'dice', seed });
+    const ev = resolveTurn(g, orders(g, { 0: { launch: 5, launchAt: C(6, 9) } }));
+    const shot = ev.shots.find((s) => s.kind === 'blast' && s.to === 1);
+    assert.ok(shot && shot.roll >= 2 && shot.roll <= 12);
+    const cell = LW_CRT[shot.roll - 2][1];
+    assert.equal(shot.stun, cell === -1);
+    assert.equal(shot.shock, cell === -1 ? 0 : cell);
+    assert.equal(ev.stunned.includes(1), shot.stun);
+    if (shot.stun) stuns++;
+  }
+  assert.ok(stuns > 0);
+});
+
+test('R14: a launch records its scatter die: 1-6 when it needed a roll, 0 when it could not miss', () => {
+  const dice = new Set();
+  for (let seed = 1; seed <= 30; seed++) {
+    const bad = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], {}, { seed });
+    const ev = resolveTurn(bad, orders(bad, { 0: { launch: 3, launchAt: C(6, 9) }, 1: { dodge: 9 } }));
+    assert.ok(ev.launches[0].sd < 0);
+    assert.ok(ev.launches[0].die >= 1 && ev.launches[0].die <= 6);
+    dice.add(ev.launches[0].die);
+    const good = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], {}, { seed });
+    assert.equal(resolveTurn(good, orders(good, { 0: { launch: 5, launchAt: C(6, 9) } })).launches[0].die, 0);
+  }
+  assert.ok(dice.size > 2);
+});
+
+test('R14: recording rolls changes nothing: a seeded CPU game ends in the same state as before', () => {
+  const g = createGame({ combat: 'dice', defence: 'original', command: 1, faction0: 'compact', squad0: 6, faction1: 'vell', squad1: 6, swarm: 1, seed: 4242 });
+  const ais = [createAI(0, 1), createAI(1, 2)];
+  for (let n = 0; n < 9; n++) {
+    const o = [];
+    for (const ai of ais) ai.plan(g).forEach((x, i) => { if (x) o[i] = x; });
+    resolveTurn(g, o);
+  }
+  assert.equal(stateHash(g), 4010343239); // recorded before the change
 });

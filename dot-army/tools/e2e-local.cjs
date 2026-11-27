@@ -45,10 +45,15 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     await p.click('#start-new');
     await p.waitForTimeout(4000); // countdown
     const a = await p.evaluate(() => dotArmyDebug());
-    await p.waitForTimeout(5000);
-    const b = await p.evaluate(() => dotArmyDebug());
+    let b = a, moved = false;
+    for (let i = 0; i < 25 && !moved; i++) { // poll up to 5 s for the CPU to move
+      await p.waitForTimeout(200);
+      b = await p.evaluate(() => dotArmyDebug());
+      moved = Array.isArray(b.targets) && b.targets[1] !== a.targets?.[1];
+    }
+    if (moved) { await p.waitForTimeout(500); b = await p.evaluate(() => dotArmyDebug()); }
     check(b.tick > a.tick, `${vp.width}x${vp.height}: game advances (${a.tick} → ${b.tick})`);
-    check(Array.isArray(b.targets) && a.targets[1] !== b.targets[1], `${vp.width}x${vp.height}: CPU moves red's target`);
+    check(moved, `${vp.width}x${vp.height}: CPU moves red's target`);
   }
 
   // 4. In portrait, a tap in the top half moves your (blue) marker: the top half no longer belongs to red.

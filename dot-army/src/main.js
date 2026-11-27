@@ -100,8 +100,8 @@ let mine = [];
  * @type {Map<number, { index: number, x0: number, y0: number, gated: boolean, pending: null | { onMarker: boolean } }>}
  */
 const drags = new Map();
-/** @type {{x: number, y: number}[][]} smoothed on-screen marker positions per player (board px), index-aligned with `mine` / game.targets[p] */
-let markersPx = [[], []];
+/** @type {{x: number, y: number}[]} smoothed on-screen positions (board px) of the local player's markers, index-aligned with `mine`. The opponent's are never drawn. */
+let markersPx = [];
 
 /**
  * @param {boolean} [start] false: set up the board but wait at the start menu
@@ -159,12 +159,9 @@ function cellPx(/** @type {number} */ cell) {
   return { x, y };
 }
 
-/** The list a player's markers are drawn from: the local player's own model, or the game's list. */
-const targetsOf = (/** @type {number} */ p) => (p === me() ? mine : game.targets[p]);
-
-/** Every marker of both players at its target's cell. */
+/** Every local marker at its target's cell. */
 function rebuildMarkers() {
-  markersPx = [0, 1].map((p) => targetsOf(p).map(cellPx));
+  markersPx = mine.map(cellPx);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,10 +186,11 @@ const actionsOn = () => (phase === 'countdown' || phase === 'play') && (!net || 
  * @param {import('./sim.js').Input} input
  */
 function issue(input) {
+  if (net && !net.ls) return false;
   if (!applyInputTo(mine, input, game.params.maxTargets, game.grid.N)) return false;
-  if (net) { if (net.ls) net.ls.queue(input); } else applyInput(game, me(), input);
-  if (input.op === 'add') markersPx[me()].push(cellPx(input.cell));
-  else if (input.op === 'remove') markersPx[me()].splice(input.index, 1);
+  if (net) net.ls.queue(input); else applyInput(game, me(), input);
+  if (input.op === 'add') markersPx.push(cellPx(input.cell));
+  else if (input.op === 'remove') markersPx.splice(input.index, 1);
   return true;
 }
 
@@ -213,7 +211,7 @@ function heldBy(/** @type {number} */ except) {
 /** The unheld local target nearest (board px) to b, within `within`: its index, or -1. */
 function nearestFree(/** @type {{x: number, y: number}} */ b, /** @type {Set<number>} */ held, within = Infinity) {
   let best = -1, bestD = within;
-  markersPx[me()].forEach((m, i) => {
+  markersPx.forEach((m, i) => {
     const d = Math.hypot(m.x - b.x, m.y - b.y);
     if (!held.has(i) && d <= bestD) { best = i; bestD = d; }
   });
@@ -250,18 +248,18 @@ canvas.addEventListener('pointerdown', (e) => {
   const held = heldBy(e.pointerId);
   const near = nearestFree(b, held, grab());
   if (near >= 0) {
-    const m = markersPx[me()][near];
+    const m = markersPx[near];
     const d = Math.hypot(m.x - b.x, m.y - b.y);
     // a tap on a held marker never removes a neighbour
     let heldD = Infinity;
-    for (const i of held) if (i >= 0) heldD = Math.min(heldD, Math.hypot(markersPx[me()][i].x - b.x, markersPx[me()][i].y - b.y));
+    for (const i of held) if (i >= 0) heldD = Math.min(heldD, Math.hypot(markersPx[i].x - b.x, markersPx[i].y - b.y));
     drag.index = near;
     drag.pending = { onMarker: d <= hit() && !(heldD < d) };
     return;
   }
   drag.index = tapEmpty(b, e.pointerId);
   if (drag.index < 0) drags.delete(e.pointerId); // nothing to hold: ignore the press
-  else markersPx[me()][drag.index] = b;
+  else markersPx[drag.index] = b;
 });
 
 canvas.addEventListener('pointermove', (e) => {
@@ -270,7 +268,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (drag.pending && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > TAP_SLOP) drag.pending = null;
   if (drag.pending) return;
   const b = boardPoint(e);
-  markersPx[me()][drag.index] = b;
+  markersPx[drag.index] = b;
   issue({ op: 'move', index: drag.index, cell: pixelToCell(game.grid, b.x, b.y, renderer.size) });
 });
 
@@ -325,23 +323,14 @@ function frame(/** @type {number} */ now) {
   const followed = new Set();
   for (const d of drags.values()) if (!d.gated && !d.pending) followed.add(d.index);
   const k = 1 - Math.exp(-dt * 14);
-  const markers = [];
-  for (let p = 0; p < 2; p++) {
-    const list = targetsOf(p);
-    const px = markersPx[p];
-    if (p !== me()) { // follows the game's list, which can change at any index
-      while (px.length < list.length) px.push(cellPx(list[px.length]));
-      px.length = list.length;
+  const markers = markersPx.map((m, i) => {
+    const dragging = followed.has(i);
+    if (!dragging) {
+      const goal = cellPx(mine[i]);
+      m = markersPx[i] = { x: m.x + (goal.x - m.x) * k, y: m.y + (goal.y - m.y) * k };
     }
-    px.forEach((m, i) => {
-      const dragging = p === me() && followed.has(i);
-      if (!dragging) {
-        const goal = cellPx(list[i]);
-        px[i] = m = { x: m.x + (goal.x - m.x) * k, y: m.y + (goal.y - m.y) * k };
-      }
-      markers.push({ x: m.x, y: m.y, player: p, dragging });
-    });
-  }
+    return { x: m.x, y: m.y, player: me(), dragging };
+  });
 
   renderer.draw(phase === 'play' ? acc / tickMs : 1, paused ? 0 : dt, {
     markers,

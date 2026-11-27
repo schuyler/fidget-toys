@@ -105,7 +105,7 @@ export function createAI(player, seed, opts = {}) {
     const { grid } = game;
     const enemy = 1 - player;
     const mine = game.dots.filter((d) => d.player === player);
-    if (!mine.length) return;
+    if (!mine.length) { aim.defend = -1; return; }
 
     // Army centre: the dot nearest the average position.
     let sq = 0, sr = 0;

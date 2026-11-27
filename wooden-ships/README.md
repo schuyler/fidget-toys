@@ -25,9 +25,10 @@ Plain ES modules, no build step, same layout as Dot Army.
 
 ## Rough edges
 
+- The sea is about 3 km square. CPU-vs-CPU games still finish in a minute or two, but nothing stops a person from running away; there's no time limit yet.
 - The camera zoom (450 m across the screen's short side) is a first guess. Gun range is 300 m, two thirds of that, so the CPU can fire at you from just past the short edges of the screen. Its arrow shows the distance: under 300 m, it's in range.
 - Upwind is slow (about 2 knots made good against 14 downwind), which makes the weather gauge matter a lot. Whether that's fun is still to be found out.
-- The CPU doesn't play the weather gauge, and easy isn't much easier than hard in CPU-vs-CPU games (hard wins 70%). Both need tuning against people.
+- The CPU doesn't play the weather gauge. Easy is a lot weaker than hard in CPU-vs-CPU games (hard wins 93% on the big sea), but how it fares against people is untested.
 - No network play yet.
 
 ## Art

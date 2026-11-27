@@ -14,8 +14,9 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
 (async () => {
   const browser = await chromium.launch();
   const errors = [];
-  const page = async (viewport, query = '') => {
+  const page = async (viewport, query = '', settings = null) => {
     const ctx = await browser.newContext({ viewport });
+    if (settings) await ctx.addInitScript((s) => localStorage.setItem('wooden-ships-settings-v1', s), JSON.stringify(settings));
     const p = await ctx.newPage();
     p.on('pageerror', (e) => errors.push(e.message));
     p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -34,19 +35,23 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     check(groups[0] === 'mode=cpu-easy,mode=cpu', `opponents are CPU easy and hard (got ${groups[0]})`);
   }
 
-  // 2. A game runs in portrait and landscape; the sea's long side follows the screen.
+  // 2. A game runs in portrait and landscape, on the same sea.
   for (const vp of [{ width: 390, height: 780 }, { width: 900, height: 480 }]) {
     const p = await page(vp, '&seed=42');
     await p.click('#start-new');
     await p.waitForFunction(() => woodenShipsDebug().phase === 'play', null, { timeout: 6000 });
     const a = await dbg(p);
     await p.waitForTimeout(1500);
-    const b = await dbg(p);
-    const portrait = vp.height > vp.width;
-    check((a.sea[1] > a.sea[0]) === portrait, `${vp.width}x${vp.height}: sea is ${a.sea.join('×')} m`);
-    check(Math.min(...a.sea) === 990, `${vp.width}x${vp.height}: short side 45 tiles of 22 m`);
+    let b = await dbg(p);
+    // Easy steers in coarse steps, so heading straight for its goal it can hold the helm still for a while.
+    const acted = (d) => d.ships[1].rudder !== 0 || d.ships[1].heading !== a.ships[1].heading || d.fired[1] > 0;
+    for (let i = 0; i < 150 && !acted(b); i++) { // up to 30 s more: they start bow-on, so the guns can't bear until they meet
+      await p.waitForTimeout(200);
+      b = await dbg(p);
+    }
+    check(a.sea[0] === 2992 && a.sea[1] === 2992, `${vp.width}x${vp.height}: sea is 136 × 136 tiles whatever the screen (got ${a.sea.join('×')} m)`);
     check(b.tick > a.tick + 30, `${vp.width}x${vp.height}: game advances (${a.tick} → ${b.tick})`);
-    check(b.ships[1].rudder !== 0 || b.ships[1].heading !== a.ships[1].heading, `${vp.width}x${vp.height}: CPU steers`);
+    check(acted(b), `${vp.width}x${vp.height}: CPU steers or fires`);
 
     // Steering: drag right swings the bow toward screen right (heading up the screen at the start in portrait).
     const before = await dbg(p);
@@ -80,12 +85,12 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     let d = await dbg(p);
     check(Math.abs(d.view.w - 450) < 1, `zoomed: 450 m across the short side (got ${Math.round(d.view.w)})`);
     check(d.view.w < d.sea[0] || d.view.h < d.sea[1], 'the sea is bigger than the screen');
-    await p.evaluate(() => { const s = woodenShipsDebug().sea; woodenShipsDebugPlace(1, 150, 150); woodenShipsDebugPlace(0, s[0] - 200, s[1] - 300); });
+    await p.evaluate(() => { const s = woodenShipsDebug().sea; woodenShipsDebugSet(1, { x: 150, y: 150 }); woodenShipsDebugSet(0, { x: s[0] - 200, y: s[1] - 300 }); });
     await p.waitForTimeout(2500);
     d = await dbg(p);
     check(inView(d, d.ships[0]), 'camera has followed your ship across the sea');
     check(!inView(d, d.ships[1]) && !!d.view.arrow, `arrow shows the off-screen CPU (${d.view.arrow && d.view.arrow.dist} m)`);
-    await p.evaluate(() => { const s = woodenShipsDebug().ships[0]; woodenShipsDebugPlace(1, s.x - 120, s.y - 150); });
+    await p.evaluate(() => { const s = woodenShipsDebug().ships[0]; woodenShipsDebugSet(1, { x: s.x - 120, y: s.y - 150 }); });
     await p.waitForTimeout(1500);
     d = await dbg(p);
     check(inView(d, d.ships[1]) && !d.view.arrow, 'no arrow once the CPU is on screen');
@@ -106,14 +111,21 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     check((await dbg(p)).tick > t1, 'resumed game moves again');
   }
 
-  // 5. A game ends with a winner and the end screen (sped up: we sink blue by hand).
+  // 5. A game ends with a winner and the end screen. Blue is down to 2 crew and
+  // the CPU alongside on the same course: on the big sea, a blue ship nobody
+  // steers can otherwise sail away from it for minutes (see RULES.md, Notes).
   {
-    const p = await page({ width: 390, height: 780 }, '&seed=9');
+    const p = await page({ width: 390, height: 780 }, '&seed=9', { mode: 'cpu', islands: 'some', wind: 'shifty', shadow: 'on', crew: '3' });
     await p.click('#start-new');
     await p.waitForFunction(() => woodenShipsDebug().phase === 'play', null, { timeout: 6000 });
-    const done = await p.waitForFunction(() => woodenShipsDebug().phase === 'over', null, { timeout: 240000 }).then(() => true, () => false);
+    await p.evaluate(() => {
+      const s = woodenShipsDebug().ships[0];
+      woodenShipsDebugSet(0, { crew: 2, vx: 0, vy: -3 });
+      woodenShipsDebugSet(1, { x: s.x + 150, y: s.y, heading: s.heading, vx: 0, vy: -3 });
+    });
+    const done = await p.waitForFunction(() => woodenShipsDebug().phase === 'over', null, { timeout: 60000 }).then(() => true, () => false);
     const d = await dbg(p);
-    check(done && d.winner >= 0, `game finishes against the CPU with nobody steering blue (winner ${d.winner}, ${Math.round(d.tick / 30)} s)`);
+    check(done && d.winner >= 0, `game finishes against the hard CPU with nobody steering blue (winner ${d.winner}, ${Math.round(d.tick / 30)} s)`);
   }
 
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);

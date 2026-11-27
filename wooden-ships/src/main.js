@@ -34,8 +34,6 @@ try {
 const query = new URLSearchParams(location.search);
 const debug = query.has('debug');
 const YOU = 0;
-/** Tiles across the sea's short side (22 m each: about 1,000 m). */
-const SHORT_TILES = 45;
 /** Pixels of sideways drag for full rudder: about a thumb's width. */
 const FULL_LOCK_PX = 48;
 /** The fire buttons and steering swap sides only once the bow is this far past straight across the screen. */
@@ -62,14 +60,9 @@ let gameSerial = 0;
 let leftIsStarboard = false;
 
 function newGame(start = true) {
-  const w = window.innerWidth, h = window.innerHeight;
-  const long = Math.min(110, Math.max(SHORT_TILES, Math.round((SHORT_TILES * Math.max(w, h)) / Math.min(w, h))));
-  const portrait = h >= w;
   const seed = query.has('seed') ? Number(query.get('seed')) : (Math.random() * 2 ** 31) >>> 0;
   game = createGame({
     seed,
-    width: portrait ? SHORT_TILES : long,
-    height: portrait ? long : SHORT_TILES,
     islands: settings.islands,
     wind: settings.wind,
     shadow: CHOICES.shadow[/** @type {'on'|'off'} */ (settings.shadow)],
@@ -311,8 +304,7 @@ form.addEventListener('submit', (e) => {
 
 window.addEventListener('resize', () => {
   if (!renderer) return;
-  if (phase === 'menu') { newGame(false); return; } // nothing started: shape the sea to the new screen
-  renderer.layout(); // a game in progress keeps its sea and is fitted to the screen
+  renderer.layout(); // the sea is the same on every screen; only the camera changes
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && (phase === 'play' || phase === 'countdown')) paused = true;
@@ -378,9 +370,9 @@ if (debug) {
     ships: game.ships.map((s) => ({ x: s.x, y: s.y, heading: s.heading, rudder: s.rudder, crew: s.crew, struck: s.struck, reload: s.batteries.map((b) => b.reloadLeft) })),
     fired: [...game.stats.fired], sea: [game.seaW, game.seaH], view: renderer.view(),
   });
-  /** For browser tests: move a ship (as if she'd sailed there). */
-  /** @type {any} */ (window).woodenShipsDebugPlace = (/** @type {number} */ id, /** @type {number} */ x, /** @type {number} */ y) => {
-    Object.assign(game.ships[id], { x, y, vx: 0, vy: 0 });
+  /** For browser tests: set a ship's fields, e.g. { x, y } to move her (she's left stopped unless vx/vy are given). */
+  /** @type {any} */ (window).woodenShipsDebugSet = (/** @type {number} */ id, /** @type {Record<string, number>} */ fields) => {
+    Object.assign(game.ships[id], { vx: 0, vy: 0 }, fields);
   };
 }
 

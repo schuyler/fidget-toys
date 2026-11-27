@@ -18,8 +18,9 @@ device, so playing another person waits for network play (see Later).
 
 ## The sea
 
-- A rectangle with the screen's shape, bigger than the screen. In
-  portrait, blue starts at the bottom and red at the top.
+- A square 136 tiles of 22 m on a side, about 3 km or 75 ship lengths,
+  far bigger than the screen and the same on every screen. Blue starts
+  south of the centre, red north of it.
 - **The camera** shows 450 m across the screen's short side (about 11
   ship lengths) and follows your ship, leading a little the way you're
   moving. When the enemy is near, it pans toward the point between you so
@@ -27,20 +28,19 @@ device, so playing another person waits for network play (see Later).
   screen. It stops at the edges of the sea.
 - When the enemy is off screen, an arrow on the screen's edge points at
   her, with how far away she is.
-- The short side is 45 tiles of 22 m, 990 m of sea. The long side
-  stretches to match the screen's shape (up to 110 tiles). A ship is
-  40 m long, so the sea is about 25 ship lengths across.
 - The sea is laid out on a grid of square tiles, 22 m on a side, drawn
   with the prototype's terrain tiles (see Art).
-- The ships start 700 m apart along the long side, each 60 m to its own
+- The ships start 700 m apart, either side of the centre, each 60 m to its own
   side of the centre line, pointing at each other with a little way on
   (3 m/s), so they pass rather than collide unless someone steers.
-- If the phone turns during a game, the sea keeps its shape; the camera
-  keeps showing 450 m across the new short side.
+- If the phone turns during a game, the camera shows 450 m across the
+  new short side.
 - **Islands:** none, some (the default), or many. Generated from the
   game's seed, point-symmetric (rotated 180° about the centre), and kept
-  clear of the start positions. *Some* is three blobs and their mirror
-  images, *many* six, each 1.5–4 tiles in radius with a ragged edge,
+  clear of the start positions. The number of blobs scales with the
+  sea's area: 0.8 per 1,000 tiles for *some* (15 on the default sea,
+  each with its mirror image) and 1.6 for *many* (30). Each is 1.5–4
+  tiles in radius with a ragged edge,
   kept at least 160 m (plus their radius) from either start and out of
   the middle of the sea.
 - **Shallows** ring every island, one tile wide (see Hazards).
@@ -289,6 +289,8 @@ You're blue, and you have the whole screen.
 | `shadowRange`, `shadowCone`, `shadowFactor` | 160 m, 30°, 0.5 | Wind shadow: how far downwind, how wide, how much wind is left |
 | `startGap`, `startOffset`, `startSpeed` | 700 m, 60 m, 3 m/s | Where and how the ships start |
 | `bounce` | 1 m/s | How hard land, the edge or another ship pushes a ship off |
+| `width`, `height` | 136, 136 tiles | Size of the sea (22 m tiles) |
+| `islandsSome`, `islandsMany` | 0.8, 1.6 | Island blobs per 1,000 tiles of sea |
 | `seed` | random | Same seed and same inputs = same game |
 
 The ship's coefficients (`lift` to `steerSpeed`, guns, length) live in a
@@ -327,9 +329,9 @@ the duel shouldn't be built in ways that rule it out:
 - **Wind is a function of position and time,** not one global value.
   In the duel it's the same everywhere. A storm would be a moving patch
   of strong, shifting wind.
-- **The sea can be bigger than the screen.** It already is: the
-  renderer draws through a camera that follows your ship, so a bigger
-  sea is a parameter change.
+- **The sea can be bigger than the screen.** It already is, and the
+  islands are drawn in chunks as they come into view, so a bigger sea
+  still is a parameter change.
 - **The map is data in the sim:** a corner grid with places on it.
   Ports would be special tiles with a side and a battery.
 - **The CPU steers by goals** (close to fire, rake, flee, follow a route,
@@ -417,7 +419,17 @@ Each is a sketch, not a rule yet.
   without it.
 
 - **Headless results** (`node wooden-ships/tools/headless.js 40`,
-  hard CPU vs hard CPU, 40 games per row, draft numbers):
+  hard CPU vs hard CPU, 40 games per row, draft numbers). This table is
+  from the first prototype's screen-shaped sea of about 1 × 2 km; on the
+  3 km sea, defaults finish 100% (mean 89 s), many islands 100% (102 s),
+  no islands 100% (78 s), and easy vs hard 100% (70 s, hard wins 93%).
+  CPUs always close on each other, so those runs don't show running
+  away. A blue ship that just holds her starting course does: the easy
+  CPU took 80–534 s to beat her over 12 seeds (one still going after 10
+  minutes), the hard one 63–288 s, often only once she'd pinned herself
+  on the edge of the sea. A stern chase between equal ships barely
+  closes. **(open: how to stop a person simply running away: a time
+  limit, a smaller sea, or something else)**
 
   | Settings | Finished in 6 min | Mean length | Blue / red wins |
   |---|---|---|---|

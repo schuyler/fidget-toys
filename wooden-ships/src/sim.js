@@ -114,11 +114,14 @@ export const DEFAULTS = {
   timeScale: 4,
   /** metres per terrain tile */
   tile: 22,
-  /** sea size in tiles; the short side is 45 tiles, about 1,000 m */
-  width: 45,
-  height: 80,
+  /** sea size in tiles: 136 × 22 m is about 3 km, 75 ship lengths. The same on every screen. */
+  width: 136,
+  height: 136,
   /** 'none' | 'some' | 'many' */
   islands: 'some',
+  /** island blobs (each with its mirror image) per 1,000 tiles of sea, for 'some' and 'many' */
+  islandsSome: 0.8,
+  islandsMany: 1.6,
   /** a key of WIND_PRESETS */
   wind: 'shifty',
   /** knots */
@@ -295,10 +298,11 @@ export function terrainAt(game, x, y) {
 function generateIslands(game, starts) {
   const { rng, params, W, H, corners } = game;
   const cw = W + 1;
-  const blobs = params.islands === 'many' ? 6 : params.islands === 'some' ? 3 : 0;
+  const density = params.islands === 'many' ? params.islandsMany : params.islands === 'some' ? params.islandsSome : 0;
+  const blobs = Math.round((density * W * H) / 1000);
   const keepOut = 160; // metres of clear water around each start, beyond the island's radius
   let placed = 0;
-  for (let tries = 0; placed < blobs && tries < 200; tries++) {
+  for (let tries = 0; placed < blobs && tries < 50 * blobs; tries++) {
     const ci = 1 + rng.int(W - 1), cj = 1 + rng.int(H - 1);
     const r = (3 + rng.int(6)) / 2; // 1.5 to 4 tiles
     const reach = (r + 1) * params.tile + keepOut;

@@ -50,8 +50,9 @@ export async function loadAssets(base) {
 
 /** Metres of sea across the screen's short side: about 11 ship lengths, so a ship is ~35 px on a phone. */
 export const VIEW_SHORT = 450;
-/** Most pixels the pre-drawn island layer may have (phones cap canvas size). */
-const MAX_TERRAIN_PX = 12e6;
+/** Tiles per side of a pre-drawn chunk of islands, and how many chunks to keep. */
+const CHUNK = 16;
+const MAX_CHUNKS = 40;
 
 /** Safe-area insets, read from the #safe-probe element (JS can't read env()). */
 function safeInsets() {
@@ -78,13 +79,12 @@ export function createRenderer(canvas, assets) {
   /** camera: screen = o + world × scale, centred on (camX, camY) */
   let scale = 1, ox = 0, oy = 0;
   let camX = 0, camY = 0, camReady = false;
-  /** pixels per metre in the terrain layer */
-  let terrainScale = 1;
   /** where the off-screen enemy arrow was last drawn, for tests */
   /** @type {{x: number, y: number, dist: number}|null} */ let arrow = null;
   let safe = { top: 0, bottom: 0, left: 0, right: 0 };
   /** @type {Game|null} */ let game = null;
-  /** @type {HTMLCanvasElement|null} */ let terrain = null;
+  /** island layer chunks, least recently used first */
+  /** @type {Map<number, {canvas: HTMLCanvasElement, X0: number, Y0: number}>} */ const chunks = new Map();
   /** previous tick's ship poses, for interpolation */
   /** @type {{x: number, y: number, heading: number}[]} */ let prev = [];
   /** @type {{x: number, y: number}[]} */ let prevBalls = [];
@@ -99,6 +99,7 @@ export function createRenderer(canvas, assets) {
     fx = [];
     streaks = [];
     camReady = false;
+    chunks.clear();
     snapshot();
     layout();
   }
@@ -121,42 +122,70 @@ export function createRenderer(canvas, assets) {
     if (!game) return;
     scale = Math.min(cw, ch) / VIEW_SHORT;
     camReady = false;
-    buildTerrain();
+    chunks.clear(); // drawn for the old scale
   }
 
-  /** Islands never move: draw the tiles once, at screen resolution. */
-  function buildTerrain() {
-    if (!game) return;
-    const g = game;
-    terrainScale = Math.min(scale * dpr, Math.sqrt(MAX_TERRAIN_PX / (g.seaW * g.seaH)));
-    const t = g.params.tile * terrainScale;
-    terrain = document.createElement('canvas');
-    terrain.width = Math.ceil(g.seaW * terrainScale);
-    terrain.height = Math.ceil(g.seaH * terrainScale);
-    const c = /** @type {CanvasRenderingContext2D} */ (terrain.getContext('2d'));
+  /**
+   * Islands never move, so they're drawn once per chunk of CHUNK × CHUNK
+   * tiles, at screen resolution, when a chunk first comes into view. The sea
+   * is far bigger than the screen, so far-off chunks are dropped again.
+   * @param {number} ci @param {number} cj
+   */
+  function chunk(ci, cj) {
+    const key = ci * 4096 + cj;
+    let c = chunks.get(key);
+    if (c) { chunks.delete(key); chunks.set(key, c); return c; } // most recently used goes last
+    c = buildChunk(ci, cj);
+    chunks.set(key, c);
+    while (chunks.size > MAX_CHUNKS) chunks.delete(/** @type {number} */ (chunks.keys().next().value));
+    return c;
+  }
+
+  /** @param {number} ci @param {number} cj */
+  function buildChunk(ci, cj) {
+    const g = /** @type {Game} */ (game);
+    const ts = scale * dpr; // pixels per metre
+    const t = g.params.tile * ts;
+    const i0 = ci * CHUNK, j0 = cj * CHUNK;
+    const ni = Math.min(CHUNK, g.W - i0), nj = Math.min(CHUNK, g.H - j0);
+    // One pixel grid for the whole sea: a chunk covers pixels X0…X1, so
+    // neighbouring chunks meet exactly, with no seam.
+    const X0 = Math.round(i0 * t), Y0 = Math.round(j0 * t);
+    const X1 = Math.round((i0 + ni) * t), Y1 = Math.round((j0 + nj) * t);
+    const canvasEl = document.createElement('canvas');
+    canvasEl.width = Math.max(1, X1 - X0);
+    canvasEl.height = Math.max(1, Y1 - Y0);
+    const c = /** @type {CanvasRenderingContext2D} */ (canvasEl.getContext('2d'));
     c.imageSmoothingQuality = 'high';
     c.fillStyle = COLORS.ocean;
-    c.fillRect(0, 0, terrain.width, terrain.height);
-    // a faint swell so open water isn't flat
+    c.fillRect(0, 0, canvasEl.width, canvasEl.height);
+    // A faint swell so open water isn't flat. Each chunk also draws its
+    // neighbours' swells (same seeded positions), so none are cut at the seams.
     c.globalAlpha = 0.18;
     c.fillStyle = COLORS.deep;
-    for (let i = 0; i < (g.W * g.H) / 6; i++) {
-      const x = Math.random() * terrain.width, y = Math.random() * terrain.height;
-      c.beginPath();
-      c.ellipse(x, y, t * (0.6 + Math.random()), t * 0.18, 0, 0, Math.PI * 2);
-      c.fill();
+    for (let dj = -1; dj <= 1; dj++) {
+      for (let di = -1; di <= 1; di++) {
+        let h = ((ci + di) * 73856093) ^ ((cj + dj) * 19349663) ^ 0x5bd1e995;
+        const rnd = () => { h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) + 0x6d2b79f5 | 0; return ((h >>> 0) % 10000) / 10000; };
+        for (let k = 0; k < (CHUNK * CHUNK) / 6; k++) {
+          const x = (di * CHUNK + rnd() * CHUNK) * t, y = (dj * CHUNK + rnd() * CHUNK) * t;
+          c.beginPath();
+          c.ellipse(x, y, t * (0.6 + rnd()), t * 0.18, 0, 0, Math.PI * 2);
+          c.fill();
+        }
+      }
     }
     c.globalAlpha = 1;
     const cw1 = g.W + 1;
     const at = (/** @type {number} */ i, /** @type {number} */ j) => g.corners[j * cw1 + i];
     const piece = (/** @type {number} */ id, /** @type {number} */ i, /** @type {number} */ j) => {
-      const x0 = Math.round(i * t), y0 = Math.round(j * t);
-      const x1 = Math.round((i + 1) * t), y1 = Math.round((j + 1) * t);
+      const x0 = Math.round(i * t) - X0, y0 = Math.round(j * t) - Y0;
+      const x1 = Math.round((i + 1) * t) - X0, y1 = Math.round((j + 1) * t) - Y0;
       c.drawImage(assets.tiles, (id % 16) * 64, Math.floor(id / 16) * 64, 64, 64, x0, y0, x1 - x0, y1 - y0);
     };
     for (const [level, set] of /** @type {[number, Record<number, number>][]} */ ([[SHALLOW, SHALLOW_TILES], [LAND, BEACH_TILES]])) {
-      for (let j = 0; j < g.H; j++) {
-        for (let i = 0; i < g.W; i++) {
+      for (let j = j0; j < j0 + nj; j++) {
+        for (let i = i0; i < i0 + ni; i++) {
           const key = (at(i, j) >= level ? 8 : 0) | (at(i + 1, j) >= level ? 4 : 0) | (at(i + 1, j + 1) >= level ? 2 : 0) | (at(i, j + 1) >= level ? 1 : 0);
           if (!key) continue;
           if (key === 15 && level === LAND) {
@@ -168,6 +197,28 @@ export function createRenderer(canvas, assets) {
         }
       }
     }
+    return { canvas: canvasEl, X0, Y0 };
+  }
+
+  /** The chunks of island layer that are on screen. */
+  function drawTerrain() {
+    if (!game) return;
+    const g = game;
+    const cm = CHUNK * g.params.tile; // metres per chunk
+    const x0 = Math.max(0, -ox / scale), y0 = Math.max(0, -oy / scale);
+    const x1 = Math.min(g.seaW, (cw - ox) / scale), y1 = Math.min(g.seaH, (ch - oy) / scale);
+    // Whole device pixels, unscaled: the camera offset is rounded for the islands.
+    const px = Math.round(ox * dpr), py = Math.round(oy * dpr);
+    const m = ctx.getTransform(); // dpr scale, plus any screen shake
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, Math.round(m.e), Math.round(m.f));
+    for (let cj = Math.floor(y0 / cm); cj * cm < y1; cj++) {
+      for (let ci = Math.floor(x0 / cm); ci * cm < x1; ci++) {
+        const c = chunk(ci, cj);
+        ctx.drawImage(c.canvas, px + c.X0, py + c.Y0);
+      }
+    }
+    ctx.restore();
   }
 
   /**
@@ -273,15 +324,7 @@ export function createRenderer(canvas, assets) {
       ctx.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k);
       shake = Math.max(0, shake - dt * 2.5);
     }
-    if (terrain) {
-      // only the part of the island layer that's on screen
-      const x0 = Math.max(0, -ox / scale), y0 = Math.max(0, -oy / scale);
-      const x1 = Math.min(g.seaW, (cw - ox) / scale), y1 = Math.min(g.seaH, (ch - oy) / scale);
-      if (x1 > x0 && y1 > y0) {
-        ctx.drawImage(terrain, x0 * terrainScale, y0 * terrainScale, (x1 - x0) * terrainScale, (y1 - y0) * terrainScale,
-          sx(x0), sy(y0), (x1 - x0) * scale, (y1 - y0) * scale);
-      }
-    }
+    drawTerrain();
 
     drawStreaks(dt, ui.timeScale);
     drawFx(dt, ui.timeScale, ['foam', 'ring']);

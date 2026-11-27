@@ -261,8 +261,8 @@ mostly for the real-time games.
 
 ### Transport
 
-All transports share the interface that `net.js` already defines:
-`send(msg)`, `onMessage(cb)`, `close()`.
+All transports share the `Transport` interface defined in `relay.js`:
+`send`, `onMessage`, `onEvent`, `stats` and `close`.
 
 - `p2pTransport`: a WebRTC DataChannel, set up through the Worker. One
   connection to each other seat (a full mesh), fine up to about 4–6 players.
@@ -271,8 +271,8 @@ All transports share the interface that `net.js` already defines:
   exists.
 
 The session tries P2P first and falls back to the relay if no channel opens
-within a few seconds. A query parameter will force one, for testing; today
-`?relay=` picks the relay and leaving it out picks BroadcastChannel.
+within a few seconds. `?relay=bc` picks BroadcastChannel, `?relay=<url>` a relay, and neither the
+deployed default.
 
 ### Session
 

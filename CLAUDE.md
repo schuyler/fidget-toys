@@ -15,10 +15,11 @@ node dot-army/tools/headless.js 20 [key=value ...]   # CPU-vs-CPU balance runs
 ```
 
 Browser checks use the preinstalled Playwright (`require('playwright')`).
-Dot Army's browser checks need the static server on port 8765:
-`tools/e2e-local.cjs` (CPU play), `tools/e2e-two-tab.cjs` (two tabs,
-`?relay=bc`), and `tools/e2e-online.cjs` (lobby, leaving, errors; also needs
-a relay, `node multiplayer/server.js`).
+Browser checks need the static server on port 8765:
+`dot-army/tools/e2e-local.cjs` (CPU play), `dot-army/tools/e2e-two-tab.cjs`
+(two tabs, `?relay=bc`), `dot-army/tools/e2e-online.cjs` (lobby, leaving,
+errors) and `multiplayer/tools/e2e-relay.cjs` (a game through a relay). The
+last two also need a relay: `node multiplayer/server.js`.
 
 ## Rules for dot-army code
 
@@ -53,7 +54,7 @@ a relay, `node multiplayer/server.js`).
   `git merge -s ours origin/main` so the next PR doesn't conflict.
 - The network relay lives in `multiplayer/` (see its README): a Node server
   for the owner's home host, or a Cloudflare Worker the owner deploys with
-  `npx wrangler@4.158.0 deploy`. Games stay dependency-free in the browser;
+  `npx wrangler@4.158.0 deploy` from `multiplayer/`. Games stay dependency-free in the browser;
   `ws` is only for the Node server.
 
 ## Writing

@@ -8,11 +8,13 @@ This document is the design, what exists, and the plan for the rest.
 
 - **Host is blue, and the host's settings apply.** The host's screen also
   decides the board's dimensions; the guest fits that board to its screen.
-- **Lockstep over a relay.** Devices exchange inputs only, through a
-  Cloudflare Worker with one Durable Object per room.
-- **The owner deploys the relay** (`npx wrangler deploy`) and will point a
-  domain at Cloudflare for it.
-- **No accounts, no strangers.** You join by link, QR code or room code.
+- **Lockstep over a relay.** Devices exchange inputs only, through the relay
+  in `multiplayer/`: a Cloudflare Worker with one Durable Object per room, or
+  the same room logic as a Node server.
+- **The owner deploys the relay** (`npx wrangler@4.158.0 deploy` from
+  `multiplayer/`). It's at `wss://fidget-rooms.erle.workers.dev` for now; a
+  custom domain is optional.
+- **No accounts, no strangers.** You join by link or room code (a QR code is still to do).
 
 ## How it works
 
@@ -68,17 +70,17 @@ marker.
   laggy fake network stay identical for a whole CPU-vs-CPU game; a device
   that hears nothing stalls after `delay` ticks; corrupting one copy is
   detected.
-- `src/net.js`: `PROTOCOL`, `roomCode()`, and a development transport over
-  `BroadcastChannel`.
+- `src/net.js`: `PROTOCOL` and a development transport over
+  `BroadcastChannel`. (`roomCode()` has since moved to `multiplayer/lobby.js`.)
 - `src/main.js`: network session (handshake, host deals games, rematches by
   host tap), "You win/You lose", the pause menu hides New game and Settings
   online, and rotating the phone doesn't pause an online game.
-- Try it: open `/dot-army/?room=TEST&host` in one tab and `/dot-army/?room=TEST`
-  in another tab of the same browser. Add `&debug` to expose
+- Try it: open `/dot-army/?room=TEST&host&relay=bc` in one tab and
+  `/dot-army/?room=TEST&relay=bc` in another tab of the same browser. Add `&debug` to expose
   `window.dotArmyDebug()` (tick, state hash, status) for automated checks.
   `tools/e2e-two-tab.cjs` does exactly that.
 
-## Phase 2: relay and lobby (next)
+## Phase 2: relay and lobby
 
 > **Done.** The relay is in `multiplayer/`, and its README replaces the
 > relay design below. The lobby is `multiplayer/lobby.js`: Play online shows
@@ -86,7 +88,7 @@ marker.
 > deployed relay is the default; `?relay=` overrides it and `?relay=bc` is
 > the two-tab development mode. Still to do from this section: the QR code.
 
-### The relay: `relay/` (new)
+### The relay (superseded: see `multiplayer/README.md`)
 
 A Worker plus a Durable Object class, about 50 lines:
 
@@ -113,7 +115,7 @@ A Worker plus a Durable Object class, about 50 lines:
 100,000 requests and 13,000 GB-s of Durable Object duration per day. Incoming
 WebSocket messages count as 1/20 of a request each, and outgoing messages are
 free. A 10-minute game at 8 ticks/s is about 9,600 incoming messages (480
-requests) and about 75 GB-s of duration (128 MB × 600 s, since a busy room
+requests) and about 77 GB-s of duration (128 MB × 600 s, since a busy room
 never hibernates). Duration is the binding limit: **roughly 170 ten-minute
 games a day.** Over the limit, new connections fail for the rest of the day;
 the free plan doesn't bill. Sources:
@@ -130,7 +132,7 @@ then gets a custom domain in `wrangler.toml`
 (`routes = [{ pattern = "dots.schuyler.info", custom_domain = true }]`). A
 `*.workers.dev` address works with no DNS changes at all, if that's simpler.
 
-### Client
+### Client (superseded: built as `multiplayer/relay.js` and `lobby.js`, without reconnect)
 
 - `net.js`: add `websocketTransport(url, room, role)` with the same interface
   as `broadcastTransport`. It reconnects with backoff, and keeps `bc` as a

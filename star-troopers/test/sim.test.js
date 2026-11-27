@@ -249,6 +249,14 @@ test('orders are checked: points, paths, sight and the shot cap', () => {
   assert.throws(() => resolveTurn(game, orders(game, { 0: { dodge: 10 } })));
 });
 
+test('the maxSpend knob caps points spent per turn, not the pool', () => {
+  const game = board([{ side: 0, cell: C(2, 9), faction: 'orrin' }, { side: 1, cell: C(6, 9) }], {}, { maxSpend: 9 });
+  const t = game.troopers[0];
+  assert.equal(checkOrder(game, t, { ...idle(), dodge: 9 }), null);
+  assert.equal(checkOrder(game, t, { ...idle(), dodge: 10 }), 'not enough points');
+  assert.equal(t.pool, 12);
+});
+
 test('Assault squads: the attacker fields at least 1.2x the defender\'s value', () => {
   const a = { ...DEFAULTS, scenario: 'assault', attacker: 0 };
   assert.deepEqual(squadSizes({ ...a }), [5, 4]);                                         // 70 vs 56

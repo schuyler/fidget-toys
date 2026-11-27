@@ -13,7 +13,7 @@
 import { createRng } from './rng.js';
 import { hexDist, reflect } from './hex.js';
 import {
-  living, usable, enterCost, los, defenceOf, baseShock, occupant, held, ROCK, COVER, idle,
+  living, usable, spendable, enterCost, los, defenceOf, baseShock, occupant, held, ROCK, COVER, idle,
 } from './sim.js';
 
 /** @typedef {import('./sim.js').Game} Game */
@@ -72,7 +72,7 @@ export function createAI(side, seed, opts = {}) {
     const urgency = 1 + (2 * game.turn) / p.turnLimit;
 
     for (const t of mine) {
-      const budget = usable(t);
+      const budget = spendable(game, t);
       const field = reach(game, t, budget);
       const goal = /** @type {number} */ (goals.get(t.id));
       const gd = /** @type {Int32Array} */ (goalDist.get(goal));

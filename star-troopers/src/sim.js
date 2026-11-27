@@ -48,6 +48,7 @@ export const DEFAULTS = {
   coverScale: 1,            // tuning knob: multiplies every cover value
   damageDivisor: 3,
   maxShot: 6,               // most points in one shot, 0 = no cap
+  maxSpend: 0,              // tuning knob: most points one trooper spends in a turn, 0 = no cap
   overwatchRange: 6,
   surplusPct: 120,
   holdToWin: 2,
@@ -301,6 +302,17 @@ export function usable(/** @type {Trooper} */ t) {
   return t.pool - t.shock;
 }
 
+/**
+ * Points a trooper can actually spend this turn: its usable points, within
+ * the per-turn cap if there is one. Unspendable points still count towards
+ * staying power, since shock comes out of the pool.
+ * @param {Game} game @param {Trooper} t
+ */
+export function spendable(game, t) {
+  const u = usable(t);
+  return game.params.maxSpend > 0 ? Math.min(u, game.params.maxSpend) : u;
+}
+
 /** Troopers still in the game. */
 export function living(/** @type {Game} */ game, side = -1) {
   return game.troopers.filter((t) => !t.down && (side < 0 || t.side === side));
@@ -395,7 +407,7 @@ export function checkOrder(game, t, o) {
   }
   const move = pathCost(game, t.cell, o.path);
   if (move === Infinity) return 'illegal path';
-  if (move + o.fire + o.dodge + o.overwatch > usable(t)) return 'not enough points';
+  if (move + o.fire + o.dodge + o.overwatch > spendable(game, t)) return 'not enough points';
   if (o.fire > 0) {
     const target = game.troopers[o.target];
     if (!target || target.down || target.side === t.side) return 'bad target';

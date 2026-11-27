@@ -371,7 +371,8 @@ export function createRenderer(canvas, assets) {
     const px = -uy, py = ux; // across it
     const v = ws * ts;
     const m = 40 / scale;
-    const size = 0.7 + 0.6 * Math.max(0, Math.min(1, (game.wind.speed - 8) / 12));
+    const { windMin, windMax } = game.params;
+    const size = 0.7 + 0.6 * Math.max(0, Math.min(1, (game.wind.speed - windMin) / (windMax - windMin)));
     ctx.save();
     ctx.strokeStyle = '#ffffff';
     ctx.lineCap = 'round';

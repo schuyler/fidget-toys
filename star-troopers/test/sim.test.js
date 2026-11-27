@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createGame, resolveTurn, checkOrder, squadSizes, los, preview, stateHash, idle, spendable, blastCells,
-  fireLoss, meanFireShock, blastLoss, landChance, defenceOf, FIRE_CRT,
+  fireLoss, meanFireShock, blastLoss, landChance, defenceOf, FIRE_CRT, inCommand,
   cellAt, ROCK, RUINS, HIGH, BRUSH, BUILDING, DRAW, DEFAULTS,
 } from '../src/sim.js';
 import { createGrid, reflect, axialToIndex, linePairs } from '../src/hex.js';
@@ -406,6 +406,44 @@ test('original defence: terrain value, 1 per ten hexes of range, 1 per point spe
   const t = game.troopers[1];
   assert.equal(defenceOf(game, t, C(2, 9), null), 3 + 1);
   assert.equal(defenceOf(game, t, C(2, 9), { ...idle(), path: [C(7, 9)], moveCost: 1, dodge: 2 }), 3 + 1 + 1 + 4);
+});
+
+test('leaders: about 1 in 5 Compact, 3 in 7 Orrin, no Vell', () => {
+  const lead = (f, n) => createGame({ seed: 4, faction0: f, squad0: n }).troopers.filter((t) => t.side === 0 && t.leader).length;
+  assert.deepEqual([lead('compact', 6), lead('compact', 10), lead('orrin', 4), lead('orrin', 7), lead('vell', 8)], [1, 2, 2, 3, 0]);
+});
+
+test('in command: terrain value plus range rating to a leader, within current points', () => {
+  const game = board([
+    { side: 0, cell: C(2, 2), leader: true },
+    { side: 0, cell: C(2, 12) },                 // open (1) + 10 cells (2) = 3 <= 9
+    { side: 0, cell: C(6, 18) },                 // building (6) + about 17 cells (4) > 9
+    { side: 0, cell: C(2, 17), shock: 5 },       // open (1) + 15 cells (3) = 4 <= 4
+    { side: 1, cell: C(10, 10) },                // no leader on its side
+    { side: 1, cell: C(11, 10), faction: 'vell' },
+  ], { terrain: [[C(6, 18), BUILDING]] });
+  assert.deepEqual(game.troopers.map((t) => inCommand(game, t)), [true, true, false, true, false, true]);
+});
+
+test('with command on, troopers in command fire first, and their hits cut the others\' shots', () => {
+  const setup = (command) => board(
+    [{ side: 0, cell: C(2, 9), faction: 'vell' }, { side: 1, cell: C(4, 9) }],  // the Compact trooper has no leader
+    {}, { command },
+  );
+  const both = setup(0);
+  let ev = resolveTurn(both, orders(both, { 0: { target: 1, fire: 6 }, 1: { target: 0, fire: 6 } }));
+  assert.equal(ev.shots.length, 2);
+  const cmd = setup(1);
+  ev = resolveTurn(cmd, orders(cmd, { 0: { target: 1, fire: 6 }, 1: { target: 0, fire: 6 } }));
+  // The Vell's shot (attack 24 against 1) takes 7, more than the 6 the Compact had in its shot.
+  assert.equal(ev.shots.length, 1);
+  assert.equal(ev.shots[0].from, 0);
+});
+
+test('a trooper hit by fire still gets its launch off in the same part of the stage', () => {
+  const game = board([{ side: 0, cell: C(2, 9), faction: 'vell' }, { side: 1, cell: C(4, 9) }, { side: 0, cell: C(9, 3) }]);
+  const ev = resolveTurn(game, orders(game, { 0: { target: 1, fire: 6 }, 1: { launch: 3, launchAt: C(9, 3) } }));
+  assert.equal(ev.launches.length, 1);
 });
 
 test('Assault squads: the attacker fields at least 1.2x the defender\'s value', () => {

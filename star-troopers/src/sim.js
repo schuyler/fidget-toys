@@ -39,9 +39,12 @@ export function isCover(/** @type {Game} */ game, /** @type {number} */ cell) {
  * the species each one pays homage to (see RULES.md); never tune these.
  */
 export const FACTIONS = /** @type {const} */ ({
-  compact: { name: 'Compact', pool: 9, aim: 2, recovery: 3 },
-  orrin: { name: 'Orrin', pool: 12, aim: 2, recovery: 1 },
-  vell: { name: 'Vell', pool: 6, aim: 4, recovery: 2 },
+  // leaders: share of a squad that are leaders, from the original's unit
+  // chart (a Human squad of 10 has 2; a L'Chal Dah squad of 7 has 3). The
+  // Rame have none: as a joint mind, they're always in command.
+  compact: { name: 'Compact', pool: 9, aim: 2, recovery: 3, leaders: 2 / 10, alwaysInCommand: false },
+  orrin: { name: 'Orrin', pool: 12, aim: 2, recovery: 1, leaders: 3 / 7, alwaysInCommand: false },
+  vell: { name: 'Vell', pool: 6, aim: 4, recovery: 2, leaders: 0, alwaysInCommand: true },
 });
 
 /** @typedef {keyof typeof FACTIONS} FactionKey */
@@ -83,6 +86,7 @@ export const DEFAULTS = {
   hexTerrain: 'building',   // what victory hexes stand on: 'building' | 'ruins' | 'brush' | 'open'
   combat: 'formula',        // damage: 'formula' (margin / damageDivisor), 'dice' (the 1977 tables, 2d6) or 'mean' (the tables' averages)
   defence: 'draft',         // 'draft' or 'original' (terrain values, +1 per 10 hexes of range, +1 per point spent moving)
+  command: 0,               // Command Communication (rule 16): 1 = troopers in command fire and launch first
   noise: 0,
   dodgeAimCap: 0,           // tuning knob: dodge counts at most this much per point (0 = full Aim)
   recoverWhenHit: 0,        // tuning knob: 1 = troopers recover even when hit (the original: only if not hit)
@@ -103,6 +107,7 @@ export const DEFAULTS = {
  * @property {number} shock
  * @property {boolean} down
  * @property {boolean} dugIn    Assault defenders until they leave their zone
+ * @property {boolean} leader   a leader: always in command, and keeps nearby troopers in command
  * @property {number} spent    points already spent this game-turn (in its first stage)
  */
 
@@ -173,7 +178,7 @@ export const DEFAULTS = {
  * Explicit layout, for tests and hand-made maps. Terrain defaults to open.
  * @typedef {Object} Layout
  * @property {[number, number][]} [terrain]   [cell, type] pairs
- * @property {{side: number, cell: number, faction?: FactionKey, shock?: number, dugIn?: boolean}[]} troopers
+ * @property {{side: number, cell: number, faction?: FactionKey, shock?: number, dugIn?: boolean, leader?: boolean}[]} troopers
  * @property {Victory[]} [victory]
  */
 
@@ -209,6 +214,7 @@ export function createGame(overrides = {}, layout) {
       const tr = addTrooper(game, t.side, t.faction ?? sideFaction(game, t.side), t.cell);
       tr.shock = t.shock ?? 0;
       tr.dugIn = t.dugIn ?? false;
+      tr.leader = t.leader ?? false;
     }
     game.victory = (layout.victory ?? []).map((v) => ({ ...v }));
   } else {
@@ -231,7 +237,7 @@ function addTrooper(game, side, faction, cell) {
   const t = {
     id: game.troopers.length, side, faction,
     pool: f.pool, aim: f.aim, recovery: f.recovery,
-    cell, shock: 0, down: false, dugIn: false, spent: 0,
+    cell, shock: 0, down: false, dugIn: false, spent: 0, leader: false,
   };
   game.troopers.push(t);
   return t;
@@ -309,6 +315,11 @@ function generate(game) {
       const t = addTrooper(game, side, sideFaction(game, side), cellAt(grid, col, row));
       t.dugIn = side === game.defender;
     }
+    // Leaders, spread across the line.
+    const squad = game.troopers.filter((t) => t.side === side);
+    const rate = FACTIONS[sideFaction(game, side)].leaders;
+    const k = rate > 0 ? Math.max(1, Math.round(n * rate)) : 0;
+    for (let j = 0; j < k; j++) squad[Math.floor(((2 * j + 1) * n) / (2 * k))].leader = true;
   }
 }
 
@@ -553,6 +564,24 @@ export function preview(game, shooter, target, points) {
   return { attack, defence: still, shock, cancel };
 }
 
+/**
+ * Is a trooper in command (rule 16.0)? Leaders always are, and so are
+ * factions that are always in command (the Vell, after the Rame). Anyone
+ * else is if the terrain value of its cell plus the range rating to the
+ * nearest friendly leader (1 per 5 cells) is no more than its current
+ * points. With no leader left, nobody else is.
+ * @param {Game} game @param {Trooper} t
+ */
+export function inCommand(game, t) {
+  if (t.leader || FACTIONS[t.faction].alwaysInCommand) return true;
+  let best = Infinity;
+  for (const l of game.troopers) {
+    if (l.down || !l.leader || l.side !== t.side) continue;
+    best = Math.min(best, Math.ceil(hexDist(game.grid, t.cell, l.cell) / 5));
+  }
+  return TERRAIN_VALUE[game.terrain[t.cell]] + best <= usable(t);
+}
+
 // ---- Launched weapons ----
 
 /** Blast strength by distance from where a bomb explodes (rule 10.3). */
@@ -734,23 +763,34 @@ export function resolveTurn(game, orders) {
     }
   };
 
-  // 2. Fire: everyone shoots from where they started, all at once.
-  {
-    const pending = game.troopers.map(() => 0);
-    for (const t of living(game)) {
-      const o = ord[t.id];
-      if (o.fire > 0) shoot('fire', t, game.troopers[o.target], o.fire, -1, pending);
-    }
-    applyShock(pending, -1);
-  }
-
-  // 2b. Launch: guided bombs leave from where their launchers stand. A
-  // trooper downed by fire never gets its launch off.
+  // 2. Fire and launch. Everyone shoots and launches from where they
+  // started the stage. With Command Communication, troopers in command go
+  // first (fire, then launch), and the shock they cause lands before the
+  // independent troopers' turn: a trooper downed then does nothing, and one
+  // that's hurt loses those points from its shot first, then its launch
+  // (rule 11.21; the original lets the player choose which tasks lose
+  // points). Within each part, fire and launches are simultaneous: a
+  // trooper hit in the same part still shoots and launches.
   /** @type {{t: Trooper, from: number, aimed: number, points: number}[]} */
   const launches = [];
-  for (const t of living(game)) {
-    const o = ord[t.id];
-    if (o.launch > 0) launches.push({ t, from: t.cell, aimed: o.launchAt, points: o.launch });
+  {
+    const first = game.troopers.map((t) => !t.down && (!p.command || inCommand(game, t)));
+    const taken = game.troopers.map(() => 0);
+    for (const commandPart of [true, false]) {
+      const pending = game.troopers.map(() => 0);
+      for (const t of living(game)) {
+        if (first[t.id] !== commandPart) continue;
+        const o = ord[t.id];
+        let lost = taken[t.id];
+        const fire = Math.max(0, o.fire - lost);
+        lost -= o.fire - fire;
+        const launch = Math.max(0, o.launch - lost);
+        if (fire > 0) shoot('fire', t, game.troopers[o.target], fire, -1, pending);
+        if (launch > 0 && launch >= p.minLaunch) launches.push({ t, from: t.cell, aimed: o.launchAt, points: launch });
+      }
+      for (const t of game.troopers) taken[t.id] += pending[t.id];
+      applyShock(pending, -1);
+    }
   }
 
   // 3. Move: one cell per step, all at once, with overwatch after each step.

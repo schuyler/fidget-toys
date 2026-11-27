@@ -150,6 +150,30 @@ dodging (+4), it would have taken `floor(6 / 3) = 2`.
   be seen over them.
 - Troopers never block line of sight. **(open)**
 
+### Command (setting, off by default)
+
+After the original's Command Communication (rule 16.0). With it on:
+
+- About 1 in 5 Compact troopers are leaders, and 3 in 7 Orrin, after the
+  original's unit chart. The Vell have no leaders: like the Rame, a
+  joint mind, they're always in command.
+- A trooper is **in command** if it's a leader, or if the terrain value
+  of its cell plus the range rating to the nearest friendly leader (1
+  per 5 cells) is no more than its current points. With no leader left,
+  nobody else is.
+- At the start of each stage, troopers in command shoot and launch
+  first. The shock they cause lands before everyone else's turn: a
+  trooper downed by it does nothing, and a hurt one loses those points
+  from its shot first, then from its launch (a launch cut below 3 points
+  doesn't happen). The original lets the player choose which tasks lose
+  points; this fixes the order.
+
+In CPU-vs-CPU games it's active (Compact troopers, with one leader to a
+squad of six, are out of command about a third of the time, mostly
+after losing their leader) but changes win rates by only a point or two.
+Most Compact damage comes from bombs, and losses before launching rarely
+cancel one.
+
 ### Launched weapons
 
 Every trooper carries guided bombs, after the original's Guided Positron
@@ -158,9 +182,11 @@ wooded terrain to avoid enemy DF and spend all TPs on LW and CM": hide
 from direct fire, and lob bombs, which need no line of sight.
 
 - **Launching:** plot a target cell and at least 3 points. Bombs leave
-  after the fire phase, from where their launchers stand (a trooper
-  downed by fire doesn't get its launch off), and go off after
-  movement, so a target that moves away escapes.
+  alongside the fire phase, from where their launchers stand (a trooper
+  hit by fire in the same part of the stage still gets its launch off,
+  as in the original, where fire casualties take effect after the launch
+  segment), and go off after movement, so a target that moves away
+  escapes.
 - **Does it land where it was aimed?** Work out
   `Aim × points − (range rating + countermeasures)`, where the range
   rating is 1 per 5 cells (rounded up) and the countermeasures are the
@@ -320,6 +346,9 @@ In any scenario, a side with no troopers left loses at once.
 | `surplusPct` | 120 | Attacker's value as a percentage of the defender's |
 | `holdToWin` | 2 | Victory hexes the attacker needs in Assault |
 | `turnLimit` | 12 | Turns before a scenario is decided |
+| `command` | 0 | Command Communication on (1) or off (0) |
+| `combat` | formula | Damage: `formula`, `dice` (the 1977 tables) or `mean` (their averages) |
+| `defence` | draft | `draft`, or `original` (terrain values, 1 per 10 cells of range, 1 per point moved) |
 | `noise` | 0 | 0 = off, 1 = ±1 on shots that land |
 | `coverScale` | 1 | Tuning: multiplies every cover value |
 | `recoverWhenHit` | 0 | Tuning: 1 = troopers recover even when hit |

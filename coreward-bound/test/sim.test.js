@@ -533,7 +533,8 @@ test('a carrier can\'t found or research away its last fleets', () => {
 
 test('a settlement taken this turn isn\'t working until its new owner\'s next turn', () => {
   const a = at(createGame(), 0, 6), b = at(createGame(), 1, 6), far = at(createGame(), 0, 12);
-  const game = board({ towns: [[a, 0, 3], [b, 1, 2], [at(createGame(), 0, -8), 1, 1]], stacks: [[a, 0, 12]] });
+  // one fleet of ours already waits in b (besieging it), so b has a fleet that can still jump
+  const game = board({ towns: [[a, 0, 3], [b, 1, 2], [at(createGame(), 0, -8), 1, 1]], stacks: [[a, 0, 12], [b, 0, 1]] });
   game.civs[0].rp = 10;
   rig(game, [6, 1]); // take it, and no tech copied
   jump(game, a, b, 9);

@@ -28,15 +28,17 @@ last two also need a relay: `node multiplayer/server.js`.
   `Math.random`, no `Date`, no floats that affect state. Network play depends
   on two devices computing identical games. Presentation code (`render.js`,
   `audio.js`, `main.js`) may use floats and `Math.random` freely.
-- The CPU (`src/ai.js`) has its own RNG and only ever moves its target, like
-  a human. It must never touch game state directly.
+- The CPU (`src/ai.js`) has its own RNG and only ever changes its own
+  targets, through the same inputs a human sends (add, remove, move). It must
+  never touch game state directly.
 - `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `lockstep.js`,
   `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`, `lobby.js`, `netpanel.js`.
   Keep them type-clean.
 - A rule change means updating, together: `sim.js`, a test in
   `test/sim.test.js`, `RULES.md`, and the How to play card in `index.html`.
   Then run the headless balance tool to check games still finish.
-- Settings the player sees are five presets in `main.js` (`CHOICES`); the
+- Settings the player sees are six presets in `main.js` (`CHOICES`: CPU,
+  Board, Speed, Spawns, Targets, Obstacles); the
   tuning parameters live in `DEFAULTS` in `sim.js` and are not exposed.
 
 ## Deploying

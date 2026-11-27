@@ -18,7 +18,12 @@ export const DEFAULTS = {
   width: 60,
   height: 40,
   tickRate: 8,
+  /** ticks per dot from a single spawn with an empty field */
   spawnInterval: 2,
+  /** % of a spawn's output each spawn beyond the first adds (100 = linear) */
+  extraSpawnRate: 65,
+  /** army size at which production halves (0 = no slowdown) */
+  armyHalfRate: 100,
   neutralSpawns: 6,
   meterMax: 40,
   neutralMeter: 10,
@@ -26,6 +31,8 @@ export const DEFAULTS = {
   facingArc: 1,
   maxDotsPerPlayer: 0,
   terrain: 'open',
+  /** most targets a player may hold (createGame clamps it to 1..127) */
+  maxTargets: 3,
   seed: 1,
 };
 
@@ -74,9 +81,12 @@ export const DEFAULTS = {
  * @property {(Dot|null)[]} occ    dot occupying each cell
  * @property {Dot[]} dots
  * @property {Spawn[]} spawns
- * @property {number[]} targets    target cell per player
- * @property {Int32Array[]} dist   flow field per player
+ * @property {number[][]} targets  per player: 1..maxTargets target cells, in order
+ * @property {Int32Array[]} dist   flow field per player: path distance to the nearest target
+ * @property {Int8Array[]} near    per player, per cell: index of the target that cell drains to (-1 unreachable)
  * @property {number[]} dotCount   per player
+ * @property {number[]} production per player: fixed-point credit toward the next dot (PROD_UNIT = one dot)
+ * @property {number[]} nextSpawn  per player: spawn id the round robin tries first
  * @property {number} nextId
  * @property {number} winner       -1 while playing
  * @property {Events} events       what happened in the last tick
@@ -111,6 +121,8 @@ export function createGame(overrides = {}, layout) {
   /** @type {Params} */
   const params = { ...DEFAULTS, ...overrides };
   params.height += params.height & 1; // keep H even: 180° rotation is then exact
+  params.maxTargets = Number.isFinite(params.maxTargets)
+    ? Math.min(127, Math.max(1, Math.floor(params.maxTargets))) : DEFAULTS.maxTargets; // near is an Int8Array
   const grid = createGrid(params.width, params.height);
   const N = grid.N;
   /** @type {Game} */
@@ -123,9 +135,12 @@ export function createGame(overrides = {}, layout) {
     occ: new Array(N).fill(null),
     dots: [],
     spawns: [],
-    targets: [0, 0],
+    targets: [[0], [0]],
     dist: [new Int32Array(N), new Int32Array(N)],
+    near: [new Int8Array(N), new Int8Array(N)],
     dotCount: [0, 0],
+    production: [0, 0],
+    nextSpawn: [0, 0],
     nextId: 1,
     winner: -1,
     events: emptyEvents(),
@@ -139,7 +154,7 @@ export function createGame(overrides = {}, layout) {
   }
   // Targets start just in front of each home.
   for (const s of game.spawns) {
-    if (s.home && s.owner >= 0) game.targets[s.owner] = frontOf(game, s);
+    if (s.home && s.owner >= 0) game.targets[s.owner] = [frontOf(game, s)];
   }
   computeFlowFields(game);
   return game;
@@ -270,14 +285,54 @@ export function faces(/** @type {Game} */ game, /** @type {Dot} */ dot, /** @typ
   return game.params.facingArc >= 3 ? diff <= 1 : diff === 0;
 }
 
-/** Spawn id the player's target sits on, or -1. */
-export function targetSpawn(/** @type {Game} */ game, /** @type {number} */ player) {
-  return game.spawnOf[game.targets[player]];
+/** Spawn ids any of `player`'s targets sit on. */
+export function targetedSpawns(/** @type {Game} */ game, /** @type {number} */ player) {
+  /** @type {Set<number>} */
+  const ids = new Set();
+  for (const t of game.targets[player]) if (game.spawnOf[t] >= 0) ids.add(game.spawnOf[t]);
+  return ids;
 }
 
-/** @param {Game} game @param {number} player @param {number} cell */
+/** @typedef {{ op: 'move', index: number, cell: number } | { op: 'add', cell: number } | { op: 'remove', index: number }} Input */
+
+/**
+ * The one place target-list rules live. Applies `input` to a list of target
+ * cells in place and returns true, or returns false and leaves it unchanged if
+ * the input is invalid: not an object with a known op, a cell that isn't an
+ * integer in 0..N-1, an index that isn't an integer in range, an add at the
+ * cap, or a remove of the last target.
+ * @param {number[]} targets @param {Input} input @param {number} maxTargets @param {number} N
+ */
+export function applyInputTo(targets, input, maxTargets, N) {
+  if (!input || typeof input !== 'object') return false;
+  const okCell = (/** @type {any} */ c) => Number.isInteger(c) && c >= 0 && c < N;
+  const okIndex = (/** @type {any} */ i) => Number.isInteger(i) && i >= 0 && i < targets.length;
+  switch (input.op) {
+    case 'move':
+      if (!okIndex(input.index) || !okCell(input.cell)) return false;
+      targets[input.index] = input.cell;
+      return true;
+    case 'add':
+      if (!okCell(input.cell) || targets.length >= maxTargets) return false;
+      targets.push(input.cell);
+      return true;
+    case 'remove':
+      if (!okIndex(input.index) || targets.length <= 1) return false;
+      targets.splice(input.index, 1);
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** @param {Game} game @param {number} player @param {Input} input */
+export function applyInput(game, player, input) {
+  return applyInputTo(game.targets[player], input, game.params.maxTargets, game.grid.N);
+}
+
+/** Move the player's first target. @param {Game} game @param {number} player @param {number} cell */
 export function setTarget(game, player, cell) {
-  if (cell >= 0 && cell < game.grid.N) game.targets[player] = cell;
+  applyInput(game, player, { op: 'move', index: 0, cell });
 }
 
 /** @param {Game} game @param {number} player @param {number} cell @param {number} facing */
@@ -299,30 +354,35 @@ export function step(/** @type {Game} */ game) {
   if (game.winner >= 0) return game.events;
   game.tick++;
   game.events = emptyEvents();
-  computeFlowFields(game);   // phase 2 (phase 1, input, happens via setTarget)
+  computeFlowFields(game);   // phase 2 (phase 1, input, happens via applyInput)
   moveDots(game);            // phase 3
   resolveCombat(game);       // phase 4
   resolveSpawnAttacks(game); // phase 5
-  regenMeters(game);
-  emitDots(game);            // phase 6
-  checkWin(game);            // phase 7
+  regenMeters(game);         // phase 6
+  emitDots(game);            // phase 7
+  checkWin(game);            // phase 8
   for (let p = 0; p < 2; p++) game.stats.peak[p] = Math.max(game.stats.peak[p], game.dotCount[p]);
   return game.events;
 }
 
-/** Phase 2: BFS distance field from each player's target. */
+/** Phase 2: one multi-source BFS per player, from all their targets, labelling each cell with the nearest. */
 function computeFlowFields(/** @type {Game} */ game) {
   const { grid, terrain } = game;
   const { N, nbr } = grid;
   const queue = new Int32Array(N);
   for (let p = 0; p < 2; p++) {
     const dist = game.dist[p];
+    const near = game.near[p];
     dist.fill(INF);
+    near.fill(-1);
     let head = 0, tail = 0;
-    const t = game.targets[p];
-    const sp = game.spawnOf[t];
-    const seeds = sp >= 0 ? game.spawns[sp].cells : [t];
-    for (const s of seeds) { dist[s] = 0; queue[tail++] = s; }
+    game.targets[p].forEach((t, i) => {
+      const sp = game.spawnOf[t];
+      for (const s of sp >= 0 ? game.spawns[sp].cells : [t]) {
+        if (dist[s] === 0) continue; // lower index wins a shared cell
+        dist[s] = 0; near[s] = i; queue[tail++] = s;
+      }
+    });
     while (head < tail) {
       const u = queue[head++];
       const du = dist[u] + 1;
@@ -330,6 +390,7 @@ function computeFlowFields(/** @type {Game} */ game) {
         const v = nbr[u * 6 + d];
         if (v >= 0 && terrain[v] === FREE && dist[v] === INF) {
           dist[v] = du;
+          near[v] = near[u];
           queue[tail++] = v;
         }
       }
@@ -363,11 +424,13 @@ function moveDots(/** @type {Game} */ game) {
   const keyed = dots.map((dot) => ({ dot, key: game.dist[dot.player][dot.cell] * 1024 + rng.int(1024) }));
   keyed.sort((a, b) => a.key - b.key);
 
-  const tSpawn = [targetSpawn(game, BLUE), targetSpawn(game, RED)];
-  const tCenter = tSpawn.map((ts, p) => (ts >= 0 ? game.spawns[ts].center : game.targets[p]));
-  /** Squared straight-line distance to the player's target, in integer units. */
-  const e2 = (/** @type {number} */ cell, /** @type {number} */ p) => {
-    const dq = grid.q[cell] - grid.q[tCenter[p]], dr = grid.r[cell] - grid.r[tCenter[p]];
+  // Per player, per target: the spawn it sits on (or -1) and its centre.
+  const tSpawn = game.targets.map((list) => list.map((t) => game.spawnOf[t]));
+  const tCenter = game.targets.map((list, p) => list.map((t, i) => (tSpawn[p][i] >= 0 ? game.spawns[tSpawn[p][i]].center : t)));
+  /** Squared straight-line distance to the centre of target `ti` of player `p`, in integer units. */
+  const e2 = (/** @type {number} */ cell, /** @type {number} */ p, /** @type {number} */ ti) => {
+    const c = tCenter[p][ti];
+    const dq = grid.q[cell] - grid.q[c], dr = grid.r[cell] - grid.r[c];
     return 3 * (2 * dq + dr) * (2 * dq + dr) + 9 * dr * dr;
   };
 
@@ -375,6 +438,9 @@ function moveDots(/** @type {Game} */ game) {
     if (dot.locked) continue;
     const p = dot.player;
     const D = game.dist[p];
+    const near = game.near[p];
+    const label = near[dot.cell];
+    const ti = label >= 0 ? label : 0; // unreachable: behave as with an unreachable first target
     const cur = D[dot.cell];
     let best = -1, bestDist = cur, bestDiff = 9, ties = 0;
     let closerExists = false, closerAllSettled = true, closerAllFriends = true;
@@ -409,11 +475,12 @@ function moveDots(/** @type {Game} */ game) {
     // target instead of queueing back along the path. The straight-line
     // distance strictly falls with every sidestep, so dots can't oscillate.
     if (best < 0 && closerExists && closerAllFriends) {
-      let bestE = e2(dot.cell, p);
+      let bestE = e2(dot.cell, p, ti);
       for (let d = 0; d < 6; d++) {
         const n = nbr[dot.cell * 6 + d];
-        if (n < 0 || terrain[n] !== FREE || occ[n] || D[n] !== cur) continue;
-        const en = e2(n, p);
+        // only within one target's region, or boundary dots could step back and forth forever
+        if (n < 0 || terrain[n] !== FREE || occ[n] || D[n] !== cur || near[n] !== label) continue;
+        const en = e2(n, p, ti);
         if (en < bestE) { bestE = en; best = d; }
       }
     }
@@ -435,7 +502,7 @@ function moveDots(/** @type {Game} */ game) {
 
     // Can't advance. Next to the spawn we're targeting: face it (attack or
     // reinforce), unless it's our own and already full, in which case guard it.
-    const ts = tSpawn[p];
+    const ts = tSpawn[p][ti];
     if (ts >= 0) {
       const s = game.spawns[ts];
       const wantsContact = s.owner !== p || s.meter < game.params.meterMax;
@@ -469,7 +536,7 @@ function moveDots(/** @type {Game} */ game) {
       dot.settled = true;
       // Settled against an enemy or neutral spawn: attack it instead.
       if (faceHostileSpawn(game, dot)) continue;
-      const from = ts >= 0 ? game.spawns[ts].center : game.targets[p];
+      const from = tCenter[p][ti];
       const away = dirToward(grid, from, dot.cell);
       if (away >= 0) dot.facing = away;
     }
@@ -541,15 +608,16 @@ function resolveSpawnAttacks(/** @type {Game} */ game) {
   const nbr = grid.nbr;
   /** @type {Map<number, Dot[][]>} spawn id → [blue dots, red dots] */
   const contacts = new Map();
+  const targeted = [targetedSpawns(game, BLUE), targetedSpawns(game, RED)];
   for (const dot of game.dots) {
-    const ts = targetSpawn(game, dot.player);
+    const ts = targeted[dot.player];
     for (let d = 0; d < 6; d++) {
       if (!faces(game, dot, d)) continue;
       const n = nbr[dot.cell * 6 + d];
       if (n < 0) continue;
       const sid = game.spawnOf[n];
       if (sid < 0) continue;
-      if (sid === ts || (dot.settled && game.spawns[sid].owner !== dot.player)) {
+      if (ts.has(sid) || (dot.settled && game.spawns[sid].owner !== dot.player)) {
         let entry = contacts.get(sid);
         if (!entry) contacts.set(sid, (entry = [[], []]));
         entry[dot.player].push(dot);
@@ -612,30 +680,67 @@ function regenMeters(/** @type {Game} */ game) {
   for (const s of game.spawns) if (s.owner >= 0 && s.meter < meterMax) s.meter++;
 }
 
-/** Phase 6: each owned spawn emits one dot at its free exit nearest the owner's target. */
-function emitDots(/** @type {Game} */ game) {
-  const { params, rng, grid } = game;
-  if (game.tick % params.spawnInterval !== 0) return;
-  for (const s of game.spawns) {
-    if (s.owner < 0) continue;
-    if (params.maxDotsPerPlayer > 0 && game.dotCount[s.owner] >= params.maxDotsPerPlayer) continue;
-    const D = game.dist[s.owner];
-    let best = -1, bestD = Infinity, ties = 0;
-    for (const e of s.exits) {
-      if (game.occ[e] || game.terrain[e] !== FREE) continue;
-      if (D[e] < bestD) { best = e; bestD = D[e]; ties = 1; }
-      else if (D[e] === bestD && rng.int(++ties) === 0) best = e;
+/** One dot's worth of production credit. Integer maths keeps the sim deterministic. */
+export const PROD_UNIT = 1 << 16;
+
+/**
+ * Production credit a player earns per tick: one dot per spawnInterval from
+ * the first spawn, each further spawn adding extraSpawnRate% of that, all
+ * scaled down by armyHalfRate / (armyHalfRate + army size).
+ * @param {Game} game @param {number} player
+ */
+export function productionRate(game, player) {
+  const { spawnInterval, extraSpawnRate, armyHalfRate } = game.params;
+  let owned = 0;
+  for (const s of game.spawns) if (s.owner === player) owned++;
+  if (!owned) return 0;
+  const k = armyHalfRate > 0 ? armyHalfRate : 1;
+  const army = armyHalfRate > 0 ? game.dotCount[player] : 0;
+  return Math.floor((PROD_UNIT * (100 + extraSpawnRate * (owned - 1)) * k) / (100 * spawnInterval * (k + army)));
+}
+
+/**
+ * Phase 7: each player's production pool fills every tick; each full unit
+ * emits one dot from the next owned spawn in turn (round robin), at its free
+ * exit nearest the owner's nearest target. A spawn whose exits are all blocked is
+ * skipped. If every owned spawn is blocked, at most one dot's credit waits.
+ * @param {Game} game
+ */
+function emitDots(game) {
+  const { params, rng, grid, spawns } = game;
+  for (let p = 0; p < 2; p++) {
+    game.production[p] += productionRate(game, p);
+    while (game.production[p] >= PROD_UNIT) {
+      if (params.maxDotsPerPlayer > 0 && game.dotCount[p] >= params.maxDotsPerPlayer) break;
+      let emitted = false;
+      for (let i = 0; i < spawns.length && !emitted; i++) {
+        const s = spawns[(game.nextSpawn[p] + i) % spawns.length];
+        if (s.owner !== p) continue;
+        const D = game.dist[p];
+        let best = -1, bestD = Infinity, ties = 0;
+        for (const e of s.exits) {
+          if (game.occ[e] || game.terrain[e] !== FREE) continue;
+          if (D[e] < bestD) { best = e; bestD = D[e]; ties = 1; }
+          else if (D[e] === bestD && rng.int(++ties) === 0) best = e;
+        }
+        if (best < 0) continue;
+        const dot = placeDot(game, p, best, dirToward(grid, s.center, best));
+        if (!dot) continue;
+        dot.prevCell = s.center;
+        game.events.spawned++;
+        game.stats.spawned[p]++;
+        game.nextSpawn[p] = (s.id + 1) % spawns.length;
+        emitted = true;
+      }
+      if (!emitted) break;
+      game.production[p] -= PROD_UNIT;
     }
-    if (best < 0) continue;
-    const facing = dirToward(grid, s.center, best);
-    const dot = placeDot(game, s.owner, best, facing);
-    if (dot) { dot.prevCell = s.center; game.events.spawned++; game.stats.spawned[s.owner]++; }
+    if (game.production[p] > PROD_UNIT) game.production[p] = PROD_UNIT;
   }
 }
 
-/** Phase 7. */
 /**
- * Phase 7: a player with no spawns and no dots is eliminated. Neutral spawns
+ * Phase 8: a player with no spawns and no dots is eliminated. Neutral spawns
  * don't matter. A draw can't happen: owned spawns only ever change hands,
  * never go neutral, so someone always owns at least one.
  * @param {Game} game
@@ -656,6 +761,7 @@ export function stateHash(/** @type {Game} */ game) {
   mix(game.tick);
   for (const d of game.dots) { mix(d.id); mix(d.player); mix(d.cell); mix(d.facing); }
   for (const s of game.spawns) { mix(s.owner + 1); mix(s.meter); }
+  for (let p = 0; p < 2; p++) { mix(game.production[p]); mix(game.nextSpawn[p]); }
   mix(game.rng.state());
   return h >>> 0;
 }

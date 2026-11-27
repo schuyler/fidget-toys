@@ -44,12 +44,14 @@
     <form method="dialog">
       <h2>How to play</h2>
       <ul class="rules">
-        <li><b>Drag your marker.</b> Your dots stream toward it. That's your only control.</li>
+        <li><b>Your markers are your only control.</b> Tap empty board to add one, tap one to remove it (with Targets set to 1, a tap just moves it), drag to move it. Once you have as many as the Targets setting allows, a tap moves your nearest one instead. Each dot heads for your nearest marker.</li>
         <li><b>Dots face the way they last moved.</b> A dot destroys an enemy in front of it, unless that enemy is facing it back. Then they freeze, glaring, until someone hits one from the side or behind.</li>
-        <li><b>Dots that reach your marker bunch up</b> into a hedgehog, facing outward.</li>
-        <li><b>Park your marker on or beside a spawn point</b> and your dots throw themselves at it, draining its ring. Empty the ring and it's yours: it starts making dots for you.</li>
+        <li><b>Dots that reach a marker bunch up</b> into a hedgehog, facing outward.</li>
+        <li><b>Park a marker on or beside a spawn point</b> and your dots throw themselves at it, draining its ring. Empty the ring and it's yours: it starts making dots for you.</li>
+        <li><b>Your spawns share one production line:</b> dots come out of each in turn. Every extra spawn speeds it up a bit less, and a big army slows it down, so spend your dots.</li>
         <li><b>Wipe out the other side to win:</b> take all their spawn points and destroy every last dot. Neutral spawns don't need capturing, and while you still have dots you're not out yet.</li>
-        <li><b>Tap anywhere</b> to jump your marker there. Against the CPU you're blue.</li>
+        <li><b>More markers isn't more army.</b> A marker near your spawns catches every new dot, so your attack starves. Extra markers trade attack for defence.</li>
+        <li><b>You can't see the other side's markers,</b> only their dots. Against the CPU you're blue.</li>
       </ul>
       <p class="hint"><a href="https://github.com/schuyler/fidget-toys/blob/main/dot-army/RULES.md" target="_blank" rel="noopener">Full rules</a>, for the curious.</p>
       <menu>
@@ -93,6 +95,14 @@
         </div>
       </div>
       <div class="row">
+        <div class="row-name" id="lbl-targets">Targets</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-targets">
+          <label><input type="radio" name="targets" value="1"><span>1</span></label>
+          <label><input type="radio" name="targets" value="2"><span>2</span></label>
+          <label><input type="radio" name="targets" value="3"><span>3</span></label>
+        </div>
+      </div>
+      <div class="row">
         <div class="row-name" id="lbl-obstacles">Obstacles</div>
         <div class="opts" role="radiogroup" aria-labelledby="lbl-obstacles">
           <label><input type="radio" name="obstacles" value="none"><span>None</span></label>
@@ -100,7 +110,7 @@
           <label><input type="radio" name="obstacles" value="many"><span>Many</span></label>
         </div>
       </div>
-      <p class="hint">Drag your marker; your dots follow. A dot destroys an enemy it's facing, unless that enemy faces it back. Park your marker on or beside a spawn point to attack it. Against the CPU you're blue; online, the host is blue. Win by taking all the enemy's spawns and destroying every last enemy dot. <a href="https://github.com/schuyler/fidget-toys/blob/main/dot-army/RULES.md" target="_blank" rel="noopener">Full rules</a></p>
+      <p class="hint">Tap to add a marker, tap a marker to remove it, drag to move it; each dot heads for your nearest one. Targets sets how many you may have (with 1, a tap jumps it). A marker near your spawns catches every new dot, so extra markers trade attack for defence. A dot destroys an enemy it's facing, unless that enemy faces it back. Park a marker on or beside a spawn point to attack it. Against the CPU you're blue; online, the host is blue. Win by taking all the enemy's spawns and destroying every last enemy dot. <a href="https://github.com/schuyler/fidget-toys/blob/main/dot-army/RULES.md" target="_blank" rel="noopener">Full rules</a></p>
       <menu>
         <button value="reset" formnovalidate>Defaults</button>
         <button value="cancel" formnovalidate>Cancel</button>

@@ -2,7 +2,9 @@
 
 Two swarms of little arrowheads fight over spawn points, and all you control is where they're headed.
 
-Drag your marker and your dots stream after it. A dot destroys any enemy it's facing, unless that enemy is facing it back, in which case they're stuck glaring at each other until someone circles round behind. Park your marker on a spawn point and your dots throw themselves at it until it's yours. Take all of your opponent's spawn points and mop up their last dots to win.
+Drag a marker and your dots stream after it. A dot destroys any enemy it's facing, unless that enemy is facing it back, in which case they're stuck glaring at each other until someone circles round behind. Park a marker on a spawn point and your dots throw themselves at it until it's yours. Take all of your opponent's spawn points and mop up their last dots to win.
+
+You can have up to three markers (the Targets setting can lower that): tap empty board to add one, tap a marker to remove it, drag to move it. Each dot goes to whichever of your markers is nearest, so a second marker parked by your spawns soaks up every new dot and your attack goes hungry. Extra markers buy defence with attack. You can't see your opponent's markers, only where their dots are going.
 
 You play the CPU, or another person on their own device online. To play someone online, one of you chooses Play online and sends the link (or the code), and the other opens it or chooses Join with code. [NETWORK.md](NETWORK.md) has the details. The [full rules](RULES.md) are short and worth a skim, because the facing rule is the whole game.
 

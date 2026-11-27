@@ -1,6 +1,6 @@
 // Wires the simulation, renderer, input, AI and sound together.
 
-import { createGame, setTarget, step, stateHash } from './sim.js';
+import { createGame, applyInput, applyInputTo, step, stateHash } from './sim.js';
 import { createAI } from './ai.js';
 import { createRenderer, COLORS } from './render.js';
 import { createAudio } from './audio.js';
@@ -11,7 +11,7 @@ import { relayTransport, DEFAULT_RELAY, SEAT_TAKEN } from '../../multiplayer/rel
 import { createLobby, roomCode, cleanCode } from '../../multiplayer/lobby.js';
 import { createNetPanel } from '../../multiplayer/netpanel.js';
 
-// The settings players see: five simple choices, each a preset. Everything
+// The settings players see: six simple choices, each a preset. Everything
 // else (meters, regen, spawn interval, facing arc) stays at the sim defaults.
 const CHOICES = {
   mode: ['cpu-easy', 'cpu'],
@@ -19,23 +19,25 @@ const CHOICES = {
   size: { small: 24, medium: 34, large: 46 },
   /** ticks per second */
   speed: { slow: 5, average: 8, fast: 12 },
-  /** neutral spawn points */
-  spawns: { few: 4, some: 6, many: 10 },
+  /** neutral spawn points, and the sim's extraSpawnRate that keeps anti-snowball working at that count */
+  spawns: { few: { neutral: 4, extra: 50 }, some: { neutral: 6, extra: 65 }, many: { neutral: 10, extra: 80 } },
+  /** most targets a player may have */
+  targets: { '1': 1, '2': 2, '3': 3 },
   /** rock layout */
   obstacles: { none: 'open', some: 'rocks', many: 'dense' },
 };
 const SQRT3 = Math.sqrt(3);
 
-// v2: only the five simple choices are stored, so values from the old
+// v2: only the six simple choices are stored, so values from the old
 // advanced fields can't linger invisibly.
 const SETTINGS_KEY = 'dot-army-settings-v2';
-const defaultSettings = { mode: 'cpu-easy', size: 'medium', speed: 'average', spawns: 'some', obstacles: 'none' };
+const defaultSettings = { mode: 'cpu-easy', size: 'medium', speed: 'average', spawns: 'some', targets: '3', obstacles: 'none' };
 /** @param {any} raw */
 function sanitize(raw) {
   const out = { ...defaultSettings };
   if (!raw || typeof raw !== 'object') return out;
   if (CHOICES.mode.includes(raw.mode)) out.mode = raw.mode;
-  for (const k of /** @type {const} */ (['size', 'speed', 'spawns', 'obstacles'])) {
+  for (const k of /** @type {const} */ (['size', 'speed', 'spawns', 'targets', 'obstacles'])) {
     if (typeof raw[k] === 'string' && raw[k] in CHOICES[k]) out[k] = raw[k];
   }
   return out;
@@ -82,17 +84,28 @@ const rotated = () => !net && screenPortrait() !== gamePortrait;
 let net = null;
 /** The one player on this screen: blue locally, or this device's seat online. */
 const me = () => (net ? net.local : 0);
-/** In a network game, the cell the local player last aimed at (applied a few ticks later). */
-let localAim = -1;
+/**
+ * The local player's targets as this device has issued them: created from the
+ * game's list when it starts, changed only by issue(), never re-read from the
+ * game (online, the game lags what was issued by a few ticks).
+ * @type {number[]}
+ */
+let mine = [];
 
-/** pointerId → player being dragged */
+/**
+ * Presses being tracked, by pointerId. index: the local target it holds (-1 if
+ * gated); x0, y0: where it began (client CSS px); gated: it began while
+ * gestures were off, so it does nothing; pending: set while a press near a
+ * marker isn't yet a tap or a drag, null once the target follows the pointer.
+ * @type {Map<number, { index: number, x0: number, y0: number, gated: boolean, pending: null | { onMarker: boolean } }>}
+ */
 const drags = new Map();
-/** @type {{x: number, y: number}[]} smoothed on-screen target positions (board px) */
-let targetsPx = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+/** @type {{x: number, y: number}[]} smoothed on-screen positions (board px) of the local player's markers, index-aligned with `mine`. The opponent's are never drawn. */
+let markersPx = [];
 
 /**
  * @param {boolean} [start] false: set up the board but wait at the start menu
- * @param {{ seed: number, width: number, height: number, tickRate: number, neutralSpawns: number, terrain: string }} [fixed]
+ * @param {{ seed: number, width: number, height: number, tickRate: number, neutralSpawns: number, extraSpawnRate: number, maxTargets: number, terrain: string }} [fixed]
  *   a network guest plays exactly the host's game
  */
 function newGame(start = true, fixed) {
@@ -118,11 +131,13 @@ function newGame(start = true, fixed) {
     width,
     height,
     tickRate: CHOICES.speed[/** @type {keyof typeof CHOICES.speed} */ (settings.speed)],
-    neutralSpawns: CHOICES.spawns[/** @type {keyof typeof CHOICES.spawns} */ (settings.spawns)],
+    neutralSpawns: CHOICES.spawns[/** @type {keyof typeof CHOICES.spawns} */ (settings.spawns)].neutral,
+    extraSpawnRate: CHOICES.spawns[/** @type {keyof typeof CHOICES.spawns} */ (settings.spawns)].extra,
+    maxTargets: CHOICES.targets[/** @type {keyof typeof CHOICES.targets} */ (settings.targets)],
     terrain: CHOICES.obstacles[/** @type {keyof typeof CHOICES.obstacles} */ (settings.obstacles)],
     seed: (Math.random() * 2 ** 31) >>> 0,
   });
-  localAim = -1;
+  mine = [...game.targets[me()]];
   renderer.setView({ flip: !!net && net.local === 1, local: me() });
   ais = [null, net ? null
     : createAI(1, game.params.seed, settings.mode === 'cpu-easy'
@@ -130,7 +145,7 @@ function newGame(start = true, fixed) {
       : { dragSpeed: 2.2 })];
   renderer.setGame(game);
   drags.clear();
-  targetsPx = [0, 1].map((p) => cellPx(game.targets[p]));
+  rebuildMarkers();
   phase = start ? 'countdown' : 'menu';
   countdown = 3.2;
   lastCount = 4;
@@ -144,12 +159,71 @@ function cellPx(/** @type {number} */ cell) {
   return { x, y };
 }
 
-// ---------------------------------------------------------------------------
-// Input: the whole screen is yours. A press anywhere moves your marker there,
-// and dragging keeps it under your finger.
+/** Every local marker at its target's cell. */
+function rebuildMarkers() {
+  markersPx = mine.map(cellPx);
+}
 
-function humanPlayers() {
-  return [me() === 0, me() === 1];
+// ---------------------------------------------------------------------------
+// Input: the whole screen is yours. Tap empty board to add a target (at the
+// cap: move the nearest one there), tap a target to remove it, drag to move it.
+
+/** A press this close (board px) to a marker grabs it for dragging. */
+const grab = () => Math.max(40, renderer.size * 3.5);
+/** A press this close to a marker is on it: a tap there removes it. */
+const hit = () => Math.max(14, renderer.size * 2);
+/** A press that moves farther than this (client CSS px) is a drag, not a tap. */
+const TAP_SLOP = 10;
+
+/** The WAITING overlay is showing: the other device has stalled for more than 600 ms. */
+const waitingShown = () => !!net && phase === 'play' && !!net.waitingSince && performance.now() - net.waitingSince > 600;
+/** Gestures may change targets only during a game, online only once lockstep is up and while not stalled. */
+const actionsOn = () => (phase === 'countdown' || phase === 'play') && (!net || (!!net.ls && !waitingShown()));
+
+/**
+ * Validate an input against the local model, then apply it: straight to the
+ * game offline, through lockstep online. Keeps the marker list in step.
+ * @param {import('./sim.js').Input} input
+ */
+function issue(input) {
+  if (net && !net.ls) return false;
+  if (!applyInputTo(mine, input, game.params.maxTargets, game.grid.N)) return false;
+  if (net) net.ls.queue(input); else applyInput(game, me(), input);
+  if (input.op === 'add') markersPx.push(cellPx(input.cell));
+  else if (input.op === 'remove') markersPx.splice(input.index, 1);
+  return true;
+}
+
+/** Board position of a pointer event, clamped to the board. */
+function boardPoint(/** @type {PointerEvent} */ e) {
+  const { w, h } = renderer.board;
+  const b = renderer.toBoard(e.clientX, e.clientY);
+  return { x: Math.max(0, Math.min(w, b.x)), y: Math.max(0, Math.min(h, b.y)) };
+}
+
+/** Local target indices held by pointers other than `except`. */
+function heldBy(/** @type {number} */ except) {
+  const held = new Set();
+  for (const [id, d] of drags) if (id !== except) held.add(d.index);
+  return held;
+}
+
+/** The unheld local target nearest (board px) to b, within `within`: its index, or -1. */
+function nearestFree(/** @type {{x: number, y: number}} */ b, /** @type {Set<number>} */ held, within = Infinity) {
+  let best = -1, bestD = within;
+  markersPx.forEach((m, i) => {
+    const d = Math.hypot(m.x - b.x, m.y - b.y);
+    if (!held.has(i) && d <= bestD) { best = i; bestD = d; }
+  });
+  return best;
+}
+
+/** A tap on empty board: add a target there, or at the cap move the nearest free one. Returns the target's index, or -1. */
+function tapEmpty(/** @type {{x: number, y: number}} */ b, /** @type {number} */ pointerId) {
+  const cell = pixelToCell(game.grid, b.x, b.y, renderer.size);
+  if (mine.length < game.params.maxTargets) return issue({ op: 'add', cell }) ? mine.length - 1 : -1;
+  const index = nearestFree(b, heldBy(pointerId));
+  return index >= 0 && issue({ op: 'move', index, cell }) ? index : -1;
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -166,40 +240,53 @@ canvas.addEventListener('pointerdown', (e) => {
     if (!rotated()) paused = false; // can't resume until the phone is turned back
     return;
   }
-  const player = me();
-  if ([...drags.values()].includes(player)) return; // another finger already has it
-  const b = renderer.toBoard(e.clientX, e.clientY);
-  drags.set(e.pointerId, player);
   try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic or stale pointer */ }
-  moveTarget(player, b.x, b.y);
+  const drag = { index: -1, x0: e.clientX, y0: e.clientY, gated: !actionsOn(), pending: /** @type {null | { onMarker: boolean }} */ (null) };
+  drags.set(e.pointerId, drag);
+  if (drag.gated) return;
+  const b = boardPoint(e);
+  const held = heldBy(e.pointerId);
+  const near = nearestFree(b, held, grab());
+  if (near >= 0) {
+    const m = markersPx[near];
+    const d = Math.hypot(m.x - b.x, m.y - b.y);
+    // a tap on a held marker never removes a neighbour
+    let heldD = Infinity;
+    for (const i of held) if (i >= 0) heldD = Math.min(heldD, Math.hypot(markersPx[i].x - b.x, markersPx[i].y - b.y));
+    drag.index = near;
+    drag.pending = { onMarker: d <= hit() && !(heldD < d) };
+    return;
+  }
+  drag.index = tapEmpty(b, e.pointerId);
+  if (drag.index < 0) drags.delete(e.pointerId); // nothing to hold: ignore the press
+  else markersPx[drag.index] = b;
 });
 
 canvas.addEventListener('pointermove', (e) => {
-  const player = drags.get(e.pointerId);
-  if (player === undefined) return;
-  const b = renderer.toBoard(e.clientX, e.clientY);
-  moveTarget(player, b.x, b.y);
+  const drag = drags.get(e.pointerId);
+  if (!drag || drag.gated || !actionsOn()) return;
+  if (drag.pending && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > TAP_SLOP) drag.pending = null;
+  if (drag.pending) return;
+  const b = boardPoint(e);
+  markersPx[drag.index] = b;
+  issue({ op: 'move', index: drag.index, cell: pixelToCell(game.grid, b.x, b.y, renderer.size) });
 });
 
-function endDrag(/** @type {PointerEvent} */ e) {
-  drags.delete(e.pointerId);
-}
-canvas.addEventListener('pointerup', endDrag);
-canvas.addEventListener('pointercancel', endDrag);
-
-function moveTarget(/** @type {number} */ player, /** @type {number} */ x, /** @type {number} */ y) {
-  const { w, h } = renderer.board;
-  x = Math.max(0, Math.min(w, x));
-  y = Math.max(0, Math.min(h, y));
-  targetsPx[player] = { x, y };
-  const cell = pixelToCell(game.grid, x, y, renderer.size);
-  if (net && net.ls && player === net.local) {
-    net.ls.setLocal(cell); // takes effect a few ticks from now, on both devices
-    localAim = cell;
-  } else if (!net) {
-    setTarget(game, player, cell);
+canvas.addEventListener('pointerup', (e) => {
+  const drag = drags.get(e.pointerId);
+  if (drag && drag.pending && !drag.gated && actionsOn()) {
+    const b = boardPoint(e);
+    if (!drag.pending.onMarker) {
+      tapEmpty(b, e.pointerId);
+    } else if (issue({ op: 'remove', index: drag.index })) {
+      for (const other of drags.values()) if (other.index > drag.index) other.index--;
+    } else if (game.params.maxTargets === 1) {
+      tapEmpty(b, e.pointerId); // a tap on the only marker jumps it
+    }
   }
-}
+  drags.delete(e.pointerId);
+});
+canvas.addEventListener('pointercancel', (e) => drags.delete(e.pointerId));
 
 // ---------------------------------------------------------------------------
 // Main loop
@@ -232,22 +319,23 @@ function frame(/** @type {number} */ now) {
     }
   }
 
-  // markers glide to their cell when not being dragged
-  const dragging = [false, false];
-  for (const p of drags.values()) dragging[p] = true;
-  for (let p = 0; p < 2; p++) {
-    if (dragging[p]) continue;
-    const goal = cellPx(net && p === net.local && localAim >= 0 ? localAim : game.targets[p]);
-    const k = 1 - Math.exp(-dt * 14);
-    targetsPx[p] = { x: targetsPx[p].x + (goal.x - targetsPx[p].x) * k, y: targetsPx[p].y + (goal.y - targetsPx[p].y) * k };
-  }
+  // markers glide to their cell, except those a finger is moving
+  const followed = new Set();
+  for (const d of drags.values()) if (!d.gated && !d.pending) followed.add(d.index);
+  const k = 1 - Math.exp(-dt * 14);
+  const markers = markersPx.map((m, i) => {
+    const dragging = followed.has(i);
+    if (!dragging) {
+      const goal = cellPx(mine[i]);
+      m = markersPx[i] = { x: m.x + (goal.x - m.x) * k, y: m.y + (goal.y - m.y) * k };
+    }
+    return { x: m.x, y: m.y, player: me(), dragging };
+  });
 
   renderer.draw(phase === 'play' ? acc / tickMs : 1, paused ? 0 : dt, {
-    targetsPx,
-    dragging,
+    markers,
     overlay: overlay(),
     hints: now < hintsUntil,
-    human: humanPlayers(),
   });
   requestAnimationFrame(frame);
 }
@@ -255,8 +343,7 @@ function frame(/** @type {number} */ now) {
 function tick() {
   for (const ai of ais) {
     if (!ai) continue;
-    const t = ai.think(game);
-    if (t !== null) setTarget(game, ai.player, t);
+    for (const input of ai.think(game)) applyInput(game, ai.player, input);
   }
   const ev = net && net.ls ? net.ls.advance() : step(game);
   renderer.onTick(ev);
@@ -291,7 +378,7 @@ function overlay() {
           ? { lines: ['NO ONE', 'HERE YET'], sub: `room ${net.room} has no host · check the code, or ☰ to leave` }
           : { lines: ['JOINING'], sub: `room ${net.room} · waiting for the host…` };
     }
-    if (phase === 'play' && net.waitingSince && performance.now() - net.waitingSince > 600) {
+    if (waitingShown()) {
       return { lines: ['WAITING'], sub: 'for the other player…' };
     }
   }
@@ -366,7 +453,7 @@ window.addEventListener('resize', () => {
     return;
   }
   renderer.layout();
-  targetsPx = [0, 1].map((p) => cellPx(game.targets[p]));
+  rebuildMarkers();
   if (rotated() && (phase === 'countdown' || phase === 'play')) paused = true;
 });
 document.addEventListener('visibilitychange', () => {
@@ -548,8 +635,8 @@ function onNetMessage(msg) {
     if (msg.v !== PROTOCOL) { net.status = 'version'; return; }
     if (msg.g <= net.gameNo) return; // already playing that one
     net.gameNo = msg.g;
-    const { seed, width, height, tickRate, neutralSpawns, terrain } = msg;
-    newGame(true, { seed, width, height, tickRate, neutralSpawns, terrain });
+    const { seed, width, height, tickRate, neutralSpawns, extraSpawnRate, maxTargets, terrain } = msg;
+    newGame(true, { seed, width, height, tickRate, neutralSpawns, extraSpawnRate, maxTargets, terrain });
     attachLockstep();
   } else if ((msg.k === 'in' || msg.k === 'h') && msg.g === net.gameNo && net.ls) {
     net.ls.receive(msg);
@@ -565,7 +652,8 @@ function hostStart() {
   const p = game.params;
   net.transport.send({
     k: 'start', g: net.gameNo, v: PROTOCOL,
-    seed: p.seed, width: p.width, height: p.height, tickRate: p.tickRate, neutralSpawns: p.neutralSpawns, terrain: p.terrain,
+    seed: p.seed, width: p.width, height: p.height, tickRate: p.tickRate, neutralSpawns: p.neutralSpawns,
+    extraSpawnRate: p.extraSpawnRate, maxTargets: p.maxTargets, terrain: p.terrain,
   });
   attachLockstep();
 }
@@ -592,7 +680,7 @@ if (debug) {
   createNetPanel(() => net?.transport.stats() ?? null);
   /** @type {any} */ (window).dotArmyDebug = () => ({
     tick: game.tick, hash: stateHash(game), status: net?.status, desync: net?.ls?.desyncAt ?? -1,
-    winner: game.winner, targets: [...game.targets], net: net?.transport.stats() ?? null,
+    winner: game.winner, targets: game.targets.map((t) => [...t]), net: net?.transport.stats() ?? null,
     overlay: (() => { const o = overlay(); return o ? { lines: o.lines, sub: o.sub } : null; })(),
     board: renderer.board,
   });

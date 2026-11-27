@@ -49,27 +49,29 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     for (let i = 0; i < 25 && !moved; i++) { // poll up to 5 s for the CPU to move
       await p.waitForTimeout(200);
       b = await p.evaluate(() => dotArmyDebug());
-      moved = Array.isArray(b.targets) && b.targets[1] !== a.targets?.[1];
+      moved = Array.isArray(b.targets) && JSON.stringify(b.targets[1]) !== JSON.stringify(a.targets?.[1]);
     }
     if (moved) { await p.waitForTimeout(500); b = await p.evaluate(() => dotArmyDebug()); }
     check(b.tick > a.tick, `${vp.width}x${vp.height}: game advances (${a.tick} → ${b.tick})`);
     check(moved, `${vp.width}x${vp.height}: CPU moves red's target`);
   }
 
-  // 4. In portrait, a tap in the top half moves your (blue) marker: the top half no longer belongs to red.
+  // 4. In portrait, a tap on empty board in the top half adds a blue target (default Targets = 3,
+  // so it adds rather than moves): the top half no longer belongs to red.
   {
     const p = await page({ width: 390, height: 780 });
     await p.click('#start-new');
     await p.waitForTimeout(3500);
-    const before = await p.evaluate(() => dotArmyDebug().targets?.[0]);
+    const before = await p.evaluate(() => JSON.stringify(dotArmyDebug().targets?.[0]));
     await p.evaluate(() => {
       const c = document.getElementById('game');
       const fire = (type) => c.dispatchEvent(new PointerEvent(type, { pointerId: 7, clientX: 300, clientY: 150, pointerType: 'touch', bubbles: true }));
       fire('pointerdown'); fire('pointerup');
     });
     await p.waitForTimeout(300);
-    const after = await p.evaluate(() => dotArmyDebug().targets?.[0]);
-    check(before !== after && after !== undefined, `top-half tap moves blue's target (${before} → ${after})`);
+    const after = await p.evaluate(() => JSON.stringify(dotArmyDebug().targets?.[0]));
+    const [nb, na] = [JSON.parse(before).length, JSON.parse(after).length];
+    check(na === nb + 1, `top-half tap adds a blue target (${before} → ${after})`);
   }
 
   // 5. Layout: in portrait the board starts near the top (no empty band where a

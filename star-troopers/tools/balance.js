@@ -6,7 +6,7 @@
 //
 // Usage: node star-troopers/tools/balance.js [gamesPerSide] [key=v1,v2 ...] [top=N]
 //   e.g. node star-troopers/tools/balance.js 100 dodgeAimCap=0,3 maxSpend=0,10
-import { createGame, resolveTurn, living, pathCost, DRAW, COVER } from '../src/sim.js';
+import { createGame, resolveTurn, living, pathCost, DRAW, isCover } from '../src/sim.js';
 import { createAI } from '../src/ai.js';
 
 const FACTIONS = ['compact', 'orrin', 'vell'];
@@ -54,7 +54,7 @@ function evaluate(params) {
           const o = orders[t.id];
           const p = prof[t.faction];
           p.turns++; tt++;
-          if (COVER[game.terrain[t.cell]] > 0) inCover++;
+          if (isCover(game, t.cell)) inCover++;
           if (!o) continue;
           p.move += pathCost(game, t.cell, o.path);
           p.fire += o.fire; p.dodge += o.dodge; p.overwatch += o.overwatch;

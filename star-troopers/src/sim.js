@@ -15,6 +15,24 @@ export const DRAW = 2;
 export const OPEN = 0, BRUSH = 1, RUINS = 2, HIGH = 3, ROCK = 4, BUILDING = 5;
 /** Cover by terrain type. Buildings are the best cover, as urban terrain was in the original. */
 export const COVER = [0, 1, 2, 1, 0, 3];
+/**
+ * The original's terrain values, mapped onto ours: Clear 1 (open),
+ * Broken/Crater 2 (ruins), Organic 3 (brush), Urban 6 (buildings). High
+ * ground sits between broken ground and the original's mountains (6).
+ */
+export const COVER_ORIGINAL = [1, 3, 2, 3, 0, 6];
+
+/** Cover value of a cell under the game's settings. */
+export function coverValue(/** @type {Game} */ game, /** @type {number} */ cell) {
+  const table = game.params.cover === 'original' ? COVER_ORIGINAL : COVER;
+  return table[game.terrain[cell]] * game.params.coverScale;
+}
+
+/** Does a cell give more cover than open ground? */
+export function isCover(/** @type {Game} */ game, /** @type {number} */ cell) {
+  const table = game.params.cover === 'original' ? COVER_ORIGINAL : COVER;
+  return table[game.terrain[cell]] > table[OPEN];
+}
 
 /**
  * The factions. Pool, Aim and Recovery are StarSoldier's own numbers for
@@ -45,6 +63,7 @@ export const DEFAULTS = {
   squad: 4,
   rangeStep: 2,
   motionStep: 2,
+  cover: 'draft',           // tuning knob: 'draft' or 'original' (the 1977 game's terrain values)
   coverScale: 1,            // tuning knob: multiplies every cover value
   damageDivisor: 3,
   maxShot: 6,               // most points in one shot, 0 = no cap
@@ -368,7 +387,7 @@ export function los(/** @type {Game} */ game, /** @type {number} */ a, /** @type
  */
 export function defenceOf(game, target, fromCell, order) {
   const p = game.params;
-  return COVER[game.terrain[target.cell]] * p.coverScale
+  return coverValue(game, target.cell)
     + Math.floor(hexDist(game.grid, fromCell, target.cell) / p.rangeStep)
     + Math.floor((order?.path.length ?? 0) / p.motionStep)
     + (order?.dodge ?? 0) * (p.dodgeAimCap > 0 ? Math.min(target.aim, p.dodgeAimCap) : target.aim)

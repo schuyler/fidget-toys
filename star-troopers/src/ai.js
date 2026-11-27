@@ -13,7 +13,7 @@
 import { createRng } from './rng.js';
 import { hexDist, reflect } from './hex.js';
 import {
-  living, usable, spendable, enterCost, los, defenceOf, baseShock, occupant, held, ROCK, COVER, idle,
+  living, usable, spendable, enterCost, los, defenceOf, baseShock, occupant, held, ROCK, coverValue, isCover, idle,
 } from './sim.js';
 
 /** @typedef {import('./sim.js').Game} Game */
@@ -92,8 +92,8 @@ export function createAI(side, seed, opts = {}) {
       reachable.slice().sort((a, b) => gd[a] - gd[b] || field.cost[a] - field.cost[b]).slice(0, 5).forEach((c) => ends.add(c));
       reachable.filter((c) => hexDist(g, c, goal) <= 1).forEach((c) => ends.add(c));
       reachable
-        .filter((c) => COVER[game.terrain[c]] > 0 && foes.some((f) => see(c, f.cell)))
-        .sort((a, b) => COVER[game.terrain[b]] - COVER[game.terrain[a]] || gd[a] - gd[b])
+        .filter((c) => isCover(game, c) && foes.some((f) => see(c, f.cell)))
+        .sort((a, b) => coverValue(game, b) - coverValue(game, a) || gd[a] - gd[b])
         .slice(0, 4).forEach((c) => ends.add(c));
       // The safest places to be next turn, and cover on the way to the goal.
       /** @type {Map<number, number>} */
@@ -102,7 +102,7 @@ export function createAI(side, seed, opts = {}) {
       reachable.slice()
         .sort((a, b) => /** @type {number} */ (threatAt.get(a)) - /** @type {number} */ (threatAt.get(b)) || gd[a] - gd[b])
         .slice(0, 4).forEach((c) => ends.add(c));
-      reachable.filter((c) => COVER[game.terrain[c]] > 0)
+      reachable.filter((c) => isCover(game, c))
         .sort((a, b) => gd[a] - gd[b]).slice(0, 3).forEach((c) => ends.add(c));
       // Support positions: near the goal, with a view of it, as safe as possible.
       const taker = takers.has(t.id);
@@ -295,7 +295,7 @@ function threatNextTurn(game, t, cell, foes, see) {
   let threat = 0;
   for (const f of foes) {
     if (!see(f.cell, cell)) continue;
-    const defence = COVER[game.terrain[cell]] * p.coverScale
+    const defence = coverValue(game, cell)
       + Math.floor(hexDist(game.grid, f.cell, cell) / p.rangeStep)
       + (t.dugIn ? 1 : 0);
     const all = p.maxShot > 0 ? Math.min(usable(f), p.maxShot) : usable(f);

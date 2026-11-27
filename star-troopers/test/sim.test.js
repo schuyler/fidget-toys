@@ -53,6 +53,14 @@ test('buildings block line of sight even from high ground, and give cover 3', ()
   assert.equal(preview(game, game.troopers[0], game.troopers[1], 1).defence, 3 + 1);
 });
 
+test('the original cover table: open ground 1, buildings 6', () => {
+  const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], { terrain: [[C(6, 8), BUILDING]] }, { cover: 'original' });
+  // target in the open at range 4: cover 1 + range 2
+  assert.equal(preview(game, game.troopers[0], game.troopers[1], 1).defence, 1 + 2);
+  game.troopers[1].cell = C(6, 8);
+  assert.equal(preview(game, game.troopers[0], game.troopers[1], 1).defence, 6 + 2);
+});
+
 test('victory hexes are buildings by default', () => {
   const game = createGame({ seed: 5 });
   assert.ok(game.victory.every((v) => game.terrain[v.cell] === BUILDING));

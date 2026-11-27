@@ -69,8 +69,11 @@ device, so playing another person waits for network play (see Later).
   turns by up to 30° either way and changes speed by up to 4 kts (kept
   within 8–20), easing to its new value over 5 s. The next shift is
   never announced.
-- Streaks drift across the sea to show the wind, and a small compass in
-  the corner shows its direction and speed.
+- Wave crests roll downwind across the sea, each a short arc bowed the
+  way it's going, bigger in a stronger wind. The view follows your ship,
+  so they move past you at the apparent wind: sail into the wind and
+  they come at you, run before it and they barely move. A small compass
+  in the corner shows the wind's direction and speed.
 
 ## Sailing
 
@@ -229,8 +232,11 @@ You're blue, and you have the whole screen.
     you and the other faces away, and neither is clearly "left". The
     buttons only swap sides once the bow is 15° past that line, so they
     don't flicker while you sail across the screen.
-- Your ship shows its no-go wedge as a faint shadow ahead of the bow, so
-  you can see when you're about to sail into it.
+- There's no marker for the no-go zone. The waves show it: point your
+  bow within 45° of where they're coming from and you lose way. (An
+  earlier version drew a faint wedge ahead of the bow. It read as a line
+  of sight, not as the wind, so it went. See [IDEAS.md](IDEAS.md) for
+  the look the interface is aiming for.)
 - On a keyboard: ← → (or A, D) steer, with the same screen-relative
   rule; Z (or Q) and X (or E) are the left and right buttons.
 

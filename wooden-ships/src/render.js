@@ -3,7 +3,7 @@
 // through a camera (world metres → screen pixels), so a sea bigger than the
 // screen would be a camera change, not a rewrite.
 
-import { icos, isin, toRad, angleDiff, batteryDir, windAt, LAND, SHALLOW } from './sim.js';
+import { icos, isin, toRad, angleDiff, batteryDir, windAt, terrainAt, LAND, SHALLOW } from './sim.js';
 
 /** @typedef {import('./sim.js').Game} Game @typedef {import('./sim.js').Events} Events */
 /** @typedef {{x: number, y: number, w: number, h: number}} Rect */
@@ -329,7 +329,6 @@ export function createRenderer(canvas, assets) {
     drawStreaks(dt, ui.timeScale);
     drawFx(dt, ui.timeScale, ['foam', 'ring']);
     const me = g.ships[ui.you];
-    if (me && !me.struck && g.winner < 0) drawNoGo(me, poses[ui.you]);
     g.ships.forEach((s, i) => drawShip(s, poses[i]));
     drawBalls(alpha);
     drawFx(dt, ui.timeScale, ['smoke', 'dust', 'flash', 'boom', 'wood']);
@@ -343,7 +342,14 @@ export function createRenderer(canvas, assets) {
     if (ui.overlay) drawOverlay(ui.overlay);
   }
 
-  /** Wind streaks drift with the true wind (game speed shown at real time). @param {number} dt @param {number} ts */
+  /**
+   * Wave crests drift downwind across the sea. They're placed in world metres
+   * and the camera follows your ship, so on screen they move at the apparent
+   * wind: sailing into the wind they come at you, running before it they
+   * nearly stand still. Each crest is a short arc across the wind, bowed the
+   * way it's rolling, so it shows direction even in a still frame; stronger
+   * wind makes bigger crests. @param {number} dt @param {number} ts
+   */
   function drawStreaks(dt, ts) {
     if (!game) return;
     const w = windAt(game);
@@ -353,62 +359,46 @@ export function createRenderer(canvas, assets) {
     const spawn = (/** @type {{x: number, y: number, len: number, life: number}} */ s) => {
       s.x = vx0 + Math.random() * vw; s.y = vy0 + Math.random() * vh; s.life = 2 + Math.random() * 2;
     };
-    const want = Math.round((cw * ch) / 9000);
+    const want = Math.round((cw * ch) / 11000);
     while (streaks.length < want) {
-      const s = { x: 0, y: 0, len: (10 + Math.random() * 18) / scale, life: 0 };
+      const s = { x: 0, y: 0, len: (11 + Math.random() * 11) / scale, life: 0 };
       spawn(s);
       s.life = Math.random() * 3;
       streaks.push(s);
     }
     if (ws === 0) return;
-    const ux = w.x / ws, uy = w.y / ws;
+    const ux = w.x / ws, uy = w.y / ws; // the way it blows
+    const px = -uy, py = ux; // across it
     const v = ws * ts;
     const m = 40 / scale;
+    const size = 0.7 + 0.6 * Math.max(0, Math.min(1, (game.wind.speed - 8) / 12));
     ctx.save();
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.2;
     ctx.lineCap = 'round';
     for (const s of streaks) {
       s.x += ux * v * dt;
       s.y += uy * v * dt;
       s.life -= dt;
       if (s.life <= 0 || s.x < vx0 - m || s.y < vy0 - m || s.x > vx0 + vw + m || s.y > vy0 + vh + m) spawn(s);
-      const a = Math.min(1, s.life, 3 - s.life) * 0.35;
-      if (a <= 0) continue;
-      ctx.globalAlpha = a;
+      const a = Math.min(1, s.life, 3 - s.life);
+      if (a <= 0 || terrainAt(game, s.x, s.y) === LAND) continue;
+      const half = s.len * size, bow = half * 0.32;
+      // the crest: bright, bowed downwind
+      ctx.globalAlpha = a * 0.6;
+      ctx.lineWidth = 1.9;
       ctx.beginPath();
-      ctx.moveTo(sx(s.x), sy(s.y));
-      ctx.lineTo(sx(s.x - ux * s.len), sy(s.y - uy * s.len));
+      ctx.moveTo(sx(s.x - px * half), sy(s.y - py * half));
+      ctx.quadraticCurveTo(sx(s.x + ux * bow), sy(s.y + uy * bow), sx(s.x + px * half), sy(s.y + py * half));
+      ctx.stroke();
+      // its back, fainter and a little upwind, so the wave has a front and a back
+      const bx = s.x - ux * bow * 0.9, by = s.y - uy * bow * 0.9, bh = half * 0.6;
+      ctx.globalAlpha = a * 0.3;
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(sx(bx - px * bh), sy(by - py * bh));
+      ctx.quadraticCurveTo(sx(bx + ux * bow * 0.6), sy(by + uy * bow * 0.6), sx(bx + px * bh), sy(by + py * bh));
       ctx.stroke();
     }
-    ctx.restore();
-  }
-
-  /**
-   * The no-go zone: a faint wedge ahead of the bow, 45° either side of the
-   * apparent wind, so you can see when you're about to sail into it.
-   * @param {import('./sim.js').Ship} ship @param {{x: number, y: number, heading: number}} pose
-   */
-  function drawNoGo(ship, pose) {
-    if (!game) return;
-    const w = windAt(game);
-    const ax = w.x - ship.vx, ay = w.y - ship.vy;
-    if (Math.hypot(ax, ay) < 0.1) return;
-    const from = Math.atan2(-ay, -ax);
-    const c = Math.cos(toRad(pose.heading)), s = Math.sin(toRad(pose.heading));
-    const L = ship.type.length / 2;
-    const x = sx(pose.x + c * L), y = sy(pose.y + s * L);
-    const r = 90 * scale;
-    ctx.save();
-    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, 'rgba(10,30,60,0.22)');
-    grad.addColorStop(1, 'rgba(10,30,60,0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.arc(x, y, r, from - Math.PI / 4, from + Math.PI / 4);
-    ctx.closePath();
-    ctx.fill();
     ctx.restore();
   }
 

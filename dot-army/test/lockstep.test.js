@@ -34,8 +34,7 @@ function twoDevices({ seed = 5, maxLag = 6, rngSeed = 99 } = {}) {
         while (inflight[i].length && inflight[i][0].at <= now) devices[i].ls.receive(inflight[i].shift().msg);
       }
       for (const d of devices) {
-        const t = d.ai.think(d.game);
-        if (t !== null) d.ls.setLocal(t);
+        for (const inp of d.ai.think(d.game)) d.ls.queue(inp);
         d.ls.pump();
         if (d.ls.ready()) d.ls.advance();
       }

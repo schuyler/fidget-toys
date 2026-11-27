@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, setTarget, placeDot, stateHash, productionRate, PROD_UNIT, BLUE, RED, NEUTRAL } from '../src/sim.js';
+import { createGame, step, setTarget, applyInput, placeDot, stateHash, productionRate, PROD_UNIT, BLUE, RED, NEUTRAL } from '../src/sim.js';
 import { createGrid, axialToIndex, cellCenter, pixelToCell, mirror, dirToward } from '../src/hex.js';
 import { createAI } from '../src/ai.js';
 
@@ -278,7 +278,7 @@ test('same seed and same inputs give the same game', () => {
     const game = createGame({ seed: 42, terrain: 'rocks' });
     const ais = [createAI(0, 5), createAI(1, 9)];
     for (let i = 0; i < 400 && game.winner < 0; i++) {
-      for (const ai of ais) { const t = ai.think(game); if (t !== null) setTarget(game, ai.player, t); }
+      for (const ai of ais) for (const inp of ai.think(game)) applyInput(game, ai.player, inp);
       step(game);
     }
     return stateHash(game);
@@ -297,17 +297,18 @@ test('generated layouts are point-symmetric', () => {
   }
 });
 
-test('the CPU drags its marker at a limited speed instead of jumping', () => {
+test('the CPU drags its markers at a limited speed instead of jumping', () => {
   const game = createGame({ seed: 11 });
   const ai = createAI(RED, 3, { dragSpeed: 0.5 });
-  let prev = game.targets[RED], moved = 0;
+  let moved = 0;
   for (let i = 0; i < 200; i++) {
-    const t = ai.think(game);
-    if (t !== null) {
-      assert.ok(game.grid.nbr.subarray(prev * 6, prev * 6 + 6).includes(t), 'one cell per move');
-      setTarget(game, RED, t);
-      prev = t;
-      moved++;
+    for (const inp of ai.think(game)) {
+      if (inp.op === 'move') {
+        const prev = game.targets[RED][inp.index]; // per target index: the CPU may hold up to 3
+        assert.ok(game.grid.nbr.subarray(prev * 6, prev * 6 + 6).includes(inp.cell), 'one cell per move');
+        moved++;
+      }
+      assert.equal(applyInput(game, RED, inp), true);
     }
     step(game);
   }
@@ -336,7 +337,7 @@ test('stats track kills, losses, spawning and spending', () => {
   const ais = [createAI(0, 1), createAI(1, 2)];
   let kills = 0, spawned = 0, consumed = 0;
   for (let i = 0; i < 600 && game.winner < 0; i++) {
-    for (const ai of ais) { const t = ai.think(game); if (t !== null) setTarget(game, ai.player, t); }
+    for (const ai of ais) for (const inp of ai.think(game)) applyInput(game, ai.player, inp);
     const ev = step(game);
     kills += ev.kills.length; spawned += ev.spawned; consumed += ev.consumed;
   }

@@ -94,7 +94,9 @@ the headless tool. Settings the player sees are the five presets in
 - Work happens on a `claude/...` branch. The owner approves each change, then
   it is **squash-merged** to `main` via a pull request.
 - Dev branches are throwaway: each is used for one PR and never reused after
-  its squash merge. Force-pushing a `claude/...` branch is fine.
+  its squash merge. Force-pushing a `claude/...` branch is fine, but never in
+  a way that destroys remote commits you don't have locally (use
+  `--force-with-lease`, or fetch and merge first).
 - The network relay lives in `multiplayer/` (see its README): a Node server
   for the owner's home host, or a Cloudflare Worker the owner deploys with
   `npx wrangler@4.158.0 deploy` from `multiplayer/`. Games stay dependency-free in the browser;

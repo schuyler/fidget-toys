@@ -21,21 +21,35 @@ This document is the design, what exists, and the plan for the rest.
 The simulation is deterministic: same seed plus same inputs gives the same
 game, bit for bit (integers and a seeded RNG only; see `CLAUDE.md`). So each
 device runs the whole game itself, and the only thing sent is each player's
-target cell, stamped with the tick it takes effect on.
+target inputs (add, remove or move a target), stamped with the tick they take
+effect on.
 
 `src/lockstep.js`:
 
-- **Input delay.** Your marker move is scheduled `delay` ticks ahead
-  (default 3, which is 375 ms at the Average speed of 8 ticks/s). Your marker
-  still follows your finger instantly; only your dots react a moment later.
+- **Inputs.** The same `Input` objects the sim takes (`applyInput` in
+  `sim.js`), which the CPU also produces:
+  `{op:'move', index, cell}`, `{op:'add', cell}` or `{op:'remove', index}`.
+  Each device keeps its own copy of its player's targets and validates an
+  input against it before sending, so the other device never gets one it
+  would refuse. It checks anyway: the sim rejects an add at the cap, a
+  remove of the last target, or a bad index or cell.
+- **Input delay.** Your inputs are scheduled `delay` ticks ahead (default 3,
+  which is 375 ms at the Average speed of 8 ticks/s). Your markers still
+  follow your finger instantly; only your dots react a moment later. While a
+  tick's inputs wait to be sent, a move replaces an earlier move of the same
+  target if no add or remove came between them, so a long drag before the
+  first send goes out as one move.
 - **No guessing.** A device advances to tick T only once it has both players'
   inputs for T. If the other device goes quiet, this one stalls and the UI
-  shows "WAITING" after 600 ms.
+  shows "WAITING" after 600 ms. Taps and drags are ignored while WAITING is
+  showing, so a long stall can't pile up a message bigger than the relay's
+  4096-byte cap (which would disconnect you).
 - **Desync check.** Every 8 ticks each side sends `stateHash(game)`; a
   mismatch stops the game with "OUT OF SYNC". So far it has never fired
   outside the test that corrupts state on purpose.
-- **Input log.** Every applied input is kept as `[tick, player, cell]`. That
-  plus the seed replays the whole game, which is how reconnection will work.
+- **Input log.** Every input the sim accepted is kept as
+  `[tick, player, Input]`. That plus the seed replays the whole game, which is
+  how reconnection will work.
 
 Bandwidth is tiny: one small JSON message per player per tick, plus a hash
 message every 8 ticks.
@@ -48,21 +62,23 @@ so messages from a finished game are ignored after a rematch.
 | Message | From | Meaning |
 |---|---|---|
 | `{k:'hello', v}` | guest | Join request; `v` is `PROTOCOL` from `net.js`. Repeated every 500 ms until answered |
-| `{k:'start', g, v, seed, width, height, tickRate, neutralSpawns, terrain}` | host | Deal game `g`. Also used for rematches |
+| `{k:'start', g, v, seed, width, height, tickRate, neutralSpawns, extraSpawnRate, maxTargets, terrain}` | host | Deal game `g`. Also used for rematches. The guest plays with exactly these parameters, including the host's Spawns coefficient and Targets cap |
 | `{k:'bye', why:'version'}` | host | Protocol mismatch: reload both devices |
-| `{k:'in', g, t, c}` | both | My target for tick `t`: cell index, or `-1` for "no change" |
+| `{k:'in', g, t, i}` | both | My inputs for tick `t`: an `Input[]`, applied in order; `[]` means no change |
 | `{k:'h', g, t, v}` | both | My state hash after tick `t` |
 
 Bump `PROTOCOL` in `net.js` whenever the simulation or messages change, so a
-cached old client can't play a new one and silently desync.
+cached old client can't play a new one and silently desync. It's 3 now: 2 was
+the production-pool rule change, 3 is multiple targets (the `in` message and
+the new `start` fields).
 
 ### What each player sees
 
 The renderer has a per-player view (`renderer.setView`). In a network game
 the guest's board is drawn rotated 180°, so red's home is at the bottom, with
 one HUD (own colour on the left) and one copy of each message. Touch input is
-mapped back through the same rotation, and any tap anywhere moves your own
-marker.
+mapped back through the same rotation, and every gesture acts on your own
+targets only. You never see the other player's markers, only their dots.
 
 ## Phase 1: done
 
@@ -179,7 +195,7 @@ then gets a custom domain in `wrangler.toml`
 - **Snowballing.** In CPU-vs-CPU games, the first side to lead by 2+ spawns
   lost 30% of the time, so not severe. Watch human games; the first lever to
   try is a home-spawn advantage (faster regen or higher meter at homes).
-- **The "drag me" hint overlaps each home spawn** at game start (cosmetic).
+- **The start hint overlaps your home spawn** at game start (cosmetic).
 - **iOS Safari audio** may need the first `touchend` rather than
   `pointerdown` to unlock. Untested.
 - **Dense obstacles:** before the elimination rule, 1 in 12 CPU games on

@@ -3,6 +3,8 @@
 Small browser games, one per directory. No build step: plain ES modules,
 served as static files. The first toy is `dot-army/`; read its `RULES.md`
 before touching game logic, and `NETWORK.md` for online play.
+`coreward-bound/` (turn-based, vs the CPU) and `star-troopers/` (sim only,
+no UI yet) follow the same rules below; each has its own `RULES.md`.
 
 ## Running and checking
 
@@ -12,6 +14,7 @@ npm install                       # once: the relay's one dependency (ws)
 npm test                          # node:test
 npm run typecheck                 # tsc --checkJs on files marked // @ts-check
 node dot-army/tools/headless.js 20 [key=value ...]   # CPU-vs-CPU balance runs
+node coreward-bound/tools/headless.js 40 [key=value ...]
 ```
 
 Browser checks use the preinstalled Playwright (`require('playwright')`).
@@ -20,6 +23,7 @@ Browser checks need the static server on port 8765:
 (two tabs, `?relay=bc`), `dot-army/tools/e2e-online.cjs` (lobby, leaving,
 errors) and `multiplayer/tools/e2e-relay.cjs` (a game through a relay). The
 last two also need a relay: `node multiplayer/server.js`.
+`coreward-bound/tools/e2e.cjs` plays Coreward Bound turns and a whole game.
 
 ## Rules for dot-army code
 
@@ -33,7 +37,11 @@ last two also need a relay: `node multiplayer/server.js`.
   never touch game state directly.
 - `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `lockstep.js`,
   `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`, `lobby.js`, `netpanel.js`.
-  Keep them type-clean.
+  Keep them type-clean. In `coreward-bound/` and `star-troopers/`,
+  `sim.js`, `hex.js`, `rng.js` and `ai.js` are checked too.
+- Coreward Bound: a rule change updates `src/sim.js`, `test/sim.test.js`,
+  `RULES.md` and the How to play card in its `index.html`, then a headless
+  run. Its player settings are `CHOICES` in `main.js` (CPU, Galaxy).
 - A rule change means updating, together: `sim.js`, a test in
   `test/sim.test.js`, `RULES.md`, and the How to play card in `index.html`.
   Then run the headless balance tool to check games still finish.

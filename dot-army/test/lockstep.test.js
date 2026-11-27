@@ -20,7 +20,7 @@ function twoDevices({ seed = 5, maxLag = 6, rngSeed = 99 } = {}) {
     const ls = createLockstep(game, p, (msg) => {
       const q = inflight[1 - p];
       const last = q.length ? q[q.length - 1].at : now;
-      q.push({ at: Math.max(last, now + 1 + net.int(maxLag)), msg }); // in order, like a WebSocket
+      q.push({ at: Math.max(last, now + 1 + net.int(maxLag)), msg: JSON.parse(JSON.stringify(msg)) }); // in order, like a WebSocket, and over JSON
     });
     return { p, game, ai, ls };
   });

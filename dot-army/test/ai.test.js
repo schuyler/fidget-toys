@@ -15,6 +15,7 @@ function play({ seed, maxTargets, dragSpeed = 2.2, ticks = 1500 }) {
   const moved = [0, 0];
   const overBudget = [];
   const notOneCell = [];
+  const movedIdx = [new Set(), new Set()];
   let n = 0;
   for (; n < ticks && game.winner < 0; n++) {
     for (const ai of ais) {
@@ -23,6 +24,7 @@ function play({ seed, maxTargets, dragSpeed = 2.2, ticks = 1500 }) {
           const prev = game.targets[ai.player][inp.index];
           if (!game.grid.nbr.subarray(prev * 6, prev * 6 + 6).includes(inp.cell)) notOneCell.push([game.tick, ai.player, inp]);
           moved[ai.player]++;
+          movedIdx[ai.player].add(inp.index);
         }
         if (applyInput(game, ai.player, inp) !== true) rejected.push([game.tick, ai.player, inp]);
       }
@@ -31,7 +33,7 @@ function play({ seed, maxTargets, dragSpeed = 2.2, ticks = 1500 }) {
     }
     step(game);
   }
-  return { maxHeld, rejected, overBudget, notOneCell, ticks: n };
+  return { maxHeld, rejected, overBudget, notOneCell, movedIdx, ticks: n };
 }
 
 test('C7: with maxTargets 3 the CPU holds two or more targets at some point', () => {
@@ -50,10 +52,13 @@ test('C7: with maxTargets 1 the CPU never holds more than one target', () => {
 });
 
 test('C7: cells moved across all targets stay within dragSpeed times ticks', () => {
-  for (const seed of [1, 2]) {
-    const r = play({ seed, maxTargets: 3, dragSpeed: 1.1, ticks: 800 });
+  const runs = [1, 2].map((seed) => play({ seed, maxTargets: 3, dragSpeed: 1.1, ticks: 800 }));
+  for (const r of runs) {
     assert.deepEqual(r.overBudget, []);
     assert.deepEqual(r.notOneCell, [], 'each move is one cell');
     assert.deepEqual(r.rejected, []);
   }
+  // the budget is shared: it only means something if the CPUs really held and moved several targets
+  assert.ok(Math.max(...runs.flatMap((r) => r.maxHeld)) >= 2, 'held 2+ targets in this run');
+  assert.ok(runs.some((r) => r.movedIdx.some((s) => s.size >= 2)), 'moved two different target indices');
 });

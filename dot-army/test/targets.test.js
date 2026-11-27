@@ -43,22 +43,44 @@ test('C1: a player never exceeds maxTargets, and the last target cannot be remov
   assert.deepEqual(list, [6]);
 });
 
-test('C2: with two targets, each dot heads to the nearer one by path', () => {
-  const game = board({ spawns: [] }, { maxTargets: 3 });
+test('C2: with two targets and a wall, each dot heads to the nearer one by path, not by straight line', () => {
+  const g0 = board();
+  const o = at(g0, 0, 0);
+  let rmax = -Infinity;
+  for (let i = 0; i < g0.grid.N; i++) rmax = Math.max(rmax, g0.grid.r[i]);
+  // a wall along one axial column with a gap only at the bottom edge
+  const walls = [];
+  for (let i = 0; i < g0.grid.N; i++) if (g0.grid.q[i] === g0.grid.q[o] - 4 && g0.grid.r[i] < rmax - 1) walls.push(i);
+  const game = board({ spawns: [], walls }, { maxTargets: 3 });
   const left = at(game, -8, 0), right = at(game, 8, 0);
   setTarget(game, BLUE, left);
   assert.equal(applyInput(game, BLUE, { op: 'add', cell: right }), true);
-  const a = at(game, -4, 0), b = at(game, 4, 0);
+  const pathDist = (from) => {
+    const d = new Map([[from, 0]]);
+    const q = [from];
+    for (let h = 0; h < q.length; h++) {
+      for (let k = 0; k < 6; k++) {
+        const n = nb(game, q[h], k);
+        if (n >= 0 && game.terrain[n] === 0 && !d.has(n)) { d.set(n, d.get(q[h]) + 1); q.push(n); }
+      }
+    }
+    return d;
+  };
+  const toLeft = pathDist(left), toRight = pathDist(right);
+  const a = at(game, -3, 0); // behind the wall from the left target, straight line says left
+  const b = at(game, -6, 0); // on the left target's side of the wall
+  assert.ok(hexDist(game.grid, a, left) < hexDist(game.grid, a, right), 'premise: straight line favours left');
+  assert.ok(toRight.get(a) < toLeft.get(a), 'premise: path favours right');
   placeDot(game, BLUE, a, E);
   placeDot(game, BLUE, b, E);
   const dotA = game.occ[a], dotB = game.occ[b];
   assert.ok(dotA && dotB);
   step(game);
-  assert.equal(game.near[BLUE][a], 0, 'left-side cell drains to target 0');
-  assert.equal(game.near[BLUE][b], 1, 'right-side cell drains to target 1');
-  for (let i = 0; i < 3; i++) step(game);
-  assert.ok(hexDist(game.grid, dotA.cell, left) < hexDist(game.grid, a, left), 'left dot moved toward the left target');
-  assert.ok(hexDist(game.grid, dotB.cell, right) < hexDist(game.grid, b, right), 'right dot moved toward the right target');
+  assert.equal(game.near[BLUE][a], 1, 'path-nearest is the right target');
+  assert.equal(game.near[BLUE][b], 0);
+  for (let i = 0; i < 9; i++) step(game);
+  assert.ok(toRight.get(dotA.cell) <= toRight.get(a) - 5, 'dot A made real progress along the path to the right target');
+  assert.ok(toLeft.get(dotB.cell) < toLeft.get(b), 'dot B moved toward the left target');
 });
 
 test('C5: a spawn targeted by a non-first target is attacked and drained as with one target', () => {
@@ -120,4 +142,21 @@ test('C8: same seed and same inputs including adds and removes give the same sta
   const a = run(), b = run();
   assert.ok(a.accepted.add > 0 && a.accepted.remove > 0 && a.accepted.move > 0, JSON.stringify(a.accepted));
   assert.equal(a.hash, b.hash);
+});
+
+test('C5: a spawn reinforced through a non-first target gains meter as with a single target', () => {
+  // Own spawns are never reached by the "settled dot" path, so only targetedSpawns can make this work.
+  const game = board({ spawns: [{ center: at(game0(), 0, 0), owner: BLUE, meter: 1 }, { center: at(game0(), -7, 0), owner: BLUE }, { center: at(game0(), 7, 0), owner: RED }] }, { spawnInterval: 1000, meterRegen: 0 });
+  const s = game.spawns[0];
+  setTarget(game, BLUE, at(game, -9, -5));
+  setTarget(game, RED, at(game, -9, -5));
+  assert.equal(applyInput(game, BLUE, { op: 'add', cell: s.center }), true);
+  assert.equal(game.targets[BLUE][1], s.center);
+  const [e, d] = (() => {
+    for (const x of s.exits) for (let k = 0; k < 6; k++) if (game.spawnOf[nb(game, x, k)] === s.id) return [x, k];
+  })();
+  placeDot(game, BLUE, e, d);
+  step(game);
+  assert.equal(s.meter, 2);
+  assert.equal(game.dotCount[BLUE], 0, 'the reinforcer is used up');
 });

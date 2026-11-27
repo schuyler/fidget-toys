@@ -10,6 +10,8 @@ function twoDevices({ seed = 5, maxLag = 6, rngSeed = 99, cpu = true } = {}) {
   const net = createRng(rngSeed);
   const inflight = [[], []];
   const sent = [[], []];
+  /** queued[p][op]: inputs device p's CPU queued */
+  const queued = [{ add: 0, remove: 0, move: 0 }, { add: 0, remove: 0, move: 0 }];
   let now = 0;
   const devices = [0, 1].map((p) => {
     const game = createGame({ seed, width: 40, height: 26, maxTargets: 3 });
@@ -18,19 +20,19 @@ function twoDevices({ seed = 5, maxLag = 6, rngSeed = 99, cpu = true } = {}) {
       sent[p].push(msg);
       const q = inflight[1 - p];
       const last = q.length ? q[q.length - 1].at : now;
-      q.push({ at: Math.max(last, now + 1 + net.int(maxLag)), msg });
+      q.push({ at: Math.max(last, now + 1 + net.int(maxLag)), msg: JSON.parse(JSON.stringify(msg)) }); // survives JSON, no aliasing
     });
     return { p, game, ai, ls };
   });
   return {
-    devices, sent,
-    frame() {
+    devices, sent, queued,
+    frame({ think = true } = {}) {
       now++;
       for (let i = 0; i < 2; i++) {
         while (inflight[i].length && inflight[i][0].at <= now) devices[i].ls.receive(inflight[i].shift().msg);
       }
       for (const d of devices) {
-        if (d.ai) for (const inp of d.ai.think(d.game)) d.ls.queue(inp);
+        if (d.ai && think) for (const inp of d.ai.think(d.game)) { queued[d.p][inp.op]++; d.ls.queue(inp); }
         d.ls.pump();
         if (d.ls.ready()) d.ls.advance();
       }
@@ -41,18 +43,28 @@ function twoDevices({ seed = 5, maxLag = 6, rngSeed = 99, cpu = true } = {}) {
 test('C12: CPUs adding, removing and moving targets on both devices stay in sync', () => {
   const net = twoDevices();
   const [a, b] = net.devices;
-  for (let i = 0; i < 4000 && (a.game.winner < 0 || b.game.winner < 0); i++) net.frame();
-  for (let i = 0; i < 50; i++) net.frame();
+  for (let i = 0; i < 1500; i++) net.frame();
+  // stop the CPUs and let everything in flight arrive and apply
+  for (let i = 0; i < 80; i++) net.frame({ think: false });
   assert.equal(a.ls.desyncAt, -1);
   assert.equal(b.ls.desyncAt, -1);
-  const t = Math.min(a.game.tick, b.game.tick);
-  assert.ok(t > 300, `played ${t} ticks`);
-  if (a.game.tick === b.game.tick) assert.equal(stateHash(a.game), stateHash(b.game));
-  assert.deepEqual(a.ls.log.filter(([tick]) => tick <= t), b.ls.log.filter(([tick]) => tick <= t));
+  assert.ok(Math.min(a.game.tick, b.game.tick) > 300, `played ${a.game.tick} ticks`);
+  assert.equal(a.game.tick, b.game.tick, 'devices caught up');
+  assert.equal(stateHash(a.game), stateHash(b.game));
+  assert.deepEqual(a.game.targets, b.game.targets);
+  assert.deepEqual(a.ls.log, b.ls.log);
   for (const p of [0, 1]) {
     for (const op of ['add', 'remove', 'move']) {
       assert.ok(a.ls.log.some(([, player, inp]) => player === p && inp.op === op), `player ${p} logged a ${op}`);
     }
+    // add and remove are never merged by queue(), so every one the CPU queued must be applied and logged.
+    // (Moves of one index may be merged within a tick, so they are only bounded above.)
+    for (const op of ['add', 'remove']) {
+      const logged = a.ls.log.filter(([, player, inp]) => player === p && inp.op === op).length;
+      assert.equal(logged, net.queued[p][op], `player ${p}: every queued ${op} was applied`);
+    }
+    const moves = a.ls.log.filter(([, player, inp]) => player === p && inp.op === 'move').length;
+    assert.ok(moves > 0 && moves <= net.queued[p].move);
   }
 });
 

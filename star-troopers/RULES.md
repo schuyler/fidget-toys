@@ -31,11 +31,18 @@ what it borrows and what it changes.
   | **Ruins** | 2 | 2 | blocks |
   | **High ground** | 2 to climb onto, 1 along or off | 1 | clear; see below |
   | **Rock** | impassable | — | blocks |
+  | **Building** | 2 | 3 | blocks, even from high ground |
 
-- Some cells are **victory hexes** (see Scenarios).
-- In Meeting games the map is point-symmetric (rotated 180° about the
-  centre), so neither side has an advantage. Assault maps have a
-  defender's half and an attacker's half.
+- Some cells are **victory hexes** (see Scenarios). Every victory hex
+  is a building: a depot, a relay station, something worth holding.
+  Holding an objective means holding the best cover on the map, as
+  urban terrain was the strongest cover in the original.
+- Maps are mirror images top to bottom, reflected across the centre
+  row, so in Meeting games neither side has an advantage. (Not rotated
+  180°: on this grid a rotated map has no cell at its centre, so it
+  couldn't have three victory hexes on its centre line.) Assault maps
+  use the same mirrored terrain, but have a defender's half and an
+  attacker's half.
 - Each squad starts in a deployment zone along its own edge (the three
   rows nearest it). Troopers are placed automatically, mirrored where the
   map is. **(open: let the player place them)**
@@ -77,9 +84,10 @@ against each other. A standard squad is **4 troopers**.
 
 ## Orders
 
-At the start of each turn both sides plot orders for every trooper, in
-secret. The CPU plots without seeing yours. A trooper's usable points are
-split between four tasks, and points left unspent are wasted:
+Each game-turn has two **stages** (see A turn). At the start of each
+stage both sides plot orders for every trooper, in secret. The CPU plots
+without seeing yours. A trooper's points for the stage are split between
+four tasks:
 
 - **Move:** plot a path, paying each cell's move cost.
 - **Fire:** pick one enemy in line of sight and put any number of points
@@ -88,24 +96,37 @@ split between four tasks, and points left unspent are wasted:
   make every shot at this trooper harder this turn.
 - **Overwatch:** points held back to shoot the first enemy that shows
   itself during movement (see A turn).
+- **Launch:** at least 3 points to fire a guided bomb at a cell (see
+  Launched weapons).
 
-A trooper can do all four in one turn, as long as the points add up.
-**(open: a cap on points per shot, like the original's limit of 6
-points per stage of a turn)**
+A trooper can do all five in one stage, as long as the points add up.
+
+- In the first stage a trooper can spend up to **6 points**.
+- In the second it can spend whatever it didn't spend in the first,
+  again up to 6.
+- Points left unspent in the second stage are wasted.
+
+So a Vell (pool 6) that goes all-out in the first stage has nothing left
+to dodge or move with in the second, while an Orrin (pool 12) can spend 6
+in each. This is the original's rule, and its designers' notes say it's
+there for exactly this reason: the Rame "have the advantage of being able
+to concentrate on attacking with a maximum strength of twenty-four in a
+given Stage, and the disadvantage of having to stretch six Task Points
+to last an entire Game-turn."
 
 ## Shooting
 
 ```
 attack  = fire points × Aim
 defence = cover            (of the cell the target is in when shot)
-        + floor(range / 3)
+        + floor(range / 2)
         + floor(cells the target plotted to move / 2)
         + dodge points × Aim
         + 1 if the target is dug in (see Assault)
 ```
 
 - If `attack < defence`, the shot misses.
-- Otherwise it deals `floor((attack − defence) / 2)` shock.
+- Otherwise it deals `floor((attack − defence) / 3)` shock.
 - **Noise (setting, off by default):** when it's on, a shot that didn't
   miss also adds one of −1, 0, 0 or +1 to its shock, chosen at random
   (minimum 0). The average stays the same. Near-threshold shots
@@ -114,10 +135,10 @@ defence = cover            (of the cell the target is in when shot)
 - There's no combined fire: every shot is worked out on its own, and
   their shock adds up.
 
-For example, a fresh Compact trooper puts 5 points into a shot (attack
-10) at another standing in the open 4 cells away (range 1). With no
-dodge, that's `floor(9 / 2) = 4` shock. If the target had put 3 points
-into dodging (+6), it would have taken `floor(3 / 2) = 1`.
+For example, a Compact trooper puts 6 points into a shot (attack 12)
+at another standing in the open 4 cells away (range 2). With no dodge,
+that's `floor(10 / 3) = 3` shock. If the target had put 2 points into
+dodging (+4), it would have taken `floor(6 / 3) = 2`.
 
 ### Line of sight
 
@@ -129,6 +150,93 @@ into dodging (+6), it would have taken `floor(3 / 2) = 1`.
   be seen over them.
 - Troopers never block line of sight. **(open)**
 
+### Command (setting, off by default)
+
+After the original's Command Communication (rule 16.0). With it on:
+
+- About 1 in 5 Compact troopers are leaders, and 3 in 7 Orrin, after the
+  original's unit chart. The Vell have no leaders: like the Rame, a
+  joint mind, they're always in command.
+- A trooper is **in command** if it's a leader, or if the terrain value
+  of its cell plus the range rating to the nearest friendly leader (1
+  per 5 cells) is no more than its current points. With no leader left,
+  nobody else is.
+- At the start of each stage, troopers in command shoot and launch
+  first. The shock they cause lands before everyone else's turn: a
+  trooper downed by it does nothing, and a hurt one loses those points
+  from its shot first, then from its launch (a launch cut below 3 points
+  doesn't happen). The original lets the player choose which tasks lose
+  points; this fixes the order.
+
+In CPU-vs-CPU games it's active (Compact troopers, with one leader to a
+squad of six, are out of command about a third of the time, mostly
+after losing their leader) but changes win rates by only a point or two.
+Most Compact damage comes from bombs, and losses before launching rarely
+cancel one.
+
+### Swarms (setting, off by default)
+
+After the Rame's Killer Swarm (rule 23.1). With it on:
+
+- Up to **three Vell may share a cell**. Nobody else shares. Vell deploy
+  in stacks of three, after the original's Rame swarm.
+- **Pooled dodge:** every Vell in a cell counts the dodge of all of them
+  against direct fire.
+- **Pooled fire:** when exactly three share a cell and all put the same
+  points into a shot at the same target, it's one attack at three times
+  the strength (List's "maximum effort" was 72).
+- **Fire hits the whole cell:** a direct-fire shot is resolved, separately,
+  against every trooper in the target's cell (rule 9.35), and a blast hits
+  everyone in each cell it reaches. That's the price of swarming.
+  Overwatch still picks one target.
+- In the interface a swarm will be one counter with one plot and a split
+  action; the CPU already plays each swarm as one piece.
+
+Measured so far, swarms make the Vell worse, not better: bombs hit all
+three members, and the CPU doesn't yet play swarms well (it rarely dodges
+enough to make bombs scatter, and never splits). In the original the
+Rame swarms also flew, with cheap movement and full countermeasures in
+the air, which we don't model.
+
+### Launched weapons
+
+Every trooper carries guided bombs, after the original's Guided Positron
+Bomb. The original's tactics advice was to "hole up in mountainous or
+wooded terrain to avoid enemy DF and spend all TPs on LW and CM": hide
+from direct fire, and lob bombs, which need no line of sight.
+
+- **Launching:** plot a target cell and at least 3 points. Bombs leave
+  alongside the fire phase, from where their launchers stand (a trooper
+  hit by fire in the same part of the stage still gets its launch off,
+  as in the original, where fire casualties take effect after the launch
+  segment), and go off after movement, so a target that moves away
+  escapes.
+- **Does it land where it was aimed?** Work out
+  `Aim × points − (range rating + countermeasures)`, where the range
+  rating is 1 per 5 cells (rounded up) and the countermeasures are the
+  dodge (points × Aim) of everyone, friend or enemy, within the blast
+  radius of the target cell. Zero or more and it lands. Below zero, roll
+  a die: at −1 it scatters on a 5 or 6, at −2 on a 4 or more, and so
+  on, down to 2 or more at −4 and worse. A bomb that scatters lands one
+  cell away in a random direction, or off the map. **(Stand-in: the
+  original's scatter table isn't available. This one agrees with the
+  rulebook's worked examples.)**
+- **The blast:** strength 30 in the cell where it goes off, 15 one cell
+  away, 5 two cells away. It only spreads into cells within 2 points of
+  movement at the original's terrain costs, so it reaches into open
+  ground and ruins next door but not into brush or buildings, and only
+  open ground two cells away.
+- **Damage:** divide the strength by the original's terrain value of
+  the trooper's cell (open 1, ruins 2, brush and high ground 3,
+  buildings 6) to get odds, count anything above 10 to 1 as 10 to 1,
+  and divide by 2.5, rounding down. A direct hit in the open deals 4; on
+  a building, 2. **(Stand-in for the original's results table, which
+  isn't available. It matches the rulebook's example, where 15 against
+  terrain 2 costs 3 points. The cap is an inference from the table's
+  banded columns, like "6-1 through 10-1".)**
+- Blasts hit everyone, friends included, and count as being hit, so no
+  recovery that stage.
+
 ### Preview
 
 When you plot a shot, the game shows what it would deal if the target
@@ -138,7 +246,9 @@ orders.
 
 ## A turn
 
-1. **Plot:** both sides plot orders, then commit.
+A game-turn is two stages, and each stage runs the whole sequence below.
+
+1. **Plot:** both sides plot orders for this stage, then commit.
 2. **Fire:** every shot is resolved from where everyone starts the turn,
    all at the same time. Shock is applied together afterwards, so a
    trooper that goes down this phase still fires. Defence uses the
@@ -150,20 +260,23 @@ orders.
      troopers, is blocked, and that trooper stops for the rest of the
      turn. Following right behind a moving friend is fine.
    - **Overwatch:** after each step, every trooper with overwatch
-     points that hasn't fired yet shoots the nearest enemy that ended
-     that step in its line of sight, within 6 cells. All overwatch in a
+     points that hasn't fired yet shoots the nearest enemy that moved
+     that step and ended it in its line of sight, within 6 cells.
+     Enemies standing still don't set it off. All overwatch in a
      step resolves together, at `overwatch points × Aim`, against the
      usual defence. Each trooper's overwatch fires once per turn.
    - **Pinned:** a trooper that takes shock from overwatch stops where
      it is.
    - A trooper that goes down stops and is removed at the end of the
      step.
-4. **Recovery:** every trooper that took no shock this turn removes
-   shock equal to its Recovery. A hurt trooper that gets into cover and
-   keeps its head down will get back into the fight; one that's still
-   being shot at won't.
+   - **Bombs go off:** each bomb checks whether it scatters, then
+     explodes. All blasts land together.
+4. **Recovery:** every trooper that took no shock this stage removes
+   shock equal to its Recovery. Since there are two stages, a trooper
+   that stays out of the line of fire recovers twice a game-turn: a
+   Compact trooper, at Recovery 3, can shake off 6 shock a turn.
 5. **Control:** victory hexes change hands (see below).
-6. **Win check.**
+6. **Win check.** The turn limit counts whole game-turns.
 
 ## Scenarios
 
@@ -243,15 +356,29 @@ In any scenario, a side with no troopers left loses at once.
 | Name | Default | Meaning |
 |---|---|---|
 | `squad` | 4 | Troopers in a standard squad |
-| `rangeStep` | 3 | Cells per +1 defence from range |
+| `rangeStep` | 2 | Cells per +1 defence from range |
 | `motionStep` | 2 | Plotted cells moved per +1 defence |
-| `damageDivisor` | 2 | Shock = margin ÷ this, rounded down |
-| `maxShot` | 0 | Most points in one shot (0 = no cap) |
+| `damageDivisor` | 3 | Shock = margin ÷ this, rounded down |
+| `stages` | 2 | Stages per game-turn (1 for a simpler, one-plot turn) |
+| `stageCap` | 6 | Most points a trooper spends in one stage |
+| `maxShot` | 0 | Tuning: most points in one shot (0 = no cap) |
 | `overwatchRange` | 6 | How far overwatch reaches |
+| `launched` | 1 | Launched weapons on (1) or off (0) |
+| `minLaunch` | 3 | Fewest points a launch takes |
+| `blastPer` | 2.5 | Stand-in: blast shock = odds ÷ this |
+| `blastOddsCap` | 10 | Stand-in: blast odds above this count as this |
 | `surplusPct` | 120 | Attacker's value as a percentage of the defender's |
 | `holdToWin` | 2 | Victory hexes the attacker needs in Assault |
 | `turnLimit` | 12 | Turns before a scenario is decided |
+| `swarm` | 0 | Vell swarms on (1) or off (0) |
+| `command` | 0 | Command Communication on (1) or off (0) |
+| `combat` | formula | Damage: `formula`, `dice` (the 1977 tables) or `mean` (their averages) |
+| `defence` | draft | `draft`, or `original` (terrain values, 1 per 10 cells of range, 1 per point moved) |
 | `noise` | 0 | 0 = off, 1 = ±1 on shots that land |
+| `coverScale` | 1 | Tuning: multiplies every cover value |
+| `recoverWhenHit` | 0 | Tuning: 1 = troopers recover even when hit |
+| `hexTerrain` | building | Tuning: what victory hexes stand on (`building`, `ruins`, `brush`, `open`) |
+| `dodgeAimCap` | 0 | Tuning: dodge counts at most this much per point (0 = full Aim) |
 | `seed` | random | Same seed and same orders = same game |
 
 ## Later
@@ -303,15 +430,107 @@ None of this is in the first version, but it's the plan.
   else. With simultaneous orders this pays off twice: each side only
   ever needs to send its orders, which makes lockstep network play
   simple, and the headless tuner can run thousands of turns.
+- **Tuning.** `node star-troopers/tools/headless.js 100 key=value ...`
+  plays CPU-vs-CPU games without a browser and prints win rates, game
+  length, how often a single shot takes down an unhurt trooper, how
+  often shots can't beat defence, and how often games stall. A comma
+  list sweeps a parameter, so `faction0=compact,orrin,vell
+  faction1=compact,orrin,vell` plays every pairing. The CPU is crude,
+  so these numbers find broken settings, not good ones.
 - **Tune the formulas, not the factions.** The faction numbers are the
   original's and stay put. What the original turned into damage with
   dice and a results table, this game does with a fixed formula, and
-  that changes the balance. Run the Vell through it: 6 points of fire
-  at Aim 4 is attack 24. Against a Compact trooper in the open 3 cells
-  away (defence 1), that's 11 shock, dead from full. A Compact trooper
-  putting all 9 points into a shot (attack 18) at a Vell that isn't
-  dodging deals 8, more than the Vell's whole pool. If everything kills
-  everything, the fix is in `damageDivisor`, `rangeStep` and `maxShot`.
+  that changes the balance. The first draft made everything kill
+  everything: a Vell's 6 points at Aim 4 took down a fresh Compact
+  trooper in one shot, and games were over by turn 5. Damage divided by
+  3 rather than 2, and range counting every 2 cells rather than 3,
+  slowed that down.
+- **Where balance stands (open).** Measured in CPU-vs-CPU games, 200 per
+  pairing, half from each side of the map, so each figure is good to
+  about ±7 points.
+  - Mirror matches are fair, which is the check that the simulation and
+    the CPU don't favour a side.
+  - With two-stage turns (the current default), the Vell no longer beat
+    everyone: the Orrin beat them about 70% of the time. That's what
+    the original's designers built two stages for.
+  - The Compact lose to everyone: about 80–95% against the Orrin and
+    about 92% against the Vell. They deal almost no damage. An Orrin
+    spends 6 + 6 points a game-turn and a Compact 6 + 3, with the same
+    Aim, so in direct fire alone the Compact are simply weaker. In the
+    original their answer was recovery (up to 6 shock a game-turn while
+    unhit) and launched weapons, whose damage doesn't depend on
+    Efficiency: a blast hits at a fixed strength (30 in its hex, 15 and
+    5 further out) divided by the target's terrain value, and
+    Efficiency only decides whether a guided weapon lands where it was
+    aimed. List's tactics article says "the bulk of the damage to the
+    enemy will be done by Launched Weapons."
+  - With launched weapons in (the current default), the Compact finally
+    deal real damage: about 1 shock per trooper-turn, up from 0.04, most
+    of it from bombs. Games are faster (5–6 turns) and mostly end by
+    fighting, not at the turn limit. But because a bomb's damage ignores
+    Aim, the pool becomes the deciding number: it's both how much a
+    trooper can take and how many bombs it can throw. The Orrin (pool
+    12) now beat everyone: about 85–93% against the Compact and 98%+
+    against the Vell. Their weakness, Recovery 1, only tells in long
+    fights, and games are short.
+  - So each piece of the original added so far has shifted the
+    imbalance to whichever number the rest of the system rewards. The
+    original balanced its scenarios with force composition as much as
+    rules, so matching forces by measured strength, rather than equal
+    headcounts, is the obvious next lever. It leaves the factions
+    untouched.
+  - **Measured force matching** (`tools/forces.js`, every combination of
+    2–8 troopers a side, then the best candidates at 300 games a
+    pairing): one Orrin is worth about 1.5–1.6 Compact, and one Compact
+    about 1.3 Vell. The three ratios agree with each other, which is a
+    sign they're measuring something real. The most even whole-number
+    table is **4 Orrin = 6 Compact = 8 Vell**: Orrin 52% against
+    Compact, Vell 44% against Compact, Orrin 41% against Vell, games
+    about 6–7 turns, mostly ending by fighting. The worth of a trooper
+    isn't quite constant with squad size (the Vell fall off in bigger
+    fights), so the table only holds near these sizes. Measured with
+    the CPU and the stand-in bomb tables, so it needs human play to
+    confirm. In List's points, those forces are 84, 84 and 84 if an
+    Orrin is worth 21 and a Vell 10.5, against his 15 and 14. **(open:
+    adopt as the Meeting forces)**
+  - **With the 1977 tables** (`combat=dice defence=original`; the charts
+    turned up after the measurements above): troopers spend about
+    two-thirds of their time in cover, and bombs and direct fire share
+    the damage, much as the original describes. Force matching changes:
+    - One Orrin is worth about 1.4 Compact, which is the original's own
+      ratio: its unit chart prices a ten-soldier Human squad the same as
+      a seven-soldier L'Chal Dah squad. 7 Orrin against 10 Compact
+      comes out 39–61.
+    - Vell and Compact are roughly one for one, the Vell slightly
+      ahead. In the original, six Rame cost the same as ten Humans; the
+      difference is everything the Rame had that the Vell don't yet
+      (Killer Swarm, always in command so firing first, and
+      countermeasures that work fully in the air).
+    - The three don't sit on one scale: the Orrin beat the Vell by more
+      than the other two ratios predict, so no whole-number table is
+      even all round. The best found are 6 Orrin / 8 Compact / 8 Vell
+      (53, 70 and 55: Orrin over Compact, Vell over Compact, Orrin over
+      Vell) and 4 / 6 / 6 (38, 68, 54), over 300 games a pairing.
+    - **(open: adopt the 1977 tables as the default, and which forces)**
+  - **The CPU is now a big factor.** Teaching it that dodging and leaving
+    the blast radius protect against bombs made it clearly better as the
+    Compact and the Orrin (beating the old CPU 148–52 and 133–65 in
+    mirror matches) but no better as the Vell (94–100). Vell against
+    Compact at 6 a side dropped from 67% to 34% as a result. Every
+    balance figure here is partly a measure of how well the CPU plays
+    each faction, so CPU changes need checking against the old CPU
+    before their balance effects are trusted.
+  - Most games still run to the turn limit and are settled by hexes
+    held.
+  - History, briefly: one-stage turns with a 6-point shot cap left the
+    Vell untouchable in cover, since nothing limited dodging; capping
+    dodge at ×2 or ×3 per point just moved the imbalance around; a
+    per-turn spending cap flattened the factions; the original's large
+    terrain values (urban 6) without launched weapons turned the game
+    into a standoff the Orrin won on staying power. The CPU once
+    ignored cover because victory hexes sat in open ground; they're
+    buildings now, and troopers split into one taker per hex and
+    supporters.
 - **Why noise starts off.** Not knowing the other side's orders is
   already plenty of uncertainty, and the interesting kind. The worry
   with pure arithmetic is that defence can become absolute: two squads
@@ -353,12 +572,16 @@ None of this is in the first version, but it's the plan.
 - **What changed from the 1977 game:**
   - The computer does the bookkeeping. Tracking points and writing
     orders was what reviewers complained about most.
-  - Four tasks instead of the original's longer list (grounding,
-    altitude, launched weapons, search and so on).
-  - Damage is half the margin by which attack beats defence, with
-    optional ±1 noise, instead of dice and a results table.
-  - Single-stage turns, with no per-stage spending limit (yet).
-  - Recovery only happens in a turn the trooper wasn't hit.
+  - Five tasks instead of the original's longer list (grounding,
+    altitude, free-flight missiles, homing missiles, search and so on).
+    The one launched weapon is the guided bomb, and its scatter and
+    damage tables are stand-ins.
+  - Damage is a third of the margin by which attack beats defence,
+    with optional ±1 noise, instead of dice and a results table.
+  - Two stages per game-turn with 6 points per stage, as in the
+    original's Standard Game, but no Command Communication (in the
+    original, troopers in contact with a leader fire first in each
+    stage).
   - Shots happen before anyone moves, from where everyone starts.
     Overwatch is the only fire during movement, and a hit pins.
   - No heavy-weapons troopers, androids or support platforms.

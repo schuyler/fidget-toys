@@ -207,7 +207,8 @@ never goes back to neutral, so at least one player always owns a spawn.
     and tapping the marker itself does the same.
 
   A press near a marker but not on it, released without moving, counts as
-  a tap on empty board, so it adds a target rather than grabbing that one.
+  a tap on empty board: under the cap it adds a target, and at the cap it
+  moves your nearest marker there, rather than grabbing that one.
 - **vs CPU** (easy, the default, or hard): you're blue, and the CPU plays
   red through the same inputs a human makes: add, remove and move its own
   targets. It uses at most two, whatever the Targets setting allows
@@ -308,14 +309,17 @@ every spawn count, not just the default.
   ones.
 - **Why production has diminishing returns.** When every spawn emitted on
   its own clock, production grew linearly with spawns, so whoever got
-  ahead snowballed. In 150 CPU-vs-CPU games on a medium board, the shared
+  ahead snowballed. In 150 CPU-vs-CPU games on a medium portrait board
+  (`width=34 height=50`), the shared
   pool with these defaults stretched games from 41 to 57 seconds on
   average, raised lead changes from 2.1 to 3.3 per game, and cut the peak
   army from about 185 dots to about 87. A steeper 50% gave about as many
   lead changes but smaller armies; 80% and up let the snowball back in.
   Those numbers are for 6 neutral spawns, which is why 65% is the sim
   default and the Some preset; Few and Many use 50% and 80%.
-- **Multiple targets and the CPU.** On a medium board, a CPU allowed two
+- **Multiple targets and the CPU.** On a medium portrait board
+  (`width=34 height=50`; headless defaults to 60×40, where games run
+  longer), a CPU allowed two
   targets beats one held to a single target about 60–63% of the time,
   so the extra target is worth having but doesn't run away with it.
   Every game still finished, in about 56 seconds on average. Lead changes

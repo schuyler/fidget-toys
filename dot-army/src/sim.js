@@ -702,7 +702,7 @@ export function productionRate(game, player) {
 /**
  * Phase 7: each player's production pool fills every tick; each full unit
  * emits one dot from the next owned spawn in turn (round robin), at its free
- * exit nearest the owner's target. A spawn whose exits are all blocked is
+ * exit nearest the owner's nearest target. A spawn whose exits are all blocked is
  * skipped. If every owned spawn is blocked, at most one dot's credit waits.
  * @param {Game} game
  */

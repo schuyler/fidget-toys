@@ -1,4 +1,4 @@
-# Wooden Ships — Rules (draft)
+# Wooden Ships — Rules
 
 Two sailing ships fight a duel on a small patch of sea. You don't control
 your speed, only your rudder: the wind does the rest, and it doesn't care
@@ -6,27 +6,37 @@ which way you'd like to go. Line up a broadside before your rival does,
 rake them from astern if you can, and don't get caught head-to-wind with
 no way on.
 
-Real time. Two players on one phone, or you vs the CPU, as in Dot Army.
+Real time, you vs the CPU. Fidget Toys never puts two players on one
+device, so playing another person waits for network play (see Later).
 
-> **Draft.** The sailing model comes from my 2022 Phaser prototype
+> **Prototype.** The sailing model comes from my 2022 Phaser prototype
 > ([schuyler/wooden-ships](https://github.com/schuyler/wooden-ships)),
-> which had the physics and no game. Every number here is a starting
-> guess, to be tuned with headless CPU-vs-CPU games. Questions still open
-> are marked **(open)**.
+> which had the physics and no game. The duel below is built and
+> playable. Most numbers are still the draft's starting guesses; the ones
+> headless CPU-vs-CPU games have checked so far are under Notes. Questions
+> still open are marked **(open)**.
 
 ## The sea
 
 - A rectangle that fills the screen, with no scrolling, so both players
   can always see both ships. In portrait, blue starts at the bottom and
   red at the top.
-- The short side is 1,000 m of sea. The long side stretches to match the
-  screen's shape. A ship is 40 m long, so the sea is 25 ship lengths
-  across.
+- The short side is 45 tiles of 22 m, 990 m of sea. The long side
+  stretches to match the screen's shape (up to 110 tiles). A ship is
+  40 m long, so the sea is about 25 ship lengths across.
 - The sea is laid out on a grid of square tiles, 22 m on a side, drawn
   with the prototype's terrain tiles (see Art).
+- The ships start 700 m apart along the long side, each 60 m to its own
+  side of the centre line, pointing at each other with a little way on
+  (3 m/s), so they pass rather than collide unless someone steers.
+- If the phone turns during a game, the sea keeps its shape and is
+  fitted to the new screen.
 - **Islands:** none, some (the default), or many. Generated from the
   game's seed, point-symmetric (rotated 180° about the centre), and kept
-  clear of the start positions.
+  clear of the start positions. *Some* is three blobs and their mirror
+  images, *many* six, each 1.5–4 tiles in radius with a ragged edge,
+  kept at least 160 m (plus their radius) from either start and out of
+  the middle of the sea.
 - **Shallows** ring every island, one tile wide (see Hazards).
 - **How islands are generated:** terrain is decided at tile *corners*,
   not tiles. Each corner is deep water, shallows or land, and each tile
@@ -36,26 +46,30 @@ Real time. Two players on one phone, or you vs the CPU, as in Dot Army.
   shallows. Each level has 14 of the 16 possible pieces. The missing two
   are the diagonals (two opposite corners set, the other two not), so the
   generator smooths those away before tiles are picked: any tile with
-  only a diagonal pair gets one more corner raised to match.
+  only a diagonal pair gets one more corner raised to match (and so does
+  its mirror image, which keeps the map symmetric).
+- For ships and balls, the terrain at a point is the terrain of the
+  nearest tile corner.
 - The edge of the sea is a wall: a ship that reaches it stops dead, as
   if it had hit an island. **(open: wrap around instead)**
 
 ## The wind
 
 - One wind for the whole sea, with a direction and a speed (8–20 kts).
-- At the start it blows across the line between the two ships, so
-  neither starts upwind of the other (the *weather gauge*, which matters
-  a lot; see Notes).
-- **Shifts:** every 20–40 s (chosen at random), the wind turns by up to
-  30° either way and changes speed, easing to its new value over 5 s.
-  The next shift is never announced.
+- At the start it blows across the line between the two ships, from one
+  side or the other at random, so neither starts upwind of the other
+  (the *weather gauge*, which matters a lot; see Notes).
+- **Shifts:** every 20–40 real seconds (chosen at random), the wind
+  turns by up to 30° either way and changes speed by up to 4 kts (kept
+  within 8–20), easing to its new value over 5 s. The next shift is
+  never announced.
 - Streaks drift across the sea to show the wind, and a small compass in
   the corner shows its direction and speed.
 
 ## Sailing
 
 Each ship has a position, a velocity, a heading (the way the bow
-points) and a rudder setting from −1 (hard to port) to +1 (hard to
+points) and a rudder setting from −100 (hard to port) to +100 (hard to
 starboard). Sails trim themselves: you never set them.
 
 Every tick (30 per second, `dt` = 1/30 s):
@@ -90,7 +104,16 @@ Every tick (30 per second, `dt` = 1/30 s):
 6. **Windage:** the hull and rigging catch a little wind whatever the
    sails are doing: `windage × apparent wind`, pushing the way the
    apparent wind blows.
-7. velocity += (drive + windage − drags) × dt; position += velocity × dt.
+7. velocity += (drive + windage) / `mass` × dt, then the hull drags;
+   position += velocity × dt.
+
+Here `dt` is in game seconds (`timeScale` / `tickRate`), except for
+turning, where `turnRate` is per real second. The drags are applied in
+closed form, `v / (1 + k × |v| × dt / mass)`, which is the exact
+solution of `dv/dt = −k × v × |v| / mass` over one tick and so can't
+overshoot however strong the keel. `mass` is new since the draft: it
+sets how quickly a ship gathers way and loses it (about 2 real seconds
+to reach speed), without changing her top speeds.
 
 None of this is coded as a special rule, but it all comes out of the
 model:
@@ -116,9 +139,10 @@ Getting upwind of your rival lets you steal their wind. **(open)**
   0.1 s apart. The guns are spaced along the middle 30 m of the hull.
 - **Traverse:** each gun can swing up to `traverse` (20°) forward or aft
   of square to the hull. When it fires, it aims at the centre of the
-  enemy ship as it is at that moment, with no lead. If the enemy is
-  outside its arc, it aims as close as the arc allows. **(open: in the
-  campaign, which enemy a gun aims at when there are several)**
+  nearest enemy ship as it is at that moment, with no lead. If the enemy
+  is outside its arc, it aims as close as the arc allows. **(open: in
+  the campaign, whether "nearest" is the right enemy to aim at when
+  there are several)**
 - A ball leaves the gun at `muzzleSpeed` in the direction it's aimed,
   plus the ship's own velocity, with a random spread of up to ±3°. It
   flies straight and flat, and it splashes harmlessly after `gunRange`.
@@ -126,9 +150,9 @@ Getting upwind of your rival lets you steal their wind. **(open)**
 - A side reloads in `reload` seconds after it fires. Each side has its
   own reload, so you can fire one broadside, turn, and fire the other.
   An arc beside each button shows its reload.
-- **Hits:** a ball that crosses the other ship's hull (a 40 × 12 m
-  capsule) hits it and is removed. A ship can't hit itself.
-  Every hit kills 1 crew.
+- **Hits:** a ball that crosses another ship's hull (a 40 × 12 m
+  capsule, checked twice per tick) hits it and is removed. A ship can't
+  hit itself. Every hit kills 1 crew.
 - **Crossing the T.** Raking needs no special rule. It comes from the
   geometry:
   - Broadside to broadside, the target is 40 m long across your line of
@@ -155,33 +179,40 @@ Getting upwind of your rival lets you steal their wind. **(open)**
 
 - **Shallows:** `bowDrag` and `keelDrag` are tripled. You can sail
   through, slowly.
-- **Islands:** a ship that touches an island stops dead and is pushed
-  clear. It loses no crew. The cost is the speed it lost and the time it
+- **Islands:** a ship that touches an island (or the edge of the sea)
+  stops dead and is pushed clear: her move that tick is undone (her
+  turn isn't, so she can't get pinned) and she's left drifting away
+  from where she touched at `bounce` (1 m/s). It loses no crew. The cost is the speed it lost and the time it
   takes to get going again. Balls hit islands and
   stop.
 - **Collision:** ships that touch bounce apart and lose most of their
-  speed. Neither loses crew. Boarding comes
+  speed (each keeps a fifth of her velocity, plus a push apart). Neither loses crew. Boarding comes
   later (see Embellishments).
 
 ## Winning
 
 - Each ship has **24 crew** (see Gunnery). A ship with none left **strikes her
   colours** (surrenders), and the other side wins. Her flag comes down,
-  and she drifts.
+  her sails are let fly (no drive), and she drifts on windage.
 - If both strike in the same tick, it's a draw.
 - No time limit. **(open: one, if headless games show long standoffs
   with both ships running downwind)**
 
 ## Controls
 
-The phone is split across the middle. Each player uses their own half,
-with multitouch, so both can play at once, as in Dot Army. Blue's half is
-the bottom one.
+You're blue, and you have the whole screen.
 
-- **Steering:** drag sideways anywhere in your half. How far you drag
-  from where you first touched sets the rudder, up to full lock at about
-  a thumb's width. Let go and the rudder centres.
-- **Fire:** two buttons in your half's corners, **left** and **right**
+- **Steering:** drag sideways anywhere. How far you drag from where you
+  first touched sets the rudder, up to full lock at about a thumb's
+  width (48 px). Let go and the rudder centres.
+  - Drag the way you want the **bow to swing on screen**. With your ship
+    heading up the screen, dragging right is starboard rudder; heading
+    down toward you, dragging right is port rudder. Like the fire
+    buttons, this is so you never have to work out port and starboard.
+  - It uses the same 15° rule as the buttons for when it swaps, and it's
+    fixed for as long as your finger stays down, so a turn across the
+    screen doesn't reverse halfway through.
+- **Fire:** two buttons in the bottom corners, **left** and **right**
   as *you* see the screen, not port and starboard. The left button
   fires whichever broadside is facing your left right now. Each button
   shows a small arrow pointing the way its guns point.
@@ -192,36 +223,42 @@ the bottom one.
     you and the other faces away, and neither is clearly "left". The
     buttons only swap sides once the bow is 15° past that line, so they
     don't flicker while you sail across the screen.
-  - For red, at the top of a shared phone, "left" is red's left, which
-    is screen right.
-- Each ship shows its no-go wedge as a faint shadow ahead of the bow, so
+- Your ship shows its no-go wedge as a faint shadow ahead of the bow, so
   you can see when you're about to sail into it.
-- Against the CPU you have the whole screen, and the buttons sit at the
-  bottom.
+- On a keyboard: ← → (or A, D) steer, with the same screen-relative
+  rule; Z (or Q) and X (or E) are the left and right buttons.
 
 ## The CPU
 
-- It steers toward a point beside you: on your beam to trade
+- It steers toward a point 120 m beside you: on your beam to trade
   broadsides, or across your bow or stern to rake. It picks whichever it
-  can reach soonest, given the wind.
-- When that point is upwind, it beats, tacking only when it has the
-  speed to get through.
+  can reach soonest, given the wind, leading you by its time to get
+  there. Close to the point, it lies alongside (beam) or crosses your
+  line (rake).
+- When that point is upwind, it beats close-hauled (65° off the wind),
+  tacking only when it has the speed to get through (1.2 m/s). If it's
+  too slow to tack for long, it wears instead (turns away, round through
+  downwind).
+- It looks a few lengths ahead and turns away from land (hard also from
+  shallows when it can), and gets itself out of irons.
 - It fires a side when a simulated ripple from that side would hit you,
-  predicted a few seconds ahead with your current rudder.
-- **Easy** aims with extra spread, reacts 1 s late and never rakes on
-  purpose. **Hard** doesn't hold back.
+  assuming you hold your course: hard wants two predicted hits, easy
+  one.
+- **Easy** reacts 1 s late, judges your position ±25 m, steers in coarse
+  steps and never rakes on purpose. **Hard** doesn't hold back.
 
 ## Settings
 
 | Setting | Choices |
 |---|---|
-| Opponent | Two players, CPU easy, CPU hard |
+| CPU | Easy (default), Hard |
 | Islands | None, Some, Many |
 | Wind | Steady, Shifty (default), Gusty |
 | Wind shadow | Off, On |
 | Crew per gun | 2, 3 (default), 5 |
 
-*Steady* never shifts. *Gusty* shifts twice as often, by up to 45°.
+*Steady* never shifts. *Gusty* shifts twice as often, by up to 45° and
+6 kts.
 
 ## Parameters
 
@@ -230,6 +267,7 @@ the bottom one.
 | `tickRate` | 30 | Ticks per second |
 | `timeScale` | 4 | Game seconds per real second |
 | `lift`, `drag` | 1.0, 1.0 | Sail coefficients; set the no-go zone and drive |
+| `mass` | 6 | Divides every force: how quickly a ship gathers and loses way |
 | `bowDrag` | 0.05 | Hull drag going forward |
 | `keelDrag` | 1.0 | Hull drag going sideways |
 | `windage` | 0.02 | Push of the apparent wind on hull and rigging |
@@ -241,7 +279,14 @@ the bottom one.
 | `reload` | 5 s | Per side, in real seconds |
 | `traverse` | 20° | How far each gun can swing forward or aft of square |
 | `crewPerGun` | 3 | Crew = this × total guns; at 0 she strikes |
+| `shallowsDrag` | 3 | Hull drags are multiplied by this in shallows |
+| `shadowRange`, `shadowCone`, `shadowFactor` | 160 m, 30°, 0.5 | Wind shadow: how far downwind, how wide, how much wind is left |
+| `startGap`, `startOffset`, `startSpeed` | 700 m, 60 m, 3 m/s | Where and how the ships start |
+| `bounce` | 1 m/s | How hard land, the edge or another ship pushes a ship off |
 | `seed` | random | Same seed and same inputs = same game |
+
+The ship's coefficients (`lift` to `steerSpeed`, guns, length) live in a
+ship type in `sim.js` (`SHIP_TYPES`); the rest in `DEFAULTS`.
 
 **Scale.** At real speed, a ship making 10 kts (5 m/s) would take over
 three minutes to cross the sea. So the sea runs at `timeScale` times
@@ -251,6 +296,12 @@ set on screen instead, in real seconds: a ball crosses `gunRange` in 2
 real seconds, so leading a moving target is a skill. That makes balls
 far slower than real ones relative to the ships. **(open: whether 4× is
 fast enough to feel like a fidget toy)**
+
+## Later
+
+- **Network play** against another person, through the repo's shared
+  relay and lockstep (as in Dot Army). The sim was built for it:
+  deterministic, inputs only, rudder as an integer.
 
 ## Room for a campaign (not the MVP)
 
@@ -359,6 +410,36 @@ Each is a sketch, not a rule yet.
   show how often the side that kills crew first goes on to win, with and
   without it.
 
+- **Headless results** (`node wooden-ships/tools/headless.js 40`,
+  hard CPU vs hard CPU, 40 games per row, draft numbers):
+
+  | Settings | Finished in 6 min | Mean length | Blue / red wins |
+  |---|---|---|---|
+  | Defaults | 100% | 81 s | 43% / 58% |
+  | No islands | 100% | 86 s | 53% / 48% |
+  | Many islands | 100% | 95 s | 53% / 48% |
+  | Steady wind | 100% | 81 s | 48% / 53% |
+  | Gusty wind | 100% | 96 s | 58% / 40% (1 draw) |
+  | Wind shadow off | 100% | 88 s | 48% / 53% |
+  | 5 crew per gun | 100% | 128 s | 40% / 60% |
+  | Easy (blue) vs hard | 98% | 82 s | 28% / 70% |
+  | Square sea (45 × 45) | 100% | 87 s | 60% / 40% |
+
+  - Games finish: no long standoffs, so no time limit yet.
+  - The CPUs land about two thirds of their balls, because they fight
+    at close range. People will do worse.
+  - The side upwind at the first shift won only 30–43% of games, so the
+    CPU doesn't exploit the weather gauge (see below). That says more
+    about the CPU than the gauge.
+  - Measured polar at 14 kts of wind: 0.9 kt at 50° off the wind, 3.9 at
+    60°, 10.3 abeam, 14.0 at 135° (a broad reach), 11.0 dead downwind.
+    Best progress upwind is about 2.2 kts, at 65°. A tack from 65°
+    carries through in 14 and 20 kts of wind, but not in 8: in light air
+    you wear or you end up in irons. **(open: whether upwind is too slow
+    to be fun)**
+  - **Ships are small on a phone:** 25 lengths across a 390 px screen is
+    about 16 px per ship. **(open: a smaller sea, or a zoomed camera)**
+
 - **The weather gauge.** In real fleet actions the upwind ship chose
   whether and when to fight, and the downwind ship could only run or
   wait. That should happen here without a special rule: the upwind ship
@@ -393,13 +474,17 @@ Each is a sketch, not a rule yet.
   continuous. Floats stay deterministic across browsers as long as the
   sim only uses `+ − × ÷` and `sqrt`, which IEEE 754 defines exactly.
   `Math.sin` and `atan2` aren't defined exactly, so headings are stored
-  as integers (65,536 to a full turn), sines come from a lookup table
-  that's committed to the repo rather than computed at load, and the
-  angle of attack is never computed as an angle: `sin a` and `cos a`
-  come straight from the cross and dot products of the bow and the
-  apparent wind. That keeps lockstep network play possible later.
-- **Art.** This uses the prototype's sprites and terrain, to be copied
-  into `wooden-ships/assets/` when the code goes in: the ship sheet
+  as integers (65,536 to a full turn), sines come from a lookup table,
+  and the angle of attack is never computed as an angle: `sin a` and
+  `cos a` come straight from the cross and dot products of the bow and
+  the apparent wind. That keeps lockstep network play possible later.
+  - The draft said the table would be committed to the repo. It's built
+    at load instead, from a Taylor series that uses only `+` and `×`, so
+    every engine builds the same table without shipping a megabyte of
+    numbers. The CPU finds headings from vectors by binary search on the
+    same table, never `atan2`.
+- **Art.** This uses the prototype's sprites and terrain, copied into
+  `wooden-ships/assets/`: the ship sheet
   (`shipsMiscellaneous_sheet`) and the terrain tiles (`tiles_sheet`). The sheet names match Kenney's
   [Pirate Pack](https://kenney.nl/assets/pirate-pack), which is CC0, but
   the files haven't been checked against the pack itself yet. It's
@@ -410,7 +495,10 @@ Each is a sketch, not a rule yet.
   renderer.
   - Ships are drawn as a hull (`hullLarge`) with a separate sail
     (`sailLarge`) on top, rotated to the sail's trim angle, so you can
-    see how the ship is set to the wind. The ready-made `ship (n)`
+    see how the ship is set to the wind. The four hull pictures show
+    damage: (1) above two-thirds crew, (2), (3), and (4) once she
+    strikes. The palm and rock tiles aren't used: at this size they
+    read as arrows. The ready-made `ship (n)`
     sprites have their sails fixed fore and aft. The sheet has sails in
     several colours, including blue (`sailLarge (5)`) and red
     (`sailLarge (3)`).

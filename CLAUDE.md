@@ -1,8 +1,9 @@
 # fidget-toys
 
 Small browser games, one per directory. No build step: plain ES modules,
-served as static files. The first toy is `dot-army/`; read its `RULES.md`
-before touching game logic, and `NETWORK.md` for online play.
+served as static files. The toys are `dot-army/` and `wooden-ships/`; read
+a toy's `RULES.md` before touching its game logic, and Dot Army's
+`NETWORK.md` for online play.
 
 ## Running and checking
 
@@ -12,6 +13,7 @@ npm install                       # once: the relay's one dependency (ws)
 npm test                          # node:test
 npm run typecheck                 # tsc --checkJs on files marked // @ts-check
 node dot-army/tools/headless.js 20 [key=value ...]   # CPU-vs-CPU balance runs
+node wooden-ships/tools/headless.js 40 [key=value ...]
 ```
 
 Browser checks use the preinstalled Playwright (`require('playwright')`).
@@ -19,7 +21,21 @@ Browser checks need the static server on port 8765:
 `dot-army/tools/e2e-local.cjs` (CPU play), `dot-army/tools/e2e-two-tab.cjs`
 (two tabs, `?relay=bc`), `dot-army/tools/e2e-online.cjs` (lobby, leaving,
 errors) and `multiplayer/tools/e2e-relay.cjs` (a game through a relay). The
-last two also need a relay: `node multiplayer/server.js`.
+last two also need a relay: `node multiplayer/server.js`. Wooden Ships has
+`wooden-ships/tools/e2e-local.cjs` (a CPU game, steering, fire buttons).
+
+## Rules for wooden-ships code
+
+The same determinism rule as Dot Army, with one difference: `sim.js` state
+is floats, so it may only use `+ − × ÷`, `sqrt`, `abs`, `min`, `max` and
+`Math.round` on them. No `Math.sin`, `atan2`, `hypot` or `**`: use `isin`,
+`icos` and `angleOf`, which work on integer headings (65,536 to a turn).
+The CPU (`ai.js`) follows the same rule and acts only through
+`applyInput`. A rule change means updating `sim.js`, `test/sim.test.js`,
+`RULES.md` and the How to play card in `index.html` together, then running
+the headless tool. Settings the player sees are the five presets in
+`main.js` (`CHOICES`); tuning parameters are `DEFAULTS` and `SHIP_TYPES` in
+`sim.js`.
 
 ## Rules for dot-army code
 
@@ -32,8 +48,8 @@ last two also need a relay: `node multiplayer/server.js`.
   targets, through the same inputs a human sends (add, remove, move). It must
   never touch game state directly.
 - `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `lockstep.js`,
-  `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`, `lobby.js`, `netpanel.js`.
-  Keep them type-clean.
+  `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`, `lobby.js`, `netpanel.js`;
+  in Wooden Ships, `sim.js`, `ai.js` and `rng.js`. Keep them type-clean.
 - A rule change means updating, together: `sim.js`, a test in
   `test/sim.test.js`, `RULES.md`, and the How to play card in `index.html`.
   Then run the headless balance tool to check games still finish.

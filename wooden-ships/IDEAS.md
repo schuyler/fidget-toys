@@ -43,8 +43,9 @@ irons and the fight went static, and the fire buttons were too far apart.
   - Needs: a marked king spoke so you can find centre, and some easy way
     to centre it (snap near the middle, or a double-click).
   - No wheel sprite in the sheet: it'd be drawn on the canvas.
-- **Cannons as fire buttons.** Two cannons either side of the wheel,
-  muzzles out, using the sheet's `cannon` sprites. Each swings to show
+- **Cannons (or cannonballs) as fire buttons.** Two cannons either side
+  of the wheel, muzzles out, using the sheet's `cannon` sprites, or a
+  `cannonBall` per side if a cannon reads as too busy. Each swings to show
   where that broadside points, as the arrows do now. Reloading could show
   as the gun running in and out again, or a glowing slow match, instead
   of a ring. That also brings the buttons in from the screen's corners.
@@ -69,6 +70,11 @@ irons and the fight went static, and the fire buttons were too far apart.
   should stay. But when one happens, something at sea could show it: the
   sails flog for a moment, or the crests turn visibly, rather than a text
   notice.
+
+- **Calmer water in a wind shadow.** With wind shadow on, a ship just
+  downwind of another gets half the wind, but the crests there look the
+  same as everywhere else. They could shrink or fade inside the shadow,
+  so you can see whose wind is being stolen.
 
 ## Crew
 

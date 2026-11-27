@@ -9,6 +9,7 @@ Play it at <https://schuyler.info/fidget-toys/wooden-ships/>, or serve the repo 
 - Drag sideways anywhere to steer: drag the way you want the bow to swing. Let go and the rudder centres.
 - The two buttons in the bottom corners fire the broadside facing that way on screen. The arrow shows where the guns point; the ring is the reload.
 - The faint wedge ahead of your bow is the no-go zone. Sail into it and you stop.
+- The sea is bigger than the screen and the view follows you. An arrow on the edge points at the CPU when it's out of sight.
 - Keyboard: ← → steer, Z and X fire.
 
 ## How it's built
@@ -24,7 +25,7 @@ Plain ES modules, no build step, same layout as Dot Army.
 
 ## Rough edges
 
-- Ships are small on a phone: the sea is 25 ship lengths across, so a ship is about 16 px on a 390 px screen.
+- The camera zoom (450 m across the screen's short side) is a first guess. Gun range is 300 m, two thirds of that, so the CPU can fire at you from just past the short edges of the screen. Its arrow shows the distance: under 300 m, it's in range.
 - Upwind is slow (about 2 knots made good against 14 downwind), which makes the weather gauge matter a lot. Whether that's fun is still to be found out.
 - The CPU doesn't play the weather gauge, and easy isn't much easier than hard in CPU-vs-CPU games (hard wins 70%). Both need tuning against people.
 - No network play yet.

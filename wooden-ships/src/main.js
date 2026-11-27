@@ -376,8 +376,12 @@ if (debug) {
     phase, tick: game.tick, winner: game.winner, paused, leftIsStarboard,
     wind: { ...game.wind },
     ships: game.ships.map((s) => ({ x: s.x, y: s.y, heading: s.heading, rudder: s.rudder, crew: s.crew, struck: s.struck, reload: s.batteries.map((b) => b.reloadLeft) })),
-    fired: [...game.stats.fired], sea: [game.seaW, game.seaH],
+    fired: [...game.stats.fired], sea: [game.seaW, game.seaH], view: renderer.view(),
   });
+  /** For browser tests: move a ship (as if she'd sailed there). */
+  /** @type {any} */ (window).woodenShipsDebugPlace = (/** @type {number} */ id, /** @type {number} */ x, /** @type {number} */ y) => {
+    Object.assign(game.ships[id], { x, y, vx: 0, vy: 0 });
+  };
 }
 
 // ---------------------------------------------------------------------------

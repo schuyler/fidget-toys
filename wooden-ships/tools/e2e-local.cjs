@@ -1,5 +1,6 @@
 // Checks Wooden Ships in a browser: menus, a CPU game in portrait and
-// landscape, steering, the screen-relative fire buttons, and the end screen.
+// landscape, steering, the screen-relative fire buttons, the camera and its
+// off-screen arrow, and the end screen.
 //
 // Needs: the repo served on port 8765 (python3 -m http.server 8765 --bind 127.0.0.1)
 // and Playwright (preinstalled in Claude Code cloud sessions).
@@ -70,7 +71,27 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     check(post.ships[0].reload[bat] > 0 && post.ships[0].reload[1 - bat] === pre.ships[0].reload[1 - bat], `${vp.width}x${vp.height}: left button fires the ${bat ? 'starboard' : 'port'} side (facing screen left)`);
   }
 
-  // 3. Pause menu pauses and resumes.
+  // 3. The camera follows your ship; an arrow points at the CPU when it's off screen.
+  {
+    const p = await page({ width: 390, height: 844 }, '&seed=5');
+    await p.click('#start-new');
+    await p.waitForFunction(() => woodenShipsDebug().phase === 'play', null, { timeout: 6000 });
+    const inView = (d, s) => s.x > d.view.x && s.x < d.view.x + d.view.w && s.y > d.view.y && s.y < d.view.y + d.view.h;
+    let d = await dbg(p);
+    check(Math.abs(d.view.w - 450) < 1, `zoomed: 450 m across the short side (got ${Math.round(d.view.w)})`);
+    check(d.view.w < d.sea[0] || d.view.h < d.sea[1], 'the sea is bigger than the screen');
+    await p.evaluate(() => { const s = woodenShipsDebug().sea; woodenShipsDebugPlace(1, 150, 150); woodenShipsDebugPlace(0, s[0] - 200, s[1] - 300); });
+    await p.waitForTimeout(2500);
+    d = await dbg(p);
+    check(inView(d, d.ships[0]), 'camera has followed your ship across the sea');
+    check(!inView(d, d.ships[1]) && !!d.view.arrow, `arrow shows the off-screen CPU (${d.view.arrow && d.view.arrow.dist} m)`);
+    await p.evaluate(() => { const s = woodenShipsDebug().ships[0]; woodenShipsDebugPlace(1, s.x - 120, s.y - 150); });
+    await p.waitForTimeout(1500);
+    d = await dbg(p);
+    check(inView(d, d.ships[1]) && !d.view.arrow, 'no arrow once the CPU is on screen');
+  }
+
+  // 4. Pause menu pauses and resumes.
   {
     const p = await page({ width: 390, height: 780 }, '&seed=3');
     await p.click('#start-new');
@@ -85,7 +106,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     check((await dbg(p)).tick > t1, 'resumed game moves again');
   }
 
-  // 4. A game ends with a winner and the end screen (sped up: we sink blue by hand).
+  // 5. A game ends with a winner and the end screen (sped up: we sink blue by hand).
   {
     const p = await page({ width: 390, height: 780 }, '&seed=9');
     await p.click('#start-new');

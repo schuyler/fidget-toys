@@ -48,6 +48,11 @@ export async function loadAssets(base) {
 }
 /** @typedef {Awaited<ReturnType<typeof loadAssets>>} Assets */
 
+/** Metres of sea across the screen's short side: about 11 ship lengths, so a ship is ~35 px on a phone. */
+export const VIEW_SHORT = 450;
+/** Most pixels the pre-drawn island layer may have (phones cap canvas size). */
+const MAX_TERRAIN_PX = 12e6;
+
 /** Safe-area insets, read from the #safe-probe element (JS can't read env()). */
 function safeInsets() {
   const probe = document.getElementById('safe-probe');
@@ -70,8 +75,13 @@ function safeInsets() {
 export function createRenderer(canvas, assets) {
   const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
   let dpr = 1, cw = 0, ch = 0;
-  /** camera: screen = o + world × scale */
+  /** camera: screen = o + world × scale, centred on (camX, camY) */
   let scale = 1, ox = 0, oy = 0;
+  let camX = 0, camY = 0, camReady = false;
+  /** pixels per metre in the terrain layer */
+  let terrainScale = 1;
+  /** where the off-screen enemy arrow was last drawn, for tests */
+  /** @type {{x: number, y: number, dist: number}|null} */ let arrow = null;
   let safe = { top: 0, bottom: 0, left: 0, right: 0 };
   /** @type {Game|null} */ let game = null;
   /** @type {HTMLCanvasElement|null} */ let terrain = null;
@@ -88,6 +98,7 @@ export function createRenderer(canvas, assets) {
     game = g;
     fx = [];
     streaks = [];
+    camReady = false;
     snapshot();
     layout();
   }
@@ -108,9 +119,8 @@ export function createRenderer(canvas, assets) {
     canvas.style.height = ch + 'px';
     safe = safeInsets();
     if (!game) return;
-    scale = Math.min(cw / game.seaW, ch / game.seaH);
-    ox = (cw - game.seaW * scale) / 2;
-    oy = (ch - game.seaH * scale) / 2;
+    scale = Math.min(cw, ch) / VIEW_SHORT;
+    camReady = false;
     buildTerrain();
   }
 
@@ -118,10 +128,11 @@ export function createRenderer(canvas, assets) {
   function buildTerrain() {
     if (!game) return;
     const g = game;
-    const t = g.params.tile * scale * dpr;
+    terrainScale = Math.min(scale * dpr, Math.sqrt(MAX_TERRAIN_PX / (g.seaW * g.seaH)));
+    const t = g.params.tile * terrainScale;
     terrain = document.createElement('canvas');
-    terrain.width = Math.ceil(g.seaW * scale * dpr);
-    terrain.height = Math.ceil(g.seaH * scale * dpr);
+    terrain.width = Math.ceil(g.seaW * terrainScale);
+    terrain.height = Math.ceil(g.seaH * terrainScale);
     const c = /** @type {CanvasRenderingContext2D} */ (terrain.getContext('2d'));
     c.imageSmoothingQuality = 'high';
     c.fillStyle = COLORS.ocean;
@@ -157,6 +168,39 @@ export function createRenderer(canvas, assets) {
         }
       }
     }
+  }
+
+  /**
+   * Follow your ship, leading a little the way she's moving; when the enemy
+   * is near, pan toward the middle so both fit, but never push your ship
+   * out of the middle 60% of the screen. Smoothed, and kept inside the sea.
+   * @param {{x: number, y: number}[]} poses @param {number} you @param {number} dt @param {number} ts
+   */
+  function updateCamera(poses, you, dt, ts) {
+    if (!game) return;
+    const g = game;
+    const me = poses[you], ship = g.ships[you];
+    const vw = cw / scale, vh = ch / scale;
+    let tx = me.x, ty = me.y;
+    const foeIdx = g.ships.findIndex((s) => s.side !== ship.side);
+    if (foeIdx >= 0) {
+      const f = poses[foeIdx];
+      tx = (me.x + f.x) / 2;
+      ty = (me.y + f.y) / 2;
+    }
+    // lead: where she'll be in about a second and a half
+    tx += Math.max(-vw * 0.2, Math.min(vw * 0.2, ship.vx * ts * 1.5));
+    ty += Math.max(-vh * 0.2, Math.min(vh * 0.2, ship.vy * ts * 1.5));
+    tx = Math.max(me.x - vw * 0.3, Math.min(me.x + vw * 0.3, tx));
+    ty = Math.max(me.y - vh * 0.3, Math.min(me.y + vh * 0.3, ty));
+    if (!camReady) { camX = tx; camY = ty; camReady = true; }
+    const k = 1 - Math.exp(-dt * 2.5);
+    camX += (tx - camX) * k;
+    camY += (ty - camY) * k;
+    camX = vw >= g.seaW ? g.seaW / 2 : Math.max(vw / 2, Math.min(g.seaW - vw / 2, camX));
+    camY = vh >= g.seaH ? g.seaH / 2 : Math.max(vh / 2, Math.min(g.seaH - vh / 2, camY));
+    ox = cw / 2 - camX * scale;
+    oy = ch / 2 - camY * scale;
   }
 
   /** @param {number} x @param {number} y */
@@ -217,18 +261,27 @@ export function createRenderer(canvas, assets) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#0d1020';
     ctx.fillRect(0, 0, cw, ch);
+    const poses = g.ships.map((s, i) => {
+      const p = prev[i] ?? s;
+      return { x: p.x + (s.x - p.x) * alpha, y: p.y + (s.y - p.y) * alpha, heading: p.heading + angleDiff(p.heading, s.heading) * alpha };
+    });
+    updateCamera(poses, ui.you, dt, ui.timeScale);
+
     ctx.save();
     if (shake > 0) {
       const k = shake * 4;
       ctx.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k);
       shake = Math.max(0, shake - dt * 2.5);
     }
-    if (terrain) ctx.drawImage(terrain, ox, oy, g.seaW * scale, g.seaH * scale);
-
-    const poses = g.ships.map((s, i) => {
-      const p = prev[i] ?? s;
-      return { x: p.x + (s.x - p.x) * alpha, y: p.y + (s.y - p.y) * alpha, heading: p.heading + angleDiff(p.heading, s.heading) * alpha };
-    });
+    if (terrain) {
+      // only the part of the island layer that's on screen
+      const x0 = Math.max(0, -ox / scale), y0 = Math.max(0, -oy / scale);
+      const x1 = Math.min(g.seaW, (cw - ox) / scale), y1 = Math.min(g.seaH, (ch - oy) / scale);
+      if (x1 > x0 && y1 > y0) {
+        ctx.drawImage(terrain, x0 * terrainScale, y0 * terrainScale, (x1 - x0) * terrainScale, (y1 - y0) * terrainScale,
+          sx(x0), sy(y0), (x1 - x0) * scale, (y1 - y0) * scale);
+      }
+    }
 
     drawStreaks(dt, ui.timeScale);
     drawFx(dt, ui.timeScale, ['foam', 'ring']);
@@ -239,6 +292,7 @@ export function createRenderer(canvas, assets) {
     drawFx(dt, ui.timeScale, ['smoke', 'dust', 'flash', 'boom', 'wood']);
     ctx.restore();
 
+    drawEnemyArrow(poses, ui.you);
     drawCompass();
     drawCrew(ui.you);
     for (const b of ui.buttons) drawButton(b, me);
@@ -251,11 +305,22 @@ export function createRenderer(canvas, assets) {
     if (!game) return;
     const w = windAt(game);
     const ws = Math.hypot(w.x, w.y);
+    // In world metres, so they slide past as the camera pans.
+    const vx0 = -ox / scale, vy0 = -oy / scale, vw = cw / scale, vh = ch / scale;
+    const spawn = (/** @type {{x: number, y: number, len: number, life: number}} */ s) => {
+      s.x = vx0 + Math.random() * vw; s.y = vy0 + Math.random() * vh; s.life = 2 + Math.random() * 2;
+    };
     const want = Math.round((cw * ch) / 9000);
-    while (streaks.length < want) streaks.push({ x: Math.random() * cw, y: Math.random() * ch, len: 10 + Math.random() * 18, life: Math.random() * 3 });
+    while (streaks.length < want) {
+      const s = { x: 0, y: 0, len: (10 + Math.random() * 18) / scale, life: 0 };
+      spawn(s);
+      s.life = Math.random() * 3;
+      streaks.push(s);
+    }
     if (ws === 0) return;
     const ux = w.x / ws, uy = w.y / ws;
-    const v = ws * ts * scale;
+    const v = ws * ts;
+    const m = 40 / scale;
     ctx.save();
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.2;
@@ -264,15 +329,13 @@ export function createRenderer(canvas, assets) {
       s.x += ux * v * dt;
       s.y += uy * v * dt;
       s.life -= dt;
-      if (s.life <= 0 || s.x < -40 || s.y < -40 || s.x > cw + 40 || s.y > ch + 40) {
-        s.x = Math.random() * cw; s.y = Math.random() * ch; s.life = 2 + Math.random() * 2;
-      }
+      if (s.life <= 0 || s.x < vx0 - m || s.y < vy0 - m || s.x > vx0 + vw + m || s.y > vy0 + vh + m) spawn(s);
       const a = Math.min(1, s.life, 3 - s.life) * 0.35;
       if (a <= 0) continue;
       ctx.globalAlpha = a;
       ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(s.x - ux * s.len, s.y - uy * s.len);
+      ctx.moveTo(sx(s.x), sy(s.y));
+      ctx.lineTo(sx(s.x - ux * s.len), sy(s.y - uy * s.len));
       ctx.stroke();
     }
     ctx.restore();
@@ -446,6 +509,67 @@ export function createRenderer(canvas, assets) {
       ctx.restore();
     }
     fx = keep;
+  }
+
+  /**
+   * When the enemy is off screen, an arrow on the screen's edge points at
+   * her, with how far away she is. It keeps clear of the HUD and buttons.
+   * @param {{x: number, y: number}[]} poses @param {number} you
+   */
+  function drawEnemyArrow(poses, you) {
+    arrow = null;
+    if (!game) return;
+    const g = game;
+    const me = g.ships[you];
+    const i = g.ships.findIndex((s) => s.side !== me.side);
+    if (i < 0) return;
+    const foe = g.ships[i], f = poses[i], mp = poses[you];
+    const ex = sx(f.x), ey = sy(f.y);
+    const pad = (foe.type.length / 2) * scale;
+    if (ex > -pad && ey > -pad && ex < cw + pad && ey < ch + pad) return;
+    const r = buttonSpots()[0].r;
+    const left = 24 + safe.left, right = cw - 24 - safe.right;
+    const top = 104 + safe.top, bottom = ch - 40 - 2 * r - safe.bottom;
+    const cx = cw / 2, cy = (top + bottom) / 2;
+    const dx = ex - cx, dy = ey - cy;
+    let t = Infinity;
+    if (dx > 0) t = Math.min(t, (right - cx) / dx);
+    if (dx < 0) t = Math.min(t, (left - cx) / dx);
+    if (dy > 0) t = Math.min(t, (bottom - cy) / dy);
+    if (dy < 0) t = Math.min(t, (top - cy) / dy);
+    if (!isFinite(t)) return;
+    const x = cx + dx * t, y = cy + dy * t;
+    const dist = Math.round(Math.hypot(f.x - mp.x, f.y - mp.y) / 10) * 10;
+    arrow = { x, y, dist };
+    const a = Math.atan2(dy, dx);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.save();
+    ctx.rotate(a);
+    ctx.fillStyle = foe.struck ? '#c9ced8' : COLORS.players[foe.side];
+    ctx.strokeStyle = 'rgba(13,16,32,0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(14, 0);
+    ctx.lineTo(-8, -11);
+    ctx.lineTo(-3, 0);
+    ctx.lineTo(-8, 11);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fill();
+    ctx.restore();
+    // distance, set back toward the middle of the screen, clear of the arrow
+    ctx.font = '700 12px system-ui, sans-serif';
+    const tw = ctx.measureText(`${dist} m`).width;
+    const lx = -Math.cos(a) * (18 + tw / 2), ly = -Math.sin(a) * 24;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(13,16,32,0.7)';
+    ctx.strokeText(`${dist} m`, lx, ly);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`${dist} m`, lx, ly);
+    ctx.restore();
   }
 
   function drawCompass() {
@@ -640,5 +764,9 @@ export function createRenderer(canvas, assets) {
 
   return {
     setGame, layout, onTick, draw, buttonSpots,
+    /** The sea on screen, in metres, and the enemy arrow if one is showing (for tests). */
+    view() {
+      return { x: -ox / scale, y: -oy / scale, w: cw / scale, h: ch / scale, arrow };
+    },
   };
 }

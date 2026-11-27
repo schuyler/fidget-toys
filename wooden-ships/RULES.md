@@ -18,9 +18,15 @@ device, so playing another person waits for network play (see Later).
 
 ## The sea
 
-- A rectangle that fills the screen, with no scrolling, so both players
-  can always see both ships. In portrait, blue starts at the bottom and
-  red at the top.
+- A rectangle with the screen's shape, bigger than the screen. In
+  portrait, blue starts at the bottom and red at the top.
+- **The camera** shows 450 m across the screen's short side (about 11
+  ship lengths) and follows your ship, leading a little the way you're
+  moving. When the enemy is near, it pans toward the point between you so
+  both fit, but never so far that your ship leaves the middle 60% of the
+  screen. It stops at the edges of the sea.
+- When the enemy is off screen, an arrow on the screen's edge points at
+  her, with how far away she is.
 - The short side is 45 tiles of 22 m, 990 m of sea. The long side
   stretches to match the screen's shape (up to 110 tiles). A ship is
   40 m long, so the sea is about 25 ship lengths across.
@@ -29,8 +35,8 @@ device, so playing another person waits for network play (see Later).
 - The ships start 700 m apart along the long side, each 60 m to its own
   side of the centre line, pointing at each other with a little way on
   (3 m/s), so they pass rather than collide unless someone steers.
-- If the phone turns during a game, the sea keeps its shape and is
-  fitted to the new screen.
+- If the phone turns during a game, the sea keeps its shape; the camera
+  keeps showing 450 m across the new short side.
 - **Islands:** none, some (the default), or many. Generated from the
   game's seed, point-symmetric (rotated 180° about the centre), and kept
   clear of the start positions. *Some* is three blobs and their mirror
@@ -321,9 +327,9 @@ the duel shouldn't be built in ways that rule it out:
 - **Wind is a function of position and time,** not one global value.
   In the duel it's the same everywhere. A storm would be a moving patch
   of strong, shifting wind.
-- **The sea can be bigger than the screen.** The duel fits the screen,
-  but the renderer goes through a camera (world to screen) from the
-  start, so a scrolling sea is a camera change, not a rewrite.
+- **The sea can be bigger than the screen.** It already is: the
+  renderer draws through a camera that follows your ship, so a bigger
+  sea is a parameter change.
 - **The map is data in the sim:** a corner grid with places on it.
   Ports would be special tiles with a side and a battery.
 - **The CPU steers by goals** (close to fire, rake, flee, follow a route,
@@ -437,8 +443,12 @@ Each is a sketch, not a rule yet.
     carries through in 14 and 20 kts of wind, but not in 8: in light air
     you wear or you end up in irons. **(open: whether upwind is too slow
     to be fun)**
-  - **Ships are small on a phone:** 25 lengths across a 390 px screen is
-    about 16 px per ship. **(open: a smaller sea, or a zoomed camera)**
+  - **Ships were small on a phone:** with the whole sea on screen, 25
+    lengths across a 390 px screen made a ship about 16 px long. The
+    camera now zooms in to 450 m across (about 35 px per ship) and an
+    arrow points at the enemy when she's off screen. **(open: whether
+    450 m is the right zoom, and whether gun range, 300 m, should still
+    fit comfortably on screen)**
 
 - **The weather gauge.** In real fleet actions the upwind ship chose
   whether and when to fight, and the downwind ship could only run or

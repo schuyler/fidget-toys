@@ -189,8 +189,9 @@ After the Rame's Killer Swarm (rule 23.1). With it on:
   against every trooper in the target's cell (rule 9.35), and a blast hits
   everyone in each cell it reaches. That's the price of swarming.
   Overwatch still picks one target.
-- In the interface a swarm will be one counter with one plot and a split
-  action; the CPU already plays each swarm as one piece.
+- In the interface a swarm is one counter with one plot; the CPU also
+  plays each swarm as one piece. Nobody can split a swarm on purpose yet.
+  **(open: a split action)**
 
 Measured so far, swarms make the Vell worse, not better: bombs hit all
 three members, and the CPU doesn't yet play swarms well (it rarely dodges
@@ -242,7 +243,7 @@ from direct fire, and lob bombs, which need no line of sight.
 When you plot a shot, the game shows what it would deal if the target
 neither dodges nor moves, and how many dodge points would cancel it
 completely. You know the arithmetic; what you don't know is their
-orders.
+orders. Under the 1977 tables the loss is an average over the two dice.
 
 ## A turn
 
@@ -322,34 +323,74 @@ In any scenario, a side with no troopers left loses at once.
 
 ## Controls
 
-- **Plotting:** tap one of your troopers. Its pool appears as a row of
-  pips, with lost points shown as shock.
-  - Drag from the trooper to plot a path. Its cost fills pips as you go.
-  - Tap an enemy to aim at it, then use + and − to set fire points. The
-    preview sits beside the target.
-  - + and − set dodge and overwatch.
-- A **Commit** button ends plotting.
-- **Watching:** the turn plays back as shots first, then movement step
-  by step, with overwatch shots as they happen. A **Replay** button runs
-  the last turn again.
-- Victory hexes show their owner's colour. The turn counter shows how
-  many turns are left.
-- Everything on the field is visible, including enemy shock. Only
-  orders are secret. **(open: fog of war)**
-- Pan by dragging and pinch to zoom, as in Coreward Bound.
+Portrait first, built for a phone. You play the bottom squad, in blue.
+
+- **Looking around:** drag the map to scroll, pinch (or use the mouse
+  wheel) to zoom. Zoomed all the way out, the whole map fits.
+- **Selecting:** tap one of your troopers, or its chip in the bar at the
+  bottom. The cells it can reach are shaded, cells it can't see are
+  darkened, and enemies it can't shoot from where it stands are dimmed.
+- **Moving:** drag the trooper to where it should end up, or tap a shaded
+  cell. While you drag, a label says what the cell costs and how many
+  enemies could see it there. The route is the cheapest one, and among the
+  cheapest, the one that spends the least time in enemy view. Drop the
+  trooper back on itself to cancel the move. If the move needs points
+  you've put into dodge or overwatch, it takes them, dodge first. It never
+  takes points from a shot or a bomb.
+- **Shooting:** tap an enemy the trooper can see. A popover sets the
+  points and shows the preview (see Preview).
+- **Everything else:** tap the selected trooper again for a popover with
+  dodge, overwatch, **Bomb…** (then tap the cell to aim at; it shows the
+  blast, the chance it lands, and a warning if one of yours will be in it),
+  and quick orders:
+  - **⟳ Last:** last stage's shot (if the target is still in sight),
+    dodge and overwatch, without the move.
+  - **Hold + watch:** stay put, a third of the points into dodge, the rest
+    into overwatch.
+  - **To cover:** the cover in reach nearest a victory hex you don't hold,
+    the rest into dodge.
+  - **Fall back:** somewhere in reach no enemy can see, the rest into
+    dodge, so it can recover.
+
+  A quick order moves on to the next trooper with no orders.
+- **Swarms** (with the setting on) are one counter with one plot, which
+  every member carries out.
+- **Committing:** the bar shows the selected trooper's points as pips,
+  coloured by task, and what's left for stage 2. **Repeat all** gives
+  every trooper with no orders its last orders. **Commit** with troopers
+  still unplotted asks whether to repeat their last orders or leave them
+  idle.
+- **Watching:** the stage plays back in order: fire (troopers in command
+  first, as their own wave), bombs launching, movement step by step with
+  overwatch shots as they happen, then bombs going off, recovery and
+  captures. Tap to skip. **Log** lists every shot with its attack,
+  defence and dice roll, where each bomb landed, and the CPU's orders;
+  from there, **Replay stage** plays it again.
+- Victory hexes show their owner's colour, and the top bar shows the turn
+  and who holds what. Everything on the field is visible, including enemy
+  shock: the ring round each trooper is its pool left. Only orders are
+  secret. **(open: fog of war)**
+- The end screen shows how long you spent plotting and how many taps it
+  took, per plot. Whether plotting 4–8 troopers twice a turn is bearable
+  on a phone is the main thing the first playtests are for.
 
 ## Settings
 
+The browser game has six, remembered between visits:
+
 | Setting | Choices |
 |---|---|
-| Your faction | Compact, Orrin, Vell |
-| Enemy faction | Compact, Orrin, Vell |
-| Scenario | Meeting, Assault |
-| Your role (Assault) | Attacker, Defender |
+| You | Compact, Orrin, Vell |
+| Enemy | Compact, Orrin, Vell |
 | CPU | Easy, Hard |
-| Map | Small, Medium, Large |
+| Forces | Lighter (4 Orrin, 6 Compact or 6 Vell a side), Standard (6, 8 or 8) |
 | Terrain | Open, Some, Dense |
-| Noise | Off, On |
+| Vell swarms | Off, On |
+
+For playtesting, it plays Meeting with the 1977 rules: `combat=dice`,
+`defence=original`, `command=1`. The forces are the two best-measured
+candidates under those rules (see Notes) and live in one table in
+`src/settings.js`. Assault, map size and noise aren't offered yet.
 
 ## Parameters
 

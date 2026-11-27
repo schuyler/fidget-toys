@@ -3,6 +3,7 @@
 Small browser games, one per directory. No build step: plain ES modules,
 served as static files. The first toy is `dot-army/`; read its `RULES.md`
 before touching game logic, and `NETWORK.md` for online play.
+`star-troopers/` is turn-based; read its `RULES.md` before touching it.
 
 ## Running and checking
 
@@ -20,6 +21,8 @@ Browser checks need the static server on port 8765:
 (two tabs, `?relay=bc`), `dot-army/tools/e2e-online.cjs` (lobby, leaving,
 errors) and `multiplayer/tools/e2e-relay.cjs` (a game through a relay). The
 last two also need a relay: `node multiplayer/server.js`.
+`star-troopers/tools/e2e-local.cjs` plays a whole Star Troopers game through
+taps and drags (same server, no relay).
 
 ## Rules for dot-army code
 
@@ -40,6 +43,22 @@ last two also need a relay: `node multiplayer/server.js`.
 - Settings the player sees are six presets in `main.js` (`CHOICES`: CPU,
   Board, Speed, Spawns, Targets, Obstacles); the
   tuning parameters live in `DEFAULTS` in `sim.js` and are not exposed.
+
+## Rules for star-troopers code
+
+- The same determinism rule: `src/sim.js` (and `hex.js`, `rng.js`) use
+  integers and the seeded RNG only. `src/ai.js` only produces orders.
+- The interface never changes the game except through `resolveTurn`.
+  Drafting orders is `src/plot.js` and playback is `src/playback.js`: pure,
+  `// @ts-check`, no DOM, tested. `render.js` and `main.js` are presentation.
+- `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `plot.js`,
+  `playback.js`, `settings.js`.
+- A rule change means updating `sim.js`, a test, `RULES.md`, and the How
+  to play card in `index.html` together, then running
+  `node star-troopers/tools/headless.js` to check games still finish.
+- The player sees six settings (`src/settings.js`); the playtest rules
+  (dice, original defence, command, Meeting) are fixed there, and so are
+  the squad sizes (`FORCES`).
 
 ## Deploying
 

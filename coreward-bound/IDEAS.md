@@ -45,8 +45,10 @@ periphery hexes were ever visited.
   measure: add a switch to `DEFAULTS` and sweep it with `tools/headless.js`.
 - **Relics give everything except Focus.** A milder version: the core
   stays dangerous for the leader.
-- **One relic on the board at a time.** Slows the race a lot. Tried
-  three at once first.
+- **One relic on the board at a time.** Should slow the race a lot
+  (untested). The game keeps three at once for now.
+- **Are games long enough?** Still about 11 rounds in CPU games, almost
+  all ended by relics.
 - **Floor relics at your own settlement deliver themselves.** A relic
   lying in one of your working settlements (dropped by a carrier killed
   attacking it, or by the core hazard during a siege) is delivered at
@@ -74,10 +76,9 @@ periphery hexes were ever visited.
 
 ## Settlements
 
-- **Taken settlements work at once.** A settlement taken this turn is
-  treated like one founded this turn: no building, chaining or delivery
-  until its owner's next turn. The other choice is that only newly founded
-  ones wait.
+- **Taken settlements work at once.** Only newly founded settlements
+  would wait a turn. Today a settlement taken this turn waits too: no
+  building, chaining or delivery until its new owner's next turn.
 - **No research at a new settlement.** Research is still allowed with
   fleets that began the turn there.
 - **CPU research pace.** The CPU researches on a schedule: one more tech

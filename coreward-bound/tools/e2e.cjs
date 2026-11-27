@@ -48,9 +48,12 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     });
     check(target !== undefined, `${name}: there are hexes in reach`);
     await p.evaluate((t) => { window.corewardDebug.renderer.centerOn(t, { dur: 1 }); }, target);
-    await p.waitForTimeout(100);
+    await p.waitForTimeout(600);
+    const probe = () => p.evaluate(() => { const r = window.corewardDebug.renderer; return [[40, 90], [innerWidth - 40, 90], [innerWidth / 2, innerHeight / 3]].map(([x, y]) => r.cellAtScreen(x, y)).join(); });
+    const beforeAim = await probe();
     await p.mouse.click(vp.width / 2, vp.height / 2);
-    await p.waitForTimeout(200);
+    await p.waitForTimeout(600);
+    check(await probe() === beforeAim, `${name}: aiming doesn't move the map`);
     const aimed = await p.evaluate(() => window.corewardDebug.view.preview?.to ?? -1);
     check(aimed === target, `${name}: tapping a reachable hex aims there (${aimed} vs ${target})`);
     check(/on target/.test(await p.textContent('#panel')), `${name}: panel shows the odds`);
@@ -90,6 +93,15 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     await p.waitForFunction(() => { const g = window.corewardDebug.game; return g.current === 0 && !document.querySelector('#btn-end').disabled; }, null, { timeout: 15000 });
     const round = await p.textContent('#hud-turn');
     check(/Round 2/.test(round), `${name}: back to you in round 2 (${round})`);
+    await p.waitForTimeout(700); // the fit glide
+    const unseen = await p.evaluate(() => {
+      const d = window.corewardDebug, g = d.game, seen = new Set();
+      for (let y = 50; y < innerHeight - 70; y += 5) for (let x = 5; x < innerWidth - 5; x += 5) seen.add(d.renderer.cellAtScreen(x, y));
+      const mine = [...g.stacks.filter((s) => s.owner === 0).map((s) => s.cell), ...[...g.owner.keys()].filter((i) => g.owner[i] === 0)];
+      return mine.filter((c) => !seen.has(c)).length;
+    });
+    check(unseen === 0, `${name}: your turn starts with all your settlements and stacks on screen (${unseen} off screen)`);
+    check(await p.locator('#hud .ico.coin').count() === 2 && await p.locator('#hud .ico.flask').count() === 2, `${name}: the top bar shows the coin and flask for both sides`);
     // it may have settled on arrival or lost fleets in space, so: not "four fleets at home, nothing else"
     const cpuMoved = await p.evaluate(() => {
       const g = window.corewardDebug.game;

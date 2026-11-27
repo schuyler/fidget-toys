@@ -131,8 +131,8 @@ hits     = floor(strength * d6 / 10), minimum 1
   RP and nothing can be built there.
 - A taken settlement becomes yours, with its value lowered by 1
   (minimum 0). Like a new one, it isn't working until your next turn:
-  it can't build, anchor chain or over-range jumps, or take delivery of
-  a relic.
+  it can't build or grow, anchor chain or over-range jumps, or take
+  delivery of a relic.
 - **Conquest roll:** each successful take also rolls for a tech. On a 5
   or 6 you copy one random tech of the loser's that you don't already
   have. Relics can't be taken this way.
@@ -184,7 +184,8 @@ There's no tech tree and no prerequisites.
   leaves any others lying there, and a stack already carrying one can't
   pick up another. Whoever jumps carries the relic with them. A jump that
   would put two of your relics in one hex isn't allowed, unless it's into
-  one of your settlements, where the relic is delivered on arrival.
+  one of your settlements (not one founded or taken this turn), where the
+  relic is delivered on arrival.
 - A stack carrying a relic must reach one of your settlements (that
   isn't besieged, and wasn't founded or taken this turn) to deliver it.
   - Founding a settlement where the carrier stands, or taking one, works
@@ -195,7 +196,7 @@ There's no tech tree and no prerequisites.
     relic drops in that hex. Anyone can pick it up the same way: hold the
     hex for a turn.
   - If the stack is lost in space, the relic goes back to a free hex at
-    the centre.
+    the centre, or waits for one to come free.
 - A **delivered relic** counts as a tech that gives +1 to all four types,
   and it counts toward a relic win.
 - Delivered relics can't be shared, traded or taken by conquest.
@@ -214,11 +215,11 @@ with 1 extra RP to make up for it.
 At the start of your turn:
 
 1. Pending relics appear (once per round).
-2. **Income and upkeep:** gain RP equal to the total value of your
+2. Carriers at your settlements deliver their relics.
+3. **Income and upkeep:** gain RP equal to the total value of your
    settlements that aren't besieged. Pay 1 RP for each fleet beyond the
    third in any one hex. Fleets you can't pay for are lost, from your
    biggest stacks.
-3. Carriers at your settlements deliver their relics.
 4. Stacks holding a relic's hex pick one up.
 5. Stacks in rival settlements try again to take them.
 

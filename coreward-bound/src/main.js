@@ -56,9 +56,11 @@ const view = {
 
 // Icons for the HUD, drawn once; colour comes from the text colour, size from CSS.
 const ICONS = {
-  coin: '<svg class="ico coin" viewBox="0 0 16 16" aria-label="RP" role="img"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="6.6" y="4.6" width="2.8" height="6.8" rx="1.2" fill="currentColor"/></svg>',
+  coin: '<svg class="ico coin" viewBox="0 0 16 16" aria-label="RP" role="img"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
   flask: '<svg class="ico flask" viewBox="0 0 16 16" aria-label="Techs" role="img"><path d="M6 2h4M6.5 2v4.5L2.8 13a1 1 0 0 0 .9 1.5h8.6a1 1 0 0 0 .9-1.5L9.5 6.5V2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M4.6 10.5h6.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
 };
+
+for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = ICONS[/** @type {'coin'|'flask'} */ (/** @type {HTMLElement} */ (el).dataset.icon)];
 
 // ------------------------------------------------------------------ game flow
 
@@ -347,7 +349,7 @@ function renderPanel() {
     if (o === YOU) {
       lines.push(btn('build', `Build fleet (${g.params.fleetCost} RP)`, opts.build) + btn('grow', 'Grow +1 (1 fleet)', opts.grow));
       const fresh = g.founded[cell] === g.turn;
-      if (fresh) lines.push('<span class="why">Ready next turn: until then it can\'t build or grow, launch long jumps, let stacks chain on, or take a relic.</span>');
+      if (fresh) lines.push('<span class="why">Ready next turn: until then it can\'t build or grow, launch long jumps, let stacks chain on, or take delivery of a relic.</span>');
       const why = [opts.build, opts.grow].filter((x) => x && !/^Not your/.test(x) && !(fresh && /^Founded this turn/.test(x)));
       if (why.length) lines.push(`<span class="why">${[...new Set(why)].join(' ')}</span>`);
     }
@@ -414,7 +416,7 @@ function openCompare() {
   const techs = (/** @type {import('./sim.js').Civ} */ c) => (c.techs.length ? c.techs.map((t) => TECH_NAMES[t]).join(', ') : 'none');
   const lvl = (/** @type {number} */ c, /** @type {number} */ t) => {
     const n = level(game, c, t);
-    return n ? `${n}: ${TECH_EFFECTS[t].replace('+1', `+${n}`)}` : '0';
+    return n ? `${n}: ${TECH_EFFECTS[t]}${n > 1 ? `, ×${n}` : ''}` : '0';
   };
   $('compare-body').innerHTML = `<table><thead><tr><th></th><th class="you">You</th><th class="cpu">CPU</th></tr></thead><tbody>`
     + row('Banked RP', `${a.rp}`, `${b.rp}`)
@@ -441,7 +443,7 @@ function narrate(e) {
   const mine = 'civ' in e && e.civ === YOU;
   switch (e.type) {
     case 'jump':
-      if (e.lost) toast(mine ? `Lost in space: ${e.n} fleet${e.n > 1 ? 's' : ''}${e.relics ? ' and the relic, which returns to the core' : ''}.` : 'A CPU stack was lost in space.', mine ? 'bad' : 'cpu');
+      if (e.lost) toast(mine ? `Lost in space: ${e.n} fleet${e.n > 1 ? 's' : ''}${e.relics ? ' and the relic, which goes back to the centre' : ''}.` : 'A CPU stack was lost in space.', mine ? 'bad' : 'cpu');
       else if (e.scatter && mine) toast(`Missed: scattered ${e.scatter} hex${e.scatter > 1 ? 'es' : ''}${e.losses ? `, lost ${e.losses}` : ''}.`, 'bad');
       break;
     case 'combat': {

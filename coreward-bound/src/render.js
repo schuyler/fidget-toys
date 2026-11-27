@@ -73,7 +73,7 @@ export function createRenderer(canvas) {
     dirty = true;
   }
 
-  /** The soft glow of the arms and the nucleus, painted once per game in world space. */
+  /** The soft glow of the arms and the core, painted once per game in world space. */
   function buildNebula() {
     if (!game) return;
     const g = game.grid;

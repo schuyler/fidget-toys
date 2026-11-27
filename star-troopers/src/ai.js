@@ -13,7 +13,7 @@
 import { createRng } from './rng.js';
 import { hexDist, reflect } from './hex.js';
 import {
-  living, usable, spendable, enterCost, blastCells, meanBlastShock, landChance, dodgeValue, BLAST, los, defenceOf, meanFireShock, occupant, held, ROCK, coverValue, isCover, idle,
+  living, usable, spendable, enterCost, blastCells, meanBlastShock, landChance, dodgeValue, BLAST, los, defenceOf, meanFireShock, occupant, held, ROCK, coverValue, isCover, idle, occupants, canShare,
 } from './sim.js';
 
 /** @typedef {import('./sim.js').Game} Game */
@@ -26,7 +26,7 @@ const SUPPORT_RANGE = 4;
 /**
  * @param {number} side
  * @param {number} seed
- * @param {{level?: 'easy'|'hard', onDecide?: (info: {trooper: Trooper, goal: number, chosen: any, cands: any[], threatAt: Map<number, number>}) => void}} [opts]
+ * @param {{level?: 'easy'|'hard', bombAware?: boolean, onDecide?: (info: {trooper: Trooper, goal: number, chosen: any, cands: any[], threatAt: Map<number, number>}) => void}} [opts]
  *   onDecide is a debugging hook: it sees every candidate and the pick.
  */
 export function createAI(side, seed, opts = {}) {
@@ -71,9 +71,15 @@ export function createAI(side, seed, opts = {}) {
     const allocated = foes.map(() => 0);      // shock we expect friends to deal each foe
     const urgency = 1 + (2 * game.turn) / p.turnLimit;
 
+    // A swarm (Vell sharing a cell) is planned as one piece: one order,
+    // within its most-hurt member's points, copied to every member.
+    const planned = new Set();
     for (const t of mine) {
-      const budget = spendable(game, t);
-      const field = reach(game, t, budget);
+      if (planned.has(t.id)) continue;
+      const group = p.swarm ? mine.filter((m) => m.id === t.id || (m.cell === t.cell && canShare(game, [t, m]))) : [t];
+      const size = group.length;
+      const budget = Math.min(...group.map((m) => spendable(game, m)));
+      const field = reach(game, t, budget, group);
       const goal = /** @type {number} */ (goals.get(t.id));
       const gd = /** @type {Int32Array} */ (goalDist.get(goal));
 
@@ -143,7 +149,12 @@ export function createAI(side, seed, opts = {}) {
           let bestTarget = -1, dealt = 0, killBonus = 0;
           if (sp.fire > 0) {
             for (const f of targets) {
-              const d = expectedShock(game, t, f, sp.fire);
+              // Three in a swarm pool one shot at triple the attack; two
+              // fire twice. Fire hits everyone in the target's cell.
+              const pooled = size === 3 ? 3 : 1;
+              let d = 0;
+              for (const v of occupants(game, f.cell)) d += expectedShock(game, t, v, sp.fire * pooled);
+              if (size === 2) d *= 2;
               const fi = foes.indexOf(f);
               const remaining = usable(f) - allocated[fi];
               const useful = Math.min(d, Math.max(0, remaining));
@@ -155,8 +166,12 @@ export function createAI(side, seed, opts = {}) {
           const launching = (sp.launch ?? 0) > 0 && bomb !== null;
           const order = { path, target: bestTarget, fire: bestTarget >= 0 ? sp.fire : 0, dodge: sp.dodge, overwatch: sp.overwatch,
             launch: launching ? sp.launch : 0, launchAt: launching && bomb ? bomb.cell : -1 };
-          let score = scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, /** @type {number} */ (threatAt.get(end)), taker)
-            + dealt + killBonus + (launching && bomb ? bomb.value : 0);
+          // In a swarm every member's dodge counts for all, and anything
+          // that hits the cell hits each of them.
+          const scored = size > 1 ? { ...order, dodge: order.dodge * size } : order;
+          let score = scoreOrder(game, t, scored, end, goal, gd, foes, see, urgency, /** @type {number} */ (threatAt.get(end)), taker, opts.bombAware ?? true)
+            + dealt + killBonus + (launching && bomb ? bomb.value * size : 0);
+          if (size > 1) score -= (size - 1) * 0.4 * (1 + (2 * t.shock) / t.pool) * /** @type {number} */ (threatAt.get(end));
           // Points held back for the second stage are worth the fire they
           // could dodge there: each one takes Aim off every shot at it, up
           // to the danger it will actually be in.
@@ -172,9 +187,12 @@ export function createAI(side, seed, opts = {}) {
       cands.sort((a, b) => b.score - a.score);
       const pick = choose(cands, level, rng);
       opts.onDecide?.({ trooper: t, goal, chosen: pick, cands, threatAt });
-      if (!pick) { orders[t.id] = idle(); continue; }
-      orders[t.id] = pick.order;
-      friendPlans.push({ start: t.cell, path: pick.order.path });
+      if (!pick) { for (const m of group) { orders[m.id] = idle(); planned.add(m.id); } continue; }
+      for (const m of group) {
+        orders[m.id] = { ...pick.order, path: pick.order.path.slice() };
+        friendPlans.push({ start: m.cell, path: pick.order.path });
+        planned.add(m.id);
+      }
       const endCell = pick.order.path.length ? pick.order.path[pick.order.path.length - 1] : t.cell;
       reserved.add(endCell);
       if (pick.target >= 0) {
@@ -418,8 +436,9 @@ function threatNextTurn(game, t, cell, foes, see, friendEnds) {
  * @param {(a: number, b: number) => boolean} see @param {number} urgency
  * @param {number} threat  expected shock next turn at the end cell
  * @param {boolean} taker  going for the hex itself, rather than supporting
+ * @param {boolean} [bombAware]  weigh bombs launched at it this stage
  */
-function scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, threat, taker) {
+function scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, threat, taker, bombAware = true) {
   const p = game.params;
   const g = game.grid;
   let score = 0;
@@ -437,6 +456,24 @@ function scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, threat, t
   }
   score -= incoming * 1.1 * care;
   if (t.shock + incoming >= t.pool) score -= 6;
+
+  // Bombs launched at where it stands this stage go off after movement.
+  // It escapes by leaving the blast radius, or makes them scatter by
+  // dodging: their accuracy is countered by the dodge of everyone in the
+  // blast radius (for a swarm, all of its members).
+  if (p.launched && bombAware) {
+    const launchers = foes.filter((f) => spendable(game, f) >= p.minLaunch);
+    if (launchers.length) {
+      const reach = blastCells(game, t.cell).find((b) => b.cell === end);
+      if (reach) {
+        const best = launchers.reduce((a, f) => (f.aim > a.aim ? f : a));
+        const points = Math.min(spendable(game, best), p.stages === 2 ? p.stageCap : Infinity);
+        const sd = best.aim * points - (Math.ceil(hexDist(g, best.cell, t.cell) / 5) + order.dodge * t.aim);
+        const bombs = meanBlastShock(game, BLAST[reach.dist], end) * landChance(sd) * Math.min(1, 0.25 * launchers.length);
+        score -= bombs * 1.1 * care;
+      }
+    }
+  }
 
   // Overwatch risk along the way, and the fire it will draw next turn
   // where it ends up.
@@ -505,7 +542,7 @@ function choose(cands, level, rng) {
  * other troopers stand in at the start of the turn.
  * @param {Game} game @param {Trooper} t @param {number} budget
  */
-function reach(game, t, budget) {
+function reach(game, t, budget, group = [t]) {
   const g = game.grid;
   const cost = new Int32Array(g.N).fill(0x3fffffff);
   const prev = new Int32Array(g.N).fill(-1);
@@ -523,8 +560,10 @@ function reach(game, t, budget) {
         const d = t.side === 0 ? k : (6 - k) % 6;
         const n = g.nbr[c * 6 + d];
         if (n < 0 || game.terrain[n] === ROCK) continue;
-        const o = occupant(game, n);
-        if (o && o.id !== t.id) continue;
+        // Cells others stand in are off limits, unless the whole group
+        // could share with them (a swarm joining friends).
+        const others = occupants(game, n).filter((o) => !group.includes(o));
+        if (others.length && !canShare(game, [...group, ...others])) continue;
         const nc = b + enterCost(game, c, n);
         if (nc <= budget && nc < cost[n]) { cost[n] = nc; prev[n] = c; buckets[nc].push(n); }
       }

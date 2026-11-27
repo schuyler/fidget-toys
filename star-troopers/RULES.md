@@ -174,6 +174,30 @@ after losing their leader) but changes win rates by only a point or two.
 Most Compact damage comes from bombs, and losses before launching rarely
 cancel one.
 
+### Swarms (setting, off by default)
+
+After the Rame's Killer Swarm (rule 23.1). With it on:
+
+- Up to **three Vell may share a cell**. Nobody else shares. Vell deploy
+  in stacks of three, after the original's Rame swarm.
+- **Pooled dodge:** every Vell in a cell counts the dodge of all of them
+  against direct fire.
+- **Pooled fire:** when exactly three share a cell and all put the same
+  points into a shot at the same target, it's one attack at three times
+  the strength (List's "maximum effort" was 72).
+- **Fire hits the whole cell:** a direct-fire shot is resolved, separately,
+  against every trooper in the target's cell (rule 9.35), and a blast hits
+  everyone in each cell it reaches. That's the price of swarming.
+  Overwatch still picks one target.
+- In the interface a swarm will be one counter with one plot and a split
+  action; the CPU already plays each swarm as one piece.
+
+Measured so far, swarms make the Vell worse, not better: bombs hit all
+three members, and the CPU doesn't yet play swarms well (it rarely dodges
+enough to make bombs scatter, and never splits). In the original the
+Rame swarms also flew, with cheap movement and full countermeasures in
+the air, which we don't model.
+
 ### Launched weapons
 
 Every trooper carries guided bombs, after the original's Guided Positron
@@ -346,6 +370,7 @@ In any scenario, a side with no troopers left loses at once.
 | `surplusPct` | 120 | Attacker's value as a percentage of the defender's |
 | `holdToWin` | 2 | Victory hexes the attacker needs in Assault |
 | `turnLimit` | 12 | Turns before a scenario is decided |
+| `swarm` | 0 | Vell swarms on (1) or off (0) |
 | `command` | 0 | Command Communication on (1) or off (0) |
 | `combat` | formula | Damage: `formula`, `dice` (the 1977 tables) or `mean` (their averages) |
 | `defence` | draft | `draft`, or `original` (terrain values, 1 per 10 cells of range, 1 per point moved) |
@@ -487,6 +512,14 @@ None of this is in the first version, but it's the plan.
       (53, 70 and 55: Orrin over Compact, Vell over Compact, Orrin over
       Vell) and 4 / 6 / 6 (38, 68, 54), over 300 games a pairing.
     - **(open: adopt the 1977 tables as the default, and which forces)**
+  - **The CPU is now a big factor.** Teaching it that dodging and leaving
+    the blast radius protect against bombs made it clearly better as the
+    Compact and the Orrin (beating the old CPU 148–52 and 133–65 in
+    mirror matches) but no better as the Vell (94–100). Vell against
+    Compact at 6 a side dropped from 67% to 34% as a result. Every
+    balance figure here is partly a measure of how well the CPU plays
+    each faction, so CPU changes need checking against the old CPU
+    before their balance effects are trusted.
   - Most games still run to the turn limit and are settled by hexes
     held.
   - History, briefly: one-stage turns with a 6-point shot cap left the

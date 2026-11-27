@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createGame, resolveTurn, checkOrder, squadSizes, los, preview, stateHash, idle, spendable, blastCells,
-  fireLoss, meanFireShock, blastLoss, landChance, defenceOf, FIRE_CRT, inCommand,
+  fireLoss, meanFireShock, blastLoss, landChance, defenceOf, FIRE_CRT, inCommand, canShare,
   cellAt, ROCK, RUINS, HIGH, BRUSH, BUILDING, DRAW, DEFAULTS,
 } from '../src/sim.js';
 import { createGrid, reflect, axialToIndex, linePairs } from '../src/hex.js';
@@ -444,6 +444,64 @@ test('a trooper hit by fire still gets its launch off in the same part of the st
   const game = board([{ side: 0, cell: C(2, 9), faction: 'vell' }, { side: 1, cell: C(4, 9) }, { side: 0, cell: C(9, 3) }]);
   const ev = resolveTurn(game, orders(game, { 0: { target: 1, fire: 6 }, 1: { launch: 3, launchAt: C(9, 3) } }));
   assert.equal(ev.launches.length, 1);
+});
+
+const V = 'vell';
+
+test('swarms: up to three Vell share a cell; nobody else does', () => {
+  const g = createGame({ swarm: 1, faction0: V, squad0: 7 });
+  const vell = g.troopers.filter((t) => t.side === 0);
+  const cells = new Map();
+  for (const t of vell) cells.set(t.cell, (cells.get(t.cell) ?? 0) + 1);
+  assert.deepEqual([...cells.values()], [3, 3, 1]);
+  const [a, b, c, d] = vell;
+  assert.ok(canShare(g, [a, b, c]) && !canShare(g, [a, b, c, d]));
+  const compact = g.troopers.filter((t) => t.side === 1);
+  assert.ok(!canShare(g, [compact[0], compact[1]]) && !canShare(g, [a, compact[0]]));
+  assert.ok(!canShare(createGame({ faction0: V }), createGame({ faction0: V }).troopers.slice(0, 2)));
+});
+
+test('swarms move together, and a fourth Vell or a Compact trooper can\'t join', () => {
+  const at = C(4, 9), to = C(5, 9);
+  const game = board([
+    { side: 0, cell: at, faction: V }, { side: 0, cell: at, faction: V }, { side: 0, cell: at, faction: V },
+    { side: 0, cell: C(5, 10), faction: V }, { side: 0, cell: C(6, 10) },
+    { side: 1, cell: C(6, 1) },
+  ], {}, { swarm: 1 });
+  resolveTurn(game, orders(game, { 0: { path: [to] }, 1: { path: [to] }, 2: { path: [to] }, 3: { path: [to] }, 4: { path: [to] } }));
+  // all five wanted one cell: nobody gets in, since together they can't share
+  assert.deepEqual(game.troopers.slice(0, 5).map((t) => t.cell), [at, at, at, C(5, 10), C(6, 10)]);
+  resolveTurn(game, orders(game, { 0: { path: [to] }, 1: { path: [to] }, 2: { path: [to] } }));
+  assert.deepEqual(game.troopers.slice(0, 3).map((t) => t.cell), [to, to, to]);
+});
+
+test('a swarm pools its dodge, and pools a shot when all three plot the same one', () => {
+  const at = C(2, 9);
+  const mk = () => board([
+    { side: 0, cell: at, faction: V }, { side: 0, cell: at, faction: V }, { side: 0, cell: at, faction: V },
+    { side: 1, cell: C(8, 9) },
+  ], {}, { swarm: 1, combat: 'mean' });
+  const game = mk();
+  // three shots of 2 points (attack 8 each) pool into one of attack 24
+  let ev = resolveTurn(game, orders(game, { 0: { target: 3, fire: 2 }, 1: { target: 3, fire: 2 }, 2: { target: 3, fire: 2 } }));
+  assert.deepEqual(ev.shots.map((x) => x.attack), [24]);
+  const split = mk();
+  ev = resolveTurn(split, orders(split, { 0: { target: 3, fire: 2 }, 1: { target: 3, fire: 2 }, 2: { target: 3, fire: 1 } }));
+  assert.deepEqual(ev.shots.map((x) => x.attack), [8, 8, 4]);
+  // the Compact shoots back at one of them: two of the swarm dodging 1 each (x4) protects all three
+  const dodge = mk();
+  ev = resolveTurn(dodge, orders(dodge, { 0: { dodge: 1 }, 1: { dodge: 1 }, 3: { target: 2, fire: 6 } }));
+  assert.ok(ev.shots.every((x) => x.defence === 3 + 8));   // open 0 + range 3 (6 cells / 2) + pooled dodge 8
+});
+
+test('fire at a swarm hits every member, each separately', () => {
+  const at = C(6, 9);
+  const game = board([
+    { side: 0, cell: at, faction: V }, { side: 0, cell: at, faction: V }, { side: 0, cell: at, faction: V },
+    { side: 1, cell: C(2, 9) },
+  ], {}, { swarm: 1 });
+  const ev = resolveTurn(game, orders(game, { 3: { target: 1, fire: 6 } }));
+  assert.deepEqual(ev.shots.map((x) => x.to).sort(), [0, 1, 2]);
 });
 
 test('Assault squads: the attacker fields at least 1.2x the defender\'s value', () => {

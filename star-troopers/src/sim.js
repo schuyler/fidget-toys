@@ -86,6 +86,7 @@ export const DEFAULTS = {
   hexTerrain: 'building',   // what victory hexes stand on: 'building' | 'ruins' | 'brush' | 'open'
   combat: 'formula',        // damage: 'formula' (margin / damageDivisor), 'dice' (the 1977 tables, 2d6) or 'mean' (the tables' averages)
   defence: 'draft',         // 'draft' or 'original' (terrain values, +1 per 10 hexes of range, +1 per point spent moving)
+  swarm: 0,                 // Killer Swarm (rule 23.1): 1 = up to 3 Vell share a cell, pooling dodge and fire
   command: 0,               // Command Communication (rule 16): 1 = troopers in command fire and launch first
   noise: 0,
   dodgeAimCap: 0,           // tuning knob: dodge counts at most this much per point (0 = full Aim)
@@ -310,8 +311,13 @@ function generate(game) {
   for (const side of [0, 1]) {
     const row = side === 0 ? grid.H - 3 : 2;
     const n = sizes[side];
+    // With swarms on, Vell deploy in stacks of up to three, after the
+    // original's Rame swarm of three.
+    const stack = params.swarm && FACTIONS[sideFaction(game, side)].alwaysInCommand ? 3 : 1;
+    const spots = Math.ceil(n / stack);
     for (let k = 0; k < n; k++) {
-      const col = Math.min(grid.W - 1, Math.floor(((2 * k + 1) * grid.W) / (2 * n)));
+      const spot = Math.floor(k / stack);
+      const col = Math.min(grid.W - 1, Math.floor(((2 * spot + 1) * grid.W) / (2 * spots)));
       const t = addTrooper(game, side, sideFaction(game, side), cellAt(grid, col, row));
       t.dugIn = side === game.defender;
     }
@@ -371,6 +377,22 @@ export function spendable(game, t) {
 /** Troopers still in the game. */
 export function living(/** @type {Game} */ game, side = -1) {
   return game.troopers.filter((t) => !t.down && (side < 0 || t.side === side));
+}
+
+/** Every living trooper in a cell (more than one only for a Vell swarm). */
+export function occupants(/** @type {Game} */ game, /** @type {number} */ cell) {
+  return game.troopers.filter((t) => !t.down && t.cell === cell);
+}
+
+/**
+ * Can these troopers share one cell? One trooper always can; with swarms
+ * on, so can up to three Vell of the same side (rule 23.1).
+ * @param {Game} game @param {Trooper[]} group
+ */
+export function canShare(game, group) {
+  if (group.length <= 1) return true;
+  if (!game.params.swarm || group.length > 3) return false;
+  return group.every((t) => FACTIONS[t.faction].alwaysInCommand && t.side === group[0].side);
 }
 
 /** The living trooper in a cell, or null. */
@@ -739,10 +761,17 @@ export function resolveTurn(game, orders) {
   /**
    * @param {'fire'|'overwatch'} kind @param {Trooper} from @param {Trooper} to
    * @param {number} points @param {number} step @param {number[]} pending
+   * @param {number} [shooters]  how many swarm members pooled this shot
    */
-  const shoot = (kind, from, to, points, step, pending) => {
-    const attack = points * from.aim;
-    const defence = defenceOf(game, to, from.cell, ord[to.id]);
+  const shoot = (kind, from, to, points, step, pending, shooters = 1) => {
+    const attack = points * from.aim * shooters;
+    // A swarm pools its dodge: every Vell in the cell counts all of it.
+    let defence = defenceOf(game, to, from.cell, ord[to.id]);
+    if (p.swarm) {
+      for (const m of occupants(game, to.cell)) {
+        if (m.id !== to.id && canShare(game, [m, to])) defence += dodgeValue(game, m, ord[m.id].dodge);
+      }
+    }
     let { shock, miss } = fireLoss(game, attack, defence);
     if (!miss && p.noise > 0) shock = Math.max(0, shock + [-1, 0, 0, 1][game.rng.int(4)] * p.noise);
     pending[to.id] += shock;
@@ -778,6 +807,8 @@ export function resolveTurn(game, orders) {
     const taken = game.troopers.map(() => 0);
     for (const commandPart of [true, false]) {
       const pending = game.troopers.map(() => 0);
+      /** @type {Map<number, {shooters: Trooper[], target: number, points: number}>} */
+      const shots = new Map();
       for (const t of living(game)) {
         if (first[t.id] !== commandPart) continue;
         const o = ord[t.id];
@@ -785,8 +816,30 @@ export function resolveTurn(game, orders) {
         const fire = Math.max(0, o.fire - lost);
         lost -= o.fire - fire;
         const launch = Math.max(0, o.launch - lost);
-        if (fire > 0) shoot('fire', t, game.troopers[o.target], fire, -1, pending);
+        if (fire > 0) shots.set(t.id, { shooters: [t], target: o.target, points: fire });
         if (launch > 0 && launch >= p.minLaunch) launches.push({ t, from: t.cell, aimed: o.launchAt, points: launch });
+      }
+      // Killer Swarm: exactly three Vell in a cell, all putting the same
+      // points into a shot at the same target, make one pooled attack.
+      if (p.swarm) {
+        for (const t of living(game)) {
+          const mine = shots.get(t.id);
+          if (!mine) continue;
+          const mates = occupants(game, t.cell);
+          if (mates.length !== 3 || !canShare(game, mates)) continue;
+          const same = mates.map((m) => shots.get(m.id));
+          if (same.every((x) => x && x.target === mine.target && x.points === mine.points && x.shooters.length === 1)) {
+            for (const m of mates) shots.delete(m.id);
+            shots.set(t.id, { shooters: mates, target: mine.target, points: mine.points });
+          }
+        }
+      }
+      // Direct fire is aimed at a hex and hits everyone in it, each
+      // resolved separately (rule 9.35).
+      for (const { shooters, target, points } of shots.values()) {
+        for (const victim of occupants(game, game.troopers[target].cell)) {
+          shoot('fire', shooters[0], victim, points, -1, pending, shooters.length);
+        }
       }
       for (const t of game.troopers) taken[t.id] += pending[t.id];
       applyShock(pending, -1);
@@ -809,15 +862,18 @@ export function resolveTurn(game, orders) {
       let changed = true;
       while (changed) {
         changed = false;
-        /** @type {Map<number, number>} */
-        const claims = new Map();
-        for (const cell of want.values()) claims.set(cell, (claims.get(cell) ?? 0) + 1);
+        // Who would be in each cell after this step: those staying put,
+        // plus those moving in. It has to be a group that can share.
+        /** @type {Map<number, Trooper[]>} */
+        const after = new Map();
+        for (const t of living(game)) {
+          const c = want.get(t.id) ?? t.cell;
+          after.set(c, [...(after.get(c) ?? []), t]);
+        }
         for (const [id, cell] of want) {
-          const occ = occupant(game, cell);
-          const contested = /** @type {number} */ (claims.get(cell)) > 1;
-          const heldStill = occ !== null && !want.has(occ.id);
-          const swap = occ !== null && want.get(occ.id) === game.troopers[id].cell;
-          if (contested || heldStill || swap) {
+          const crowded = !canShare(game, /** @type {Trooper[]} */ (after.get(cell)));
+          const swap = occupants(game, cell).some((o) => want.get(o.id) === game.troopers[id].cell);
+          if (crowded || swap) {
             want.delete(id);
             stopped[id] = 1;
             ev.blocked.push({ id, step: s });
@@ -869,8 +925,7 @@ export function resolveTurn(game, orders) {
       const rangeRating = Math.ceil(range / 5);
       let cm = 0;
       for (const { cell } of blastCells(game, L.aimed)) {
-        const occ = occupant(game, cell);
-        if (occ) cm += dodgeValue(game, occ, ord[occ.id].dodge);
+        for (const occ of occupants(game, cell)) cm += dodgeValue(game, occ, ord[occ.id].dodge);
       }
       const sd = L.t.aim * L.points - (rangeRating + cm);
       let landed = L.aimed;
@@ -883,9 +938,7 @@ export function resolveTurn(game, orders) {
       }
       ev.launches.push({ from: L.t.id, aimed: L.aimed, landed, sd });
       if (landed < 0) continue;
-      for (const { cell, dist } of blastCells(game, landed)) {
-        const occ = occupant(game, cell);
-        if (!occ) continue;
+      for (const { cell, dist } of blastCells(game, landed)) for (const occ of occupants(game, cell)) {
         const blast = BLAST[dist];
         const { shock, stun } = blastLoss(game, blast, cell);
         pending[occ.id] += shock;

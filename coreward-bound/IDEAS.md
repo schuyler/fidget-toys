@@ -188,8 +188,9 @@ periphery hexes were ever visited.
 - **What Outreach does.** Both entries above come from Outreach, as did
   the stance table under "More players". Sources: a reproduction of rules
   1.0–19.0 on [RulesPal](https://rulespal.com/outreach/rulebook), and
-  fan-made revised rules, rules summary and Fate Table supplied by the
-  owner. The fan table may differ from SPI's original chart.
+  fan-made revised rules, rules summary and Fate Table, freely
+  downloadable from the game's files on BoardGameGeek. The fan table may
+  differ from SPI's original chart.
   - **The Fate Table.** Every turn each player rolls a d6 against their
     total SP (the summed value of their star gates, which is also their
     income). Low rolls are bad. +1 per X result on that turn's

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createGame, resolveTurn, checkOrder, squadSizes, los, preview, stateHash, idle, spendable, blastCells,
+  fireLoss, meanFireShock, blastLoss, landChance, defenceOf, FIRE_CRT,
   cellAt, ROCK, RUINS, HIGH, BRUSH, BUILDING, DRAW, DEFAULTS,
 } from '../src/sim.js';
 import { createGrid, reflect, axialToIndex, linePairs } from '../src/hex.js';
@@ -352,7 +353,59 @@ test('bombs only scatter when the scatter differential is negative', () => {
     const good = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], {}, { seed });
     assert.equal(resolveTurn(good, orders(good, { 0: { launch: 5, launchAt: C(6, 9) } })).launches[0].landed, C(6, 9));
   }
-  assert.ok(scattered >= 38 && scattered <= 60, `scattered ${scattered} of 60, expected about 50`);
+  assert.equal(scattered, 60);   // at -6 or worse the table always scatters
+});
+
+test('the 1977 fire table: averages in mean mode, a column value in dice mode, nothing under +1', () => {
+  const mean = createGame({ combat: 'mean' }, { troopers: [] });
+  assert.deepEqual([1, 3, 5, 9, 14].map((d) => fireLoss(mean, 10 + d, 10).shock), [1, 4, 6, 9, 9]);
+  assert.deepEqual(fireLoss(mean, 10, 10), { shock: 0, miss: true });
+  assert.ok(Math.abs(meanFireShock({ ...DEFAULTS, combat: 'dice' }, 13, 10) - 155 / 36) < 1e-9);
+  const dice = createGame({ combat: 'dice', seed: 3 }, { troopers: [] });
+  const column = new Set(FIRE_CRT.map((row) => row[2]));
+  for (let i = 0; i < 50; i++) assert.ok(column.has(fireLoss(dice, 13, 10).shock));
+});
+
+test('the 1977 launched weapons table: odds against the terrain value', () => {
+  const g = createGame({ combat: 'mean' }, { troopers: [], terrain: [[C(6, 9), BUILDING]] });
+  assert.equal(blastLoss(g, 30, C(2, 9)).shock, 8);   // 30 to 1 in the open: average 8.25
+  assert.equal(blastLoss(g, 15, C(2, 9)).shock, 3);   // 15 to 1: average 3.2
+  assert.equal(blastLoss(g, 30, C(6, 9)).shock, 1);   // 5 to 1 on a building: average 0.67
+  assert.equal(blastLoss(g, 5, C(6, 9)).shock, 0);    // under 1 to 1: no effect
+});
+
+test('dice mode stuns, and a stunned trooper does not recover', () => {
+  let stuns = 0;
+  for (let seed = 1; seed <= 60; seed++) {
+    const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9), shock: 2 }],
+      { terrain: [[C(6, 9), BUILDING]] }, { combat: 'dice', seed });
+    const ev = resolveTurn(game, orders(game, { 0: { launch: 6, launchAt: C(6, 9) } }));
+    if (ev.stunned.includes(1)) {
+      stuns++;
+      assert.equal(game.troopers[1].shock, 2);  // no loss, but no recovery either
+    }
+  }
+  assert.ok(stuns >= 8 && stuns <= 32, `stunned ${stuns} of 60, expected about 18`);   // rolls of 6 or 7: 11 in 36
+});
+
+test('the 1977 scatter table: landing chances, and scatter of up to three hexes', () => {
+  assert.deepEqual([0, -1, -2, -3, -4, -5, -6, -9].map(landChance), [1, 4 / 6, 3 / 6, 2 / 6, 2 / 6, 1 / 6, 0, 0]);
+  const far = new Set();
+  for (let seed = 1; seed <= 40; seed++) {
+    const g = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], {}, { seed });
+    const ev = resolveTurn(g, orders(g, { 0: { launch: 3, launchAt: C(6, 9) }, 1: { dodge: 9 } }));
+    const { landed } = ev.launches[0];
+    assert.notEqual(landed, C(6, 9));                // SD -13: always scatters
+    if (landed >= 0) far.add(Math.max(Math.abs(g.grid.q[landed] - g.grid.q[C(6, 9)]), Math.abs(g.grid.r[landed] - g.grid.r[C(6, 9)])));
+  }
+  assert.ok([...far].every((d) => d >= 1 && d <= 3));
+});
+
+test('original defence: terrain value, 1 per ten hexes of range, 1 per point spent moving', () => {
+  const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], { terrain: [[C(6, 9), BRUSH]] }, { defence: 'original' });
+  const t = game.troopers[1];
+  assert.equal(defenceOf(game, t, C(2, 9), null), 3 + 1);
+  assert.equal(defenceOf(game, t, C(2, 9), { ...idle(), path: [C(7, 9)], moveCost: 1, dodge: 2 }), 3 + 1 + 1 + 4);
 });
 
 test('Assault squads: the attacker fields at least 1.2x the defender\'s value', () => {

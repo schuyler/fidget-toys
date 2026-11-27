@@ -81,6 +81,8 @@ export const DEFAULTS = {
   holdToWin: 2,
   turnLimit: 12,
   hexTerrain: 'building',   // what victory hexes stand on: 'building' | 'ruins' | 'brush' | 'open'
+  combat: 'formula',        // damage: 'formula' (margin / damageDivisor), 'dice' (the 1977 tables, 2d6) or 'mean' (the tables' averages)
+  defence: 'draft',         // 'draft' or 'original' (terrain values, +1 per 10 hexes of range, +1 per point spent moving)
   noise: 0,
   dodgeAimCap: 0,           // tuning knob: dodge counts at most this much per point (0 = full Aim)
   recoverWhenHit: 0,        // tuning knob: 1 = troopers recover even when hit (the original: only if not hit)
@@ -114,6 +116,7 @@ export const DEFAULTS = {
  * @property {number} overwatch
  * @property {number} [launch]    points put into launching a guided bomb (0 = none)
  * @property {number} [launchAt]  the cell it's aimed at, or -1
+ * @property {number} [moveCost]  set while resolving: points the path costs (for the movement defence)
  */
 
 /**
@@ -142,6 +145,7 @@ export const DEFAULTS = {
  * @property {{id: number, amount: number}[]} recovered
  * @property {{cell: number, from: number, to: number}[]} captures
  * @property {{from: number, aimed: number, landed: number, sd: number}[]} launches  landed -1 = off the map
+ * @property {number[]} stunned   troopers stunned by a blast (no recovery this stage)
  */
 
 /**
@@ -408,8 +412,18 @@ export function los(/** @type {Game} */ game, /** @type {number} */ a, /** @type
  */
 export function defenceOf(game, target, fromCell, order) {
   const p = game.params;
+  const dist = hexDist(game.grid, fromCell, target.cell);
+  if (p.defence === 'original') {
+    // Rule 9.62: range attenuation is 1 for every ten hexes or part of ten,
+    // and the movement effect is 1 per point plotted to be spent moving.
+    return COVER_ORIGINAL[game.terrain[target.cell]] * p.coverScale
+      + Math.ceil(dist / 10)
+      + (order?.moveCost ?? order?.path.length ?? 0)
+      + dodgeValue(game, target, order?.dodge ?? 0)
+      + (target.dugIn ? 1 : 0);
+  }
   return coverValue(game, target.cell)
-    + Math.floor(hexDist(game.grid, fromCell, target.cell) / p.rangeStep)
+    + Math.floor(dist / p.rangeStep)
     + Math.floor((order?.path.length ?? 0) / p.motionStep)
     + dodgeValue(game, target, order?.dodge ?? 0)
     + (target.dugIn ? 1 : 0);
@@ -420,6 +434,112 @@ export function baseShock(/** @type {Params} */ p, /** @type {number} */ attack,
   return attack < defence ? -1 : Math.floor((attack - defence) / p.damageDivisor);
 }
 
+// ---- The 1977 results tables ----
+// Transcribed from the StarSoldier charts (rules 26.1, 26.2 and 10.4).
+
+/** Chance of each two-dice total, indexed by total (2-12), in 36ths. */
+const TWO_DICE = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1];
+
+/**
+ * 26.1 Standard Game Fire Combat: points lost, by two-dice roll (rows 2-12)
+ * and attack differential (+1 to +9; more than +9 counts as +9).
+ */
+export const FIRE_CRT = [
+  [8, 10, 12, 12, 12, 12, 12, 12, 12],
+  [6, 8, 10, 12, 12, 12, 12, 12, 12],
+  [4, 6, 8, 10, 11, 12, 12, 12, 12],
+  [2, 4, 6, 7, 8, 9, 10, 11, 12],
+  [1, 3, 5, 6, 7, 8, 9, 10, 11],
+  [0, 2, 4, 5, 6, 7, 8, 9, 10],
+  [0, 1, 3, 4, 5, 6, 7, 8, 9],
+  [0, 0, 2, 3, 4, 5, 6, 7, 8],
+  [0, 0, 1, 2, 3, 4, 5, 6, 7],
+  [0, 0, 0, 1, 2, 2, 3, 3, 3],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0],
+];
+
+/** Stun on the launched weapons table. */
+const S = -1;
+
+/**
+ * 26.2 Standard Game Launched Weapons: points lost (S = stunned), by
+ * two-dice roll (rows 2-12) and odds (1-5, 6-10, 11-15, 16-20, 21-25, 26+ to 1).
+ */
+export const LW_CRT = [
+  [6, 8, 10, 12, 12, 12],
+  [4, 6, 8, 11, 12, 12],
+  [2, 4, 6, 8, 10, 12],
+  [1, 3, 5, 7, 9, 11],
+  [S, 2, 4, 6, 8, 10],
+  [S, 1, 3, 5, 7, 9],
+  [0, S, 2, 4, 6, 8],
+  [0, S, 1, 3, 5, 7],
+  [0, 0, S, 2, 3, 3],
+  [0, 0, 0, S, S, S],
+  [0, 0, 0, 0, 0, 0],
+];
+
+/**
+ * 10.4 Scatter: for a negative scatter differential (columns -1 to -6 or
+ * less) and a die roll (rows 1-6), how many hexes a guided bomb scatters.
+ * 0 = it lands where it was aimed.
+ */
+export const SCATTER_TABLE = [
+  [0, 0, 0, 0, 0, 1],
+  [0, 0, 0, 0, 1, 1],
+  [0, 0, 1, 1, 1, 2],
+  [0, 1, 1, 1, 2, 2],
+  [1, 1, 1, 2, 2, 3],
+  [1, 2, 2, 2, 3, 3],
+];
+
+/** Average of a table column over two dice, counting stuns as no loss. */
+function columnMean(/** @type {number[][]} */ table, /** @type {number} */ col) {
+  let sum = 0;
+  for (let roll = 2; roll <= 12; roll++) sum += TWO_DICE[roll] * Math.max(0, table[roll - 2][col]);
+  return sum / 36;
+}
+const FIRE_MEAN = FIRE_CRT[0].map((_, c) => columnMean(FIRE_CRT, c));
+const LW_MEAN = LW_CRT[0].map((_, c) => columnMean(LW_CRT, c));
+
+/** Two dice, from the game's RNG. */
+function roll2d6(/** @type {Game} */ game) {
+  return game.rng.int(6) + game.rng.int(6) + 2;
+}
+
+/**
+ * Points a shot takes, by the game's combat setting. A miss is a shot that
+ * can't hurt: attack below defence for the formula, a differential under
+ * +1 on the tables.
+ * @param {Game} game @param {number} attack @param {number} defence
+ * @returns {{shock: number, miss: boolean}}
+ */
+export function fireLoss(game, attack, defence) {
+  const p = game.params;
+  if (p.combat !== 'dice' && p.combat !== 'mean') {
+    const s = baseShock(p, attack, defence);
+    return s < 0 ? { shock: 0, miss: true } : { shock: s, miss: false };
+  }
+  const diff = attack - defence;
+  if (diff < 1) return { shock: 0, miss: true };
+  const col = Math.min(diff, 9) - 1;
+  if (p.combat === 'dice') return { shock: FIRE_CRT[roll2d6(game) - 2][col], miss: false };
+  return { shock: Math.round(FIRE_MEAN[col]), miss: false };
+}
+
+/**
+ * The shock a shot can be expected to take, before any dice: what the CPU
+ * and the preview go by.
+ * @param {Params} p @param {number} attack @param {number} defence
+ */
+export function meanFireShock(p, attack, defence) {
+  if (p.combat !== 'dice' && p.combat !== 'mean') return Math.max(0, baseShock(p, attack, defence));
+  const diff = attack - defence;
+  if (diff < 1) return 0;
+  const m = FIRE_MEAN[Math.min(diff, 9) - 1];
+  return p.combat === 'mean' ? Math.round(m) : m;
+}
+
 /**
  * The preview from RULES.md: shock if the target neither dodges nor moves,
  * and the dodge points that would cancel the shot completely.
@@ -428,7 +548,7 @@ export function baseShock(/** @type {Params} */ p, /** @type {number} */ attack,
 export function preview(game, shooter, target, points) {
   const attack = points * shooter.aim;
   const still = defenceOf(game, target, shooter.cell, null);
-  const shock = Math.max(0, baseShock(game.params, attack, still));
+  const shock = meanFireShock(game.params, attack, still);
   const cancel = attack < still ? 0 : Math.floor((attack - still) / target.aim) + 1;
   return { attack, defence: still, shock, cancel };
 }
@@ -471,32 +591,51 @@ export function blastCells(game, at) {
   return out;
 }
 
-/**
- * Shock from a blast of the given strength on a trooper in `cell`. A
- * stand-in for the original's LW results table, which isn't available:
- * the odds (strength over terrain value), capped at blastOddsCap, over
- * blastPer. It matches the rulebook's worked example (15 against terrain 2
- * costs 3 points). The cap is an inference: the original's columns are
- * banded ("6-1 through 10-1"), which suggests the table tops out rather
- * than growing without limit.
- * @param {Game} game @param {number} blast @param {number} cell
- */
-export function blastShock(game, blast, cell) {
-  const p = game.params;
-  let odds = blast / TERRAIN_VALUE[game.terrain[cell]];
-  if (p.blastOddsCap > 0) odds = Math.min(odds, p.blastOddsCap);
-  return Math.floor(odds / p.blastPer);
+/** The odds column (0-5) on the launched weapons table, or -1 for under 1 to 1. */
+function lwColumn(/** @type {number} */ odds) {
+  if (odds < 1) return -1;
+  return Math.min(5, Math.floor((Math.floor(odds) - 1) / 5));
 }
 
 /**
- * The die roll (1-6) at or above which a bomb with a negative scatter
- * differential scatters. A stand-in for the original's scatter table,
- * chosen to agree with the rulebook's examples: at -1 a five scatters, at
- * -5 a six does.
- * @param {number} sd
+ * Points a blast of the given strength takes from a trooper in `cell`, and
+ * whether it's stunned, by the game's combat setting. The odds are the
+ * strength over the original's terrain value (rule 10.3).
+ * - formula: a stand-in from before the table was found: odds (capped at
+ *   blastOddsCap) over blastPer.
+ * - dice: the 1977 table, two dice.
+ * - mean: the table column's average, rounded; no stuns.
+ * @param {Game} game @param {number} blast @param {number} cell
+ * @returns {{shock: number, stun: boolean}}
  */
-export function scatterThreshold(sd) {
-  return Math.max(2, 6 + sd);
+export function blastLoss(game, blast, cell) {
+  const p = game.params;
+  const odds = blast / TERRAIN_VALUE[game.terrain[cell]];
+  if (p.combat !== 'dice' && p.combat !== 'mean') {
+    const capped = p.blastOddsCap > 0 ? Math.min(odds, p.blastOddsCap) : odds;
+    return { shock: Math.floor(capped / p.blastPer), stun: false };
+  }
+  const col = lwColumn(odds);
+  if (col < 0) return { shock: 0, stun: false };
+  if (p.combat === 'mean') return { shock: Math.round(LW_MEAN[col]), stun: false };
+  const r = LW_CRT[roll2d6(game) - 2][col];
+  return r === S ? { shock: 0, stun: true } : { shock: r, stun: false };
+}
+
+/** The shock a blast can be expected to take, before any dice. */
+export function meanBlastShock(/** @type {Game} */ game, /** @type {number} */ blast, /** @type {number} */ cell) {
+  const p = game.params;
+  if (p.combat !== 'dice' && p.combat !== 'mean') return blastLoss(game, blast, cell).shock;
+  const col = lwColumn(blast / TERRAIN_VALUE[game.terrain[cell]]);
+  if (col < 0) return 0;
+  return p.combat === 'mean' ? Math.round(LW_MEAN[col]) : LW_MEAN[col];
+}
+
+/** Chance (0-1) that a guided bomb with this scatter differential lands where aimed. */
+export function landChance(/** @type {number} */ sd) {
+  if (sd >= 0) return 1;
+  const col = Math.min(6, -sd) - 1;
+  return SCATTER_TABLE.filter((row) => row[col] === 0).length / 6;
 }
 
 /** A trooper's dodge (countermeasures) value for the points given. */
@@ -537,7 +676,7 @@ export function checkOrder(game, t, order) {
 
 /** An order that does nothing. */
 export function idle() {
-  return { path: [], target: -1, fire: 0, dodge: 0, overwatch: 0, launch: 0, launchAt: -1 };
+  return { path: [], target: -1, fire: 0, dodge: 0, overwatch: 0, launch: 0, launchAt: -1, moveCost: 0 };
 }
 
 // ---- The turn ----
@@ -559,10 +698,11 @@ export function resolveTurn(game, orders) {
     if (why) throw new Error(`trooper ${t.id}: ${why}`);
   }
   /** @type {TurnEvents} */
-  const ev = { turn: game.turn, stage: game.stage, shots: [], steps: [], blocked: [], pinned: [], downs: [], recovered: [], captures: [], launches: [] };
+  const ev = { turn: game.turn, stage: game.stage, shots: [], steps: [], blocked: [], pinned: [], downs: [], recovered: [], captures: [], launches: [], stunned: [] };
   for (const t of living(game)) {
     const o = ord[t.id];
-    t.spent += pathCost(game, t.cell, o.path) + o.fire + o.dodge + o.overwatch + o.launch;
+    o.moveCost = pathCost(game, t.cell, o.path);
+    t.spent += o.moveCost + o.fire + o.dodge + o.overwatch + o.launch;
   }
   const shockBefore = game.troopers.map((t) => t.shock);
   const hit = new Uint8Array(game.troopers.length);
@@ -574,10 +714,8 @@ export function resolveTurn(game, orders) {
   const shoot = (kind, from, to, points, step, pending) => {
     const attack = points * from.aim;
     const defence = defenceOf(game, to, from.cell, ord[to.id]);
-    let shock = baseShock(p, attack, defence);
-    const miss = shock < 0;
-    if (miss) shock = 0;
-    else if (p.noise > 0) shock = Math.max(0, shock + [-1, 0, 0, 1][game.rng.int(4)] * p.noise);
+    let { shock, miss } = fireLoss(game, attack, defence);
+    if (!miss && p.noise > 0) shock = Math.max(0, shock + [-1, 0, 0, 1][game.rng.int(4)] * p.noise);
     pending[to.id] += shock;
     ev.shots.push({ kind, from: from.id, to: to.id, attack, defence, shock, miss, shockBefore: shockBefore[to.id], step });
   };
@@ -696,8 +834,12 @@ export function resolveTurn(game, orders) {
       }
       const sd = L.t.aim * L.points - (rangeRating + cm);
       let landed = L.aimed;
-      if (sd < 0 && game.rng.int(6) + 1 >= scatterThreshold(sd)) {
-        landed = game.grid.nbr[L.aimed * 6 + game.rng.int(6)];
+      if (sd < 0) {
+        const hexes = SCATTER_TABLE[game.rng.int(6)][Math.min(6, -sd) - 1];
+        if (hexes > 0) {
+          const dir = game.rng.int(6);
+          for (let k = 0; k < hexes && landed >= 0; k++) landed = game.grid.nbr[landed * 6 + dir];
+        }
       }
       ev.launches.push({ from: L.t.id, aimed: L.aimed, landed, sd });
       if (landed < 0) continue;
@@ -705,8 +847,9 @@ export function resolveTurn(game, orders) {
         const occ = occupant(game, cell);
         if (!occ) continue;
         const blast = BLAST[dist];
-        const shock = blastShock(game, blast, cell);
+        const { shock, stun } = blastLoss(game, blast, cell);
         pending[occ.id] += shock;
+        if (stun) { hit[occ.id] = 1; ev.stunned.push(occ.id); }
         ev.shots.push({ kind: 'blast', from: L.t.id, to: occ.id, attack: blast, defence: TERRAIN_VALUE[game.terrain[cell]],
           shock, miss: false, shockBefore: shockBefore[occ.id], step: -2 });
       }

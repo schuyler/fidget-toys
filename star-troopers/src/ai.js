@@ -13,7 +13,7 @@
 import { createRng } from './rng.js';
 import { hexDist, reflect } from './hex.js';
 import {
-  living, usable, spendable, enterCost, blastCells, blastShock, scatterThreshold, dodgeValue, BLAST, los, defenceOf, baseShock, occupant, held, ROCK, coverValue, isCover, idle,
+  living, usable, spendable, enterCost, blastCells, meanBlastShock, landChance, dodgeValue, BLAST, los, defenceOf, meanFireShock, occupant, held, ROCK, coverValue, isCover, idle,
 } from './sim.js';
 
 /** @typedef {import('./sim.js').Game} Game */
@@ -289,7 +289,7 @@ function planLaunch(game, t, budget, foes, friendPlans, allocated) {
     /** @type {{fi: number, amount: number}[]} */
     const alloc = [];
     for (const { cell, dist } of reach) {
-      const shock = blastShock(game, BLAST[dist], cell);
+      const shock = meanBlastShock(game, BLAST[dist], cell);
       if (friendEnds.has(cell)) value -= 1.5 * shock;
       const f = foes.find((x) => x.cell === cell);
       if (!f) continue;
@@ -309,7 +309,7 @@ function planLaunch(game, t, budget, foes, friendPlans, allocated) {
       if (t.aim * k - (rangeRating + cm) >= 0) { points = k; break; }
     }
     const sd = t.aim * points - (rangeRating + cm);
-    const land = sd >= 0 ? 1 : 1 - (7 - scatterThreshold(sd)) / 6;
+    const land = landChance(sd);
     const total = value * land;
     if (total > 0.5 && (!best || total > best.value)) {
       best = { cell: target.cell, points, value: total, reach: new Set(reach.map((r) => r.cell)), alloc: alloc.map((a) => ({ ...a, amount: a.amount * land })) };
@@ -345,7 +345,7 @@ function splitsFor(left, canFire, maxShot) {
  */
 function expectedShock(game, t, f, points) {
   const guess = { path: [], target: -1, fire: 0, dodge: Math.floor(spendable(game, f) / 3), overwatch: 0 };
-  const s = baseShock(game.params, points * t.aim, defenceOf(game, f, t.cell, guess));
+  const s = meanFireShock(game.params, points * t.aim, defenceOf(game, f, t.cell, guess));
   return Math.max(0, s);
 }
 
@@ -392,7 +392,7 @@ function threatNextTurn(game, t, cell, foes, see, friendEnds) {
     // Next stage it could have up to a full stage's worth again.
     const next = p.stages === 2 ? Math.min(usable(f), p.stageCap) : usable(f);
     const all = p.maxShot > 0 ? Math.min(next, p.maxShot) : next;
-    const s = baseShock(p, all * f.aim, defence);
+    const s = meanFireShock(p, all * f.aim, defence);
     if (s > 0) threat += s / Math.max(1, friends.filter((m) => m.id === t.id || see(f.cell, m.cell)).length);
   }
   // Bombs need no line of sight. The more enemies that could launch one,
@@ -401,10 +401,10 @@ function threatNextTurn(game, t, cell, foes, see, friendEnds) {
   if (p.launched) {
     const launchers = foes.filter((f) => usable(f) >= p.minLaunch).length;
     if (launchers > 0) {
-      threat += blastShock(game, BLAST[0], cell) * Math.min(1, 0.25 * launchers);
+      threat += meanBlastShock(game, BLAST[0], cell) * Math.min(1, 0.25 * launchers);
       for (const e of friendEnds) {
         const d = hexDist(game.grid, e, cell);
-        if (d <= 2) threat += blastShock(game, BLAST[d], cell) * 0.15;
+        if (d <= 2) threat += meanBlastShock(game, BLAST[d], cell) * 0.15;
       }
     }
   }
@@ -432,7 +432,7 @@ function scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, threat, t
   let incoming = 0;
   for (const f of foes) {
     if (!see(f.cell, t.cell)) continue;
-    const s = baseShock(p, guessShot(game, f) * f.aim, defenceOf(game, t, f.cell, order));
+    const s = meanFireShock(p, guessShot(game, f) * f.aim, defenceOf(game, t, f.cell, order));
     if (s > 0) incoming += s / Math.max(1, living(game, t.side).filter((m) => see(f.cell, m.cell)).length);
   }
   score -= incoming * 1.1 * care;

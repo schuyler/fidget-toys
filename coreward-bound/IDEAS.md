@@ -87,40 +87,133 @@ periphery hexes were ever visited.
 
 ## Neutrals
 
-- **Autonomous forces.** Borrowed from Outreach, which is also where the
-  stance table under "More players" came from. Exploring a hex nobody has seen
-  can turn up a neutral force: a few star gates and fleets placed in and
-  around that hex. It sits still until it meets someone. Its stance
-  toward each civ is rolled at first contact, not chosen; attacking it
-  makes it Hostile toward you; while Hostile it grows (in Outreach, one
-  fleet for every two star gates it holds). An allied neutral lets you chain
-  through its hexes, as allied settlements do. Would put risk and reward
-  in the arms, which today are empty, and give fights a reason to happen
-  away from the core.
+- **Neutral systems.** Settlements nobody owns, sitting in the arms with
+  a garrison. Meant to put risk and reward in the arms, which today are
+  empty, and to give fights a reason to happen away from the core. The
+  design so far, all numbers untested:
+  - **Placement.** Two mirrored pairs per galaxy, fixed when the map is
+    made, so both civs face the same neutrals. Hidden until one of your
+    stacks lands on the hex, like potential values. In arm hexes, none
+    within about 3 hexes of a home (so no home starts inside one's
+    territory). Value equal to the hex's potential; garrison about
+    value + 1 fleets.
+  - **Attitude.** Each neutral holds one toward each civ, on a ladder:
+    Hostile ← Indifferent → Friendly → annexed. All start Indifferent.
+    Nothing is rolled; attitudes change only through what players do.
+  - **Territory.** Every hex within 2 of the neutral (19 hexes). Nobody
+    can found a settlement on the neutral's own hex, since it already
+    is one.
+  - **Infringement.** Attacking a neutral, or founding a settlement in
+    its territory, makes it Hostile toward that civ. Jumping through or
+    standing in its territory doesn't count, and neither does growing a
+    settlement that was there before.
+  - **Indifferent:** does nothing, but blocks its hex.
+  - **Hostile:** at the start of each round, gains a fleet if below a
+    cap (value + 3?). With 3 or more fleets, sends all but one at the
+    weakest settlement or stack of the offending civ inside its
+    territory, using the ordinary jump, scatter and combat rules. A
+    small routine in `sim.js` on the seeded RNG, so it stays
+    deterministic.
+  - **Friendly:** works like your own settlement for jumping (chaining,
+    +1 to aim at it, sight), but pays no RP, builds nothing and takes no
+    relic deliveries. You may found settlements in its territory without
+    offence, and if your rival founds one there, it turns Hostile toward
+    them: a Friendly neutral guards your frontier.
+  - **Courting.** Indifferent → Friendly: spend fleets equal to its
+    value, from fleets that began the turn in or next to it. Friendly →
+    annexed: pay RP equal to its value with one of your fleets present.
+    Fixed prices, no roll, like research.
+  - **Attacking.** Beat the garrison (it gets +1 defending, as at any
+    settlement), then the usual take roll. You get it at value − 1, not
+    working until your next turn, as with any taken settlement.
 
-  What Outreach does, from the one copy of the rules found (a third-party
-  reproduction of rules 1.0–19.0 on
-  [RulesPal](https://rulespal.com/outreach/rulebook); the charts are
-  missing, so none of the odds are known):
-  - Neutrals come from the Fate Table, rolled when a hex is explored:
-    results G–J make one of 2–5 star gates and 5–12 fleets, face down.
-    At most four are on the board at once. That's the random "disasters"
-    table this game left out (RULES.md).
-  - A neutral never moves, attacks or raises fleets until it has had
-    contact with a player.
-  - With no CPU, the first player to reach one moves it, as its
-    "caretaker".
-  - When you change your stance toward anyone, neutrals in contact with
-    you may re-roll theirs toward you (the "domino effect").
-  - The rules don't say what defeating one gives you. They mention
-    "neutral settled hexes" whose allegiance can be won, but never
-    explain them.
+  Courting should pay at least as well as attacking, because attacking
+  destroys what courting buys:
 
-  What this game would need of its own: a small routine to run neutrals
-  (there's no human caretaker against the CPU), odds for finding one, a
-  reward for beating one (its settlements? RP? a tech?), and the stances,
-  which aren't in the game yet either, unless neutrals get a simpler
-  friendly/hostile switch.
+  | | Attack and take | Court and annex |
+  |---|---|---|
+  | Cost | Fleets lost fighting the garrison, then the take roll | Fleets equal to its value, then RP equal to its value |
+  | Speed | A turn or two | At least two turns, in the open |
+  | Settlement | Value − 1, waits a turn | Full value, working at once |
+  | Garrison | Destroyed | Joins you |
+  | Its tech (if neutrals hold one) | Only on the conquest roll (5–6) | Yours for certain |
+  | Its territory | Nothing | Yours to settle |
+
+  For a value-4 neutral, courting costs about 5 fleets' worth (4 fleets
+  plus 4 RP) and returns a 5-fleet garrison, a value-4 settlement and its
+  territory. That may be too generous; what balances it is that courting
+  is slow and exposed. Attacking stays right for speed, for denial (your
+  rival is courting it, or it guards their border or carries their chain
+  coreward), and for a Hostile neutral you'd rather not pay off. So
+  courting is the way to grow and attacking is the way to interfere,
+  which makes neutrals something to fight over.
+
+  Open questions:
+  - **Winning back a Hostile neutral.** Perhaps hostility from founding
+    can be bought off (Hostile → Indifferent for twice its value in
+    fleets) while hostility from an attack is permanent. Otherwise one
+    careless settlement locks a neutral out for the game.
+  - **Your rival attacks a neutral that's Friendly to you.** Simplest:
+    an ordinary fight, it turns Hostile toward them, and if they take it
+    your courting is lost. Courting is a stake your rival can burn.
+  - **Friendly neutrals as a road to the core.** A Friendly link midway
+    up an arm is a free chain toward the core, which could feed the race.
+    Fixes: keep neutrals out of the inner third of the arms, or don't let
+    a relic carrier chain through one.
+  - **Reputation.** Attacking one neutral could make the others less
+    friendly toward you (Outreach's "domino effect", loosely). Probably
+    unnecessary with annexation already this much better; leave it out
+    at first.
+  - **The CPU** has to understand territory (don't found inside an
+    unfriendly one), court neutrals near its path, and attack the
+    rival's Friendly ones. Without that, headless runs measure nothing.
+    This is the biggest piece of work.
+  - **Interface:** each neutral needs a marker for its attitude toward
+    you. Its attitude toward your rival should probably stay hidden, as
+    stack sizes are.
+
+- **Dissolution, as one settlement breaking away.** Each turn, one of
+  your settlements may break away and become an Indifferent neutral (as
+  above), keeping its value, with the chance rising with distance from
+  your home. Anyone can win it back by courting. An anti-snowball tax
+  that bites hardest on long reaches, including the road to the core,
+  and turns where to settle into a risk you can see on the map. Problems:
+  a single roll that costs you a settlement you could do nothing about is
+  the luck complaint again, so show each settlement's chance on the map
+  and let a fleet stationed there, or RP, lower it. "Distance" needs
+  defining: hexes from home is simplest; jumps through your network would
+  reward the connected chain from the homeward-carrier entry. Too strong
+  and nobody expands.
+
+- **What Outreach does.** Both entries above come from Outreach, as did
+  the stance table under "More players". Sources: a reproduction of rules
+  1.0–19.0 on [RulesPal](https://rulespal.com/outreach/rulebook), and
+  fan-made revised rules, rules summary and Fate Table supplied by the
+  owner. The fan table may differ from SPI's original chart.
+  - **The Fate Table.** Every turn each player rolls a d6 against their
+    total SP (the summed value of their star gates, which is also their
+    income). Low rolls are bad. +1 per X result on that turn's
+    exploration rolls (capped at 6), +1 per 50 RP spent (capped at 8),
+    and 5 RP shifts one column left. Results A–F are Dissolution (10%,
+    30%, 50%, 70%, 80%, 90% of your SP; E and F also cost a
+    Civilization Level), G–J create an autonomous force, K and L raise
+    your Civilization Level if you've spent Wisdom Chits. Below 20 SP
+    nothing happens; at 60–69 SP, five unmodified rolls in six are
+    Dissolution; at 70+, all six.
+  - **Dissolution** neutralizes your star gates worth that share of your
+    SP; you choose which. Each result can hit you only once a game, and
+    B (30%) makes you immune to the rest. Neutralized gates stay on the
+    board, and any player can win one back by paying RP equal to its
+    value plus fleets equal to its value minus their Civilization Level.
+  - **Autonomous forces** (2–5 star gates, 5–12 fleets) are placed
+    around a hex the rolling player explored that turn; no exploration,
+    no force. At most four on the board. They never move, attack or
+    build until contacted. The first player to contact one runs it, as
+    "caretaker". Their stance toward each player is rolled on the
+    Random Interaction Option Table at first contact and may be
+    re-rolled later; attacking one makes it hostile toward you. A
+    hostile force keeps one fleet per star gate at home and sends the
+    rest at the nearest of your star gates in sight.
 
 ## More players
 

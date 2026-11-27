@@ -1,10 +1,9 @@
 # fidget-toys
 
 Small browser games, one per directory. No build step: plain ES modules,
-served as static files. The toys are `dot-army/`, `wooden-ships/` and
-`coreward-bound/`; read a toy's `RULES.md` before touching its game logic,
-and Dot Army's `NETWORK.md` for online play. `star-troopers/` (sim only, no
-UI yet) follows the same rules below.
+served as static files. The toys are `dot-army/`, `wooden-ships/`,
+`coreward-bound/` and `star-troopers/`; read a toy's `RULES.md` before
+touching its game logic, and Dot Army's `NETWORK.md` for online play.
 
 ## Running and checking
 
@@ -26,6 +25,8 @@ errors) and `multiplayer/tools/e2e-relay.cjs` (a game through a relay). The
 last two also need a relay: `node multiplayer/server.js`. Wooden Ships has
 `wooden-ships/tools/e2e-local.cjs` (a CPU game, steering, fire buttons).
 `coreward-bound/tools/e2e.cjs` plays Coreward Bound turns and a whole game.
+`star-troopers/tools/e2e-local.cjs` plays a whole Star Troopers game through
+taps and drags (same server, no relay).
 
 ## Rules for wooden-ships code
 
@@ -52,9 +53,9 @@ the headless tool. Settings the player sees are the five presets in
   never touch game state directly.
 - `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `lockstep.js`,
   `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`, `lobby.js`, `netpanel.js`;
-  in Wooden Ships, `sim.js`, `ai.js` and `rng.js`; in `coreward-bound/` and
-  `star-troopers/`, `sim.js`, `hex.js`, `rng.js` and `ai.js`. Keep them
-  type-clean.
+  in Wooden Ships, `sim.js`, `ai.js` and `rng.js`; in `coreward-bound/`,
+  `sim.js`, `hex.js`, `rng.js` and `ai.js` (Star Troopers has its own list
+  below). Keep them type-clean.
 - Coreward Bound: a rule change updates `src/sim.js`, `test/sim.test.js`,
   `RULES.md` and the How to play card in its `index.html`, then a headless
   run. Its player settings are `CHOICES` in `main.js` (CPU, Galaxy).
@@ -64,6 +65,25 @@ the headless tool. Settings the player sees are the five presets in
 - Settings the player sees are six presets in `main.js` (`CHOICES`: CPU,
   Board, Speed, Spawns, Targets, Obstacles); the
   tuning parameters live in `DEFAULTS` in `sim.js` and are not exposed.
+
+## Rules for star-troopers code
+
+- The same determinism rule: `src/sim.js` (and `hex.js`, `rng.js`) use
+  integers and the seeded RNG only: no `Math.random`, no `Date`, no floats
+  that affect state. `src/ai.js` only produces orders.
+- The interface never changes the game except through `resolveTurn`.
+  Drafting orders is `src/plot.js` and playback is `src/playback.js`: pure,
+  `// @ts-check`, no DOM, tested (`test/plot.test.js`, `playback.test.js`,
+  `settings.test.js`). `render.js`, `geom.js` (pixel geometry), `main.js`,
+  `index.html` and `style.css` are presentation.
+- `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `plot.js`,
+  `playback.js`, `settings.js`.
+- A rule change means updating `sim.js`, a test, `RULES.md`, and the How
+  to play card in `index.html` together, then running
+  `node star-troopers/tools/headless.js` to check games still finish.
+- The player sees six settings (`src/settings.js`); the playtest rules
+  (dice, original defence, command, Meeting) are fixed there, and so are
+  the squad sizes (`FORCES`).
 
 ## Deploying
 

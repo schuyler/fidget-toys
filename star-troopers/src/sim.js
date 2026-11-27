@@ -136,6 +136,8 @@ export const DEFAULTS = {
  * @property {boolean} miss      attack < defence
  * @property {number} shockBefore  target's shock at the start of the turn
  * @property {number} step       movement step for overwatch, -1 for fire, -2 for a blast
+ * @property {number} roll       the two-dice roll, 2-12; 0 when no dice were rolled
+ * @property {boolean} stun      a blast that stunned (no shock, but no recovery either)
  */
 
 /**
@@ -150,7 +152,7 @@ export const DEFAULTS = {
  * @property {{id: number, step: number}[]} downs   step -1 = fire phase
  * @property {{id: number, amount: number}[]} recovered
  * @property {{cell: number, from: number, to: number}[]} captures
- * @property {{from: number, aimed: number, landed: number, sd: number}[]} launches  landed -1 = off the map
+ * @property {{from: number, aimed: number, landed: number, sd: number, die: number}[]} launches  landed -1 = off the map; die = the scatter roll, 1-6, or 0 if it needed none
  * @property {number[]} stunned   troopers stunned by a blast (no recovery this stage)
  */
 
@@ -545,19 +547,22 @@ function roll2d6(/** @type {Game} */ game) {
  * can't hurt: attack below defence for the formula, a differential under
  * +1 on the tables.
  * @param {Game} game @param {number} attack @param {number} defence
- * @returns {{shock: number, miss: boolean}}
+ * @returns {{shock: number, miss: boolean, roll: number}}  roll: the two dice, or 0 if none were rolled
  */
 export function fireLoss(game, attack, defence) {
   const p = game.params;
   if (p.combat !== 'dice' && p.combat !== 'mean') {
     const s = baseShock(p, attack, defence);
-    return s < 0 ? { shock: 0, miss: true } : { shock: s, miss: false };
+    return s < 0 ? { shock: 0, miss: true, roll: 0 } : { shock: s, miss: false, roll: 0 };
   }
   const diff = attack - defence;
-  if (diff < 1) return { shock: 0, miss: true };
+  if (diff < 1) return { shock: 0, miss: true, roll: 0 };
   const col = Math.min(diff, 9) - 1;
-  if (p.combat === 'dice') return { shock: FIRE_CRT[roll2d6(game) - 2][col], miss: false };
-  return { shock: Math.round(FIRE_MEAN[col]), miss: false };
+  if (p.combat === 'dice') {
+    const roll = roll2d6(game);
+    return { shock: FIRE_CRT[roll - 2][col], miss: false, roll };
+  }
+  return { shock: Math.round(FIRE_MEAN[col]), miss: false, roll: 0 };
 }
 
 /**
@@ -582,8 +587,18 @@ export function preview(game, shooter, target, points) {
   const attack = points * shooter.aim;
   const still = defenceOf(game, target, shooter.cell, null);
   const shock = meanFireShock(game.params, attack, still);
-  const cancel = attack < still ? 0 : Math.floor((attack - still) / target.aim) + 1;
-  return { attack, defence: still, shock, cancel };
+  return { attack, defence: still, shock, cancel: cancelDodge(game.params, attack, still, target.aim) };
+}
+
+/**
+ * Dodge points (at the target's Aim) that would leave a shot unable to
+ * hurt: attack below defence for the formula, a differential under +1 on
+ * the tables.
+ * @param {Params} p @param {number} attack @param {number} defence @param {number} aim
+ */
+export function cancelDodge(p, attack, defence, aim) {
+  if (p.combat === 'dice' || p.combat === 'mean') return attack <= defence ? 0 : Math.ceil((attack - defence) / aim);
+  return attack < defence ? 0 : Math.floor((attack - defence) / aim) + 1;
 }
 
 /**
@@ -657,20 +672,21 @@ function lwColumn(/** @type {number} */ odds) {
  * - dice: the 1977 table, two dice.
  * - mean: the table column's average, rounded; no stuns.
  * @param {Game} game @param {number} blast @param {number} cell
- * @returns {{shock: number, stun: boolean}}
+ * @returns {{shock: number, stun: boolean, roll: number}}  roll: the two dice, or 0 if none were rolled
  */
 export function blastLoss(game, blast, cell) {
   const p = game.params;
   const odds = blast / TERRAIN_VALUE[game.terrain[cell]];
   if (p.combat !== 'dice' && p.combat !== 'mean') {
     const capped = p.blastOddsCap > 0 ? Math.min(odds, p.blastOddsCap) : odds;
-    return { shock: Math.floor(capped / p.blastPer), stun: false };
+    return { shock: Math.floor(capped / p.blastPer), stun: false, roll: 0 };
   }
   const col = lwColumn(odds);
-  if (col < 0) return { shock: 0, stun: false };
-  if (p.combat === 'mean') return { shock: Math.round(LW_MEAN[col]), stun: false };
-  const r = LW_CRT[roll2d6(game) - 2][col];
-  return r === S ? { shock: 0, stun: true } : { shock: r, stun: false };
+  if (col < 0) return { shock: 0, stun: false, roll: 0 };
+  if (p.combat === 'mean') return { shock: Math.round(LW_MEAN[col]), stun: false, roll: 0 };
+  const roll = roll2d6(game);
+  const r = LW_CRT[roll - 2][col];
+  return r === S ? { shock: 0, stun: true, roll } : { shock: r, stun: false, roll };
 }
 
 /** The shock a blast can be expected to take, before any dice. */
@@ -772,10 +788,10 @@ export function resolveTurn(game, orders) {
         if (m.id !== to.id && canShare(game, [m, to])) defence += dodgeValue(game, m, ord[m.id].dodge);
       }
     }
-    let { shock, miss } = fireLoss(game, attack, defence);
+    let { shock, miss, roll } = fireLoss(game, attack, defence);
     if (!miss && p.noise > 0) shock = Math.max(0, shock + [-1, 0, 0, 1][game.rng.int(4)] * p.noise);
     pending[to.id] += shock;
-    ev.shots.push({ kind, from: from.id, to: to.id, attack, defence, shock, miss, shockBefore: shockBefore[to.id], step });
+    ev.shots.push({ kind, from: from.id, to: to.id, attack, defence, shock, miss, shockBefore: shockBefore[to.id], step, roll, stun: false });
   };
 
   /** @param {number[]} pending @param {number} step */
@@ -892,7 +908,7 @@ export function resolveTurn(game, orders) {
       ev.steps.push(moves);
 
       // Overwatch: shoot the nearest enemy that moved this step, in sight
-      // and in range. Each trooper's overwatch fires once per turn.
+      // and in range. Each trooper's overwatch fires once per stage.
       const pending = game.troopers.map(() => 0);
       for (const w of living(game)) {
         if (ord[w.id].overwatch <= 0 || watched[w.id]) continue;
@@ -928,23 +944,24 @@ export function resolveTurn(game, orders) {
         for (const occ of occupants(game, cell)) cm += dodgeValue(game, occ, ord[occ.id].dodge);
       }
       const sd = L.t.aim * L.points - (rangeRating + cm);
-      let landed = L.aimed;
+      let landed = L.aimed, die = 0;
       if (sd < 0) {
-        const hexes = SCATTER_TABLE[game.rng.int(6)][Math.min(6, -sd) - 1];
+        die = game.rng.int(6) + 1;
+        const hexes = SCATTER_TABLE[die - 1][Math.min(6, -sd) - 1];
         if (hexes > 0) {
           const dir = game.rng.int(6);
           for (let k = 0; k < hexes && landed >= 0; k++) landed = game.grid.nbr[landed * 6 + dir];
         }
       }
-      ev.launches.push({ from: L.t.id, aimed: L.aimed, landed, sd });
+      ev.launches.push({ from: L.t.id, aimed: L.aimed, landed, sd, die });
       if (landed < 0) continue;
       for (const { cell, dist } of blastCells(game, landed)) for (const occ of occupants(game, cell)) {
         const blast = BLAST[dist];
-        const { shock, stun } = blastLoss(game, blast, cell);
+        const { shock, stun, roll } = blastLoss(game, blast, cell);
         pending[occ.id] += shock;
         if (stun) { hit[occ.id] = 1; ev.stunned.push(occ.id); }
         ev.shots.push({ kind: 'blast', from: L.t.id, to: occ.id, attack: blast, defence: TERRAIN_VALUE[game.terrain[cell]],
-          shock, miss: false, shockBefore: shockBefore[occ.id], step: -2 });
+          shock, miss: false, shockBefore: shockBefore[occ.id], step: -2, roll, stun });
       }
     }
     applyShock(pending, -2);

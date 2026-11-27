@@ -85,6 +85,43 @@ periphery hexes were ever visited.
   every 4 rounds on Hard, every 7 on Easy. Easy can look like it isn't
   researching at all.
 
+## Neutrals
+
+- **Autonomous forces.** Borrowed from Outreach, which is also where the
+  stance table under "More players" came from. Exploring a hex nobody has seen
+  can turn up a neutral force: a few star gates and fleets placed in and
+  around that hex. It sits still until it meets someone. Its stance
+  toward each civ is rolled at first contact, not chosen; attacking it
+  makes it Hostile toward you; while Hostile it grows (in Outreach, one
+  fleet for every two star gates it holds). An allied neutral lets you chain
+  through its hexes, as allied settlements do. Would put risk and reward
+  in the arms, which today are empty, and give fights a reason to happen
+  away from the core.
+
+  What Outreach does, from the one copy of the rules found (a third-party
+  reproduction of rules 1.0–19.0 on
+  [RulesPal](https://rulespal.com/outreach/rulebook); the charts are
+  missing, so none of the odds are known):
+  - Neutrals come from the Fate Table, rolled when a hex is explored:
+    results G–J make one of 2–5 star gates and 5–12 fleets, face down.
+    At most four are on the board at once. That's the random "disasters"
+    table this game left out (RULES.md).
+  - A neutral never moves, attacks or raises fleets until it has had
+    contact with a player.
+  - With no CPU, the first player to reach one moves it, as its
+    "caretaker".
+  - When you change your stance toward anyone, neutrals in contact with
+    you may re-roll theirs toward you (the "domino effect").
+  - The rules don't say what defeating one gives you. They mention
+    "neutral settled hexes" whose allegiance can be won, but never
+    explain them.
+
+  What this game would need of its own: a small routine to run neutrals
+  (there's no human caretaker against the CPU), odds for finding one, a
+  reward for beating one (its settlements? RP? a tech?), and the stances,
+  which aren't in the game yet either, unless neutrals get a simpler
+  friendly/hostile switch.
+
 ## More players
 
 - **Three or six civs.** A hex grid only maps onto itself under

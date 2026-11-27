@@ -1,9 +1,10 @@
 # fidget-toys
 
 Small browser games, one per directory. No build step: plain ES modules,
-served as static files. The toys are `dot-army/` and `wooden-ships/`; read
-a toy's `RULES.md` before touching its game logic, and Dot Army's
-`NETWORK.md` for online play.
+served as static files. The toys are `dot-army/`, `wooden-ships/` and
+`coreward-bound/`; read a toy's `RULES.md` before touching its game logic,
+and Dot Army's `NETWORK.md` for online play. `star-troopers/` (sim only, no
+UI yet) follows the same rules below.
 
 ## Running and checking
 
@@ -14,6 +15,7 @@ npm test                          # node:test
 npm run typecheck                 # tsc --checkJs on files marked // @ts-check
 node dot-army/tools/headless.js 20 [key=value ...]   # CPU-vs-CPU balance runs
 node wooden-ships/tools/headless.js 40 [key=value ...]
+node coreward-bound/tools/headless.js 40 [key=value ...]
 ```
 
 Browser checks use the preinstalled Playwright (`require('playwright')`).
@@ -23,6 +25,7 @@ Browser checks need the static server on port 8765:
 errors) and `multiplayer/tools/e2e-relay.cjs` (a game through a relay). The
 last two also need a relay: `node multiplayer/server.js`. Wooden Ships has
 `wooden-ships/tools/e2e-local.cjs` (a CPU game, steering, fire buttons).
+`coreward-bound/tools/e2e.cjs` plays Coreward Bound turns and a whole game.
 
 ## Rules for wooden-ships code
 
@@ -49,7 +52,12 @@ the headless tool. Settings the player sees are the five presets in
   never touch game state directly.
 - `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `lockstep.js`,
   `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`, `lobby.js`, `netpanel.js`;
-  in Wooden Ships, `sim.js`, `ai.js` and `rng.js`. Keep them type-clean.
+  in Wooden Ships, `sim.js`, `ai.js` and `rng.js`; in `coreward-bound/` and
+  `star-troopers/`, `sim.js`, `hex.js`, `rng.js` and `ai.js`. Keep them
+  type-clean.
+- Coreward Bound: a rule change updates `src/sim.js`, `test/sim.test.js`,
+  `RULES.md` and the How to play card in its `index.html`, then a headless
+  run. Its player settings are `CHOICES` in `main.js` (CPU, Galaxy).
 - A rule change means updating, together: `sim.js`, a test in
   `test/sim.test.js`, `RULES.md`, and the How to play card in `index.html`.
   Then run the headless balance tool to check games still finish.

@@ -439,6 +439,25 @@ None of this is in the first version, but it's the plan.
     confirm. In List's points, those forces are 84, 84 and 84 if an
     Orrin is worth 21 and a Vell 10.5, against his 15 and 14. **(open:
     adopt as the Meeting forces)**
+  - **With the 1977 tables** (`combat=dice defence=original`; the charts
+    turned up after the measurements above): troopers spend about
+    two-thirds of their time in cover, and bombs and direct fire share
+    the damage, much as the original describes. Force matching changes:
+    - One Orrin is worth about 1.4 Compact, which is the original's own
+      ratio: its unit chart prices a ten-soldier Human squad the same as
+      a seven-soldier L'Chal Dah squad. 7 Orrin against 10 Compact
+      comes out 39–61.
+    - Vell and Compact are roughly one for one, the Vell slightly
+      ahead. In the original, six Rame cost the same as ten Humans; the
+      difference is everything the Rame had that the Vell don't yet
+      (Killer Swarm, always in command so firing first, and
+      countermeasures that work fully in the air).
+    - The three don't sit on one scale: the Orrin beat the Vell by more
+      than the other two ratios predict, so no whole-number table is
+      even all round. The best found are 6 Orrin / 8 Compact / 8 Vell
+      (53, 70 and 55: Orrin over Compact, Vell over Compact, Orrin over
+      Vell) and 4 / 6 / 6 (38, 68, 54), over 300 games a pairing.
+    - **(open: adopt the 1977 tables as the default, and which forces)**
   - Most games still run to the turn limit and are settled by hexes
     held.
   - History, briefly: one-stage turns with a 6-point shot cap left the

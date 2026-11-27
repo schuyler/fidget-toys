@@ -6,6 +6,7 @@ import { cellCenter, boardSize, fitSize, dirAngle } from './hex.js';
 
 /** @typedef {import('./sim.js').Game} Game */
 /** @typedef {import('./sim.js').Events} Events */
+/** A target marker to draw: board px, owner, and whether a finger is moving it. @typedef {{ x: number, y: number, player: number, dragging: boolean }} Marker */
 
 export const COLORS = {
   bg: '#0d1020',
@@ -220,7 +221,7 @@ export function createRenderer(canvas) {
   /**
    * @param {number} alpha  0..1 progress through the current tick
    * @param {number} dt     seconds since last frame
-   * @param {{ targetsPx: ({x: number, y: number}|null)[], dragging: boolean[], overlay: {lines: string[], color?: string, sub?: string}|null, hints: boolean, human: boolean[] }} ui
+   * @param {{ markers: Marker[], overlay: {lines: string[], color?: string, sub?: string}|null, hints: boolean }} ui
    */
   function draw(alpha, dt, ui) {
     if (!game || !staticLayer) return;
@@ -414,14 +415,15 @@ export function createRenderer(canvas) {
     ctx.globalAlpha = 1;
   }
 
-  /** @param {{ targetsPx: ({x: number, y: number}|null)[], dragging: boolean[], hints: boolean, human: boolean[] }} ui */
+  /** @param {{ markers: Marker[], hints: boolean }} ui */
   function drawTargets(ui) {
+    if (!game) return;
     const now = performance.now() / 1000;
-    for (let p = 0; p < 2; p++) {
-      const t = ui.targetsPx[p];
-      if (!t) continue;
+    let hinted = false; // the hint is drawn once, under the local player's first marker
+    for (const t of ui.markers) {
+      const p = t.player;
       const color = COLORS.players[p];
-      const R = Math.max(12, size * 1.7) * (ui.dragging[p] ? 1.35 : 1) * (1 + 0.06 * Math.sin(now * 5 + p));
+      const R = Math.max(12, size * 1.7) * (t.dragging ? 1.35 : 1) * (1 + 0.06 * Math.sin(now * 5 + p));
       ctx.save();
       ctx.translate(t.x, t.y);
       // 1. Dark backing disc: dims the dots underneath so the marker reads
@@ -466,7 +468,8 @@ export function createRenderer(canvas) {
       ctx.strokeStyle = color;
       ctx.stroke();
       ctx.restore();
-      if (ui.hints && ui.human[p]) {
+      if (ui.hints && !hinted && p === view.local) {
+        hinted = true;
         ctx.save();
         ctx.translate(t.x, t.y);
         if (view.flip) ctx.rotate(Math.PI);
@@ -474,7 +477,7 @@ export function createRenderer(canvas) {
         ctx.globalAlpha = 0.6 + 0.4 * Math.sin(now * 6);
         ctx.font = `600 ${Math.max(12, size * 1.6)}px system-ui, sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText('drag me', 0, R + Math.max(16, size * 2.4));
+        ctx.fillText(game.params.maxTargets > 1 ? 'tap to add · tap a marker to remove · drag to move' : 'drag me · tap to jump', 0, R + Math.max(16, size * 2.4));
         ctx.restore();
       }
     }

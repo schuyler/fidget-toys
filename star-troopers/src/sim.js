@@ -61,6 +61,8 @@ export const DEFAULTS = {
   faction1: 'compact',      // side 1 starts at the top
   attacker: 0,              // Assault: which side attacks
   squad: 4,
+  squad0: 0,                // tuning: side 0's squad size, overriding squad (0 = use squad)
+  squad1: 0,                // tuning: side 1's squad size, overriding squad (0 = use squad)
   rangeStep: 2,
   motionStep: 2,
   cover: 'draft',           // tuning knob: 'draft' or 'original' (the 1977 game's terrain values)
@@ -239,7 +241,7 @@ export function inZone(/** @type {Game} */ game, /** @type {number} */ side, /**
 
 /** How many troopers each side fields. */
 export function squadSizes(/** @type {Params} */ p) {
-  if (p.scenario !== 'assault') return [p.squad, p.squad];
+  if (p.scenario !== 'assault') return [p.squad0 || p.squad, p.squad1 || p.squad];
   const att = p.attacker, def = 1 - att;
   const fa = /** @type {FactionKey} */ (att === 0 ? p.faction0 : p.faction1);
   const fd = /** @type {FactionKey} */ (def === 0 ? p.faction0 : p.faction1);

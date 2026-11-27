@@ -364,6 +364,12 @@ test('Assault squads: the attacker fields at least 1.2x the defender\'s value', 
   assert.deepEqual(squadSizes({ ...DEFAULTS }), [4, 4]);
 });
 
+test('squad0 and squad1 set each side\'s squad size in Meeting', () => {
+  assert.deepEqual(squadSizes({ ...DEFAULTS, squad0: 6, squad1: 3 }), [6, 3]);
+  const game = createGame({ seed: 2, squad0: 6, squad1: 3 });
+  assert.deepEqual([0, 1].map((s) => game.troopers.filter((t) => t.side === s).length), [6, 3]);
+});
+
 test('generated Meeting maps are mirror images top to bottom', () => {
   for (const seed of [1, 2, 3, 4, 5]) {
     const game = createGame({ seed, terrain: 'dense' });

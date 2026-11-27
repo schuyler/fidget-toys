@@ -117,16 +117,14 @@ export function createAI(player, seed, opts = {}) {
       if (e < bestC) { bestC = e; centre = d.cell; }
     }
 
-    // Defend: an owned spawn with enemy dots pressed against it.
+    // Defend: an owned spawn with an enemy dot pressed against it. (This used
+    // to need 2 dots at a home and 4 elsewhere, which almost never happened
+    // with room for a second target, so the defend role never appeared.)
     let threat = -1;
     for (const s of game.spawns) {
       if (s.owner !== player) continue;
-      let hit = -1, count = 0;
-      for (const e of s.exits) {
-        const o = game.occ[e];
-        if (o && o.player === enemy) { count++; hit = e; }
-      }
-      if (count >= (s.home ? 2 : 4) && (cap > 1 || rng.next() < 0.8)) { threat = hit; break; }
+      const hit = s.exits.find((e) => game.occ[e]?.player === enemy);
+      if (hit !== undefined && (cap > 1 || rng.next() < 0.8)) { threat = hit; break; }
     }
     if (cap > 1) aim.defend = threat;
     else if (threat >= 0) {

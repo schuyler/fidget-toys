@@ -12,8 +12,9 @@ import { createGrid, hexDist, reflect, rowOf, colOf, cellAt, linePairs } from '.
 export const DRAW = 2;
 
 /** Terrain types. */
-export const OPEN = 0, BRUSH = 1, RUINS = 2, HIGH = 3, ROCK = 4;
-const COVER = [0, 1, 2, 1, 0];
+export const OPEN = 0, BRUSH = 1, RUINS = 2, HIGH = 3, ROCK = 4, BUILDING = 5;
+/** Cover by terrain type. Buildings are the best cover, as urban terrain was in the original. */
+export const COVER = [0, 1, 2, 1, 0, 3];
 
 /**
  * The factions. Pool, Aim and Recovery are StarSoldier's own numbers for
@@ -51,7 +52,9 @@ export const DEFAULTS = {
   surplusPct: 120,
   holdToWin: 2,
   turnLimit: 12,
+  hexTerrain: 'building',   // what victory hexes stand on: 'building' | 'ruins' | 'brush' | 'open'
   noise: 0,
+  dodgeAimCap: 0,           // tuning knob: dodge counts at most this much per point (0 = full Aim)
   recoverWhenHit: 1,        // 0 = only troopers that weren't hit recover
   seed: 1,
 };
@@ -250,7 +253,8 @@ function generate(game) {
     for (let i = 0; i < grid.N; i++) {
       if (rowOf(grid, i) > mid) game.terrain[i] = game.terrain[reflect(grid, i)];
     }
-    for (const v of vcells) if (game.terrain[v] === ROCK) game.terrain[v] = OPEN;
+    const ht = { open: OPEN, brush: BRUSH, ruins: RUINS, building: BUILDING }[/** @type {'open'|'brush'|'ruins'|'building'} */ (params.hexTerrain)] ?? BUILDING;
+    for (const v of vcells) game.terrain[v] = ht;
     if (connected(game, vcells)) break;
     if (attempt === 29) for (let i = 0; i < grid.N; i++) if (game.terrain[i] === ROCK) game.terrain[i] = OPEN;
   }
@@ -313,7 +317,7 @@ export function enterCost(/** @type {Game} */ game, /** @type {number} */ from, 
   const t = game.terrain[to];
   if (t === ROCK) return Infinity;
   if (t === HIGH) return game.terrain[from] === HIGH ? 1 : 2;
-  return t === OPEN ? 1 : 2;
+  return t === OPEN ? 1 : 2; // brush, ruins and buildings
 }
 
 /** Total cost of a path starting from `start`; Infinity if it's not a legal path. */
@@ -336,7 +340,7 @@ function isNeighbour(/** @type {Game} */ game, /** @type {number} */ a, /** @typ
 export function los(/** @type {Game} */ game, /** @type {number} */ a, /** @type {number} */ b) {
   const high = game.terrain[a] === HIGH || game.terrain[b] === HIGH;
   /** @param {number} c */
-  const blocks = (c) => c >= 0 && (game.terrain[c] === ROCK || (game.terrain[c] === RUINS && !high));
+  const blocks = (c) => c >= 0 && (game.terrain[c] === ROCK || game.terrain[c] === BUILDING || (game.terrain[c] === RUINS && !high));
   const pairs = linePairs(game.grid, a, b);
   for (let i = 1; i < pairs.length - 1; i++) {
     const [c1, c2] = pairs[i];
@@ -355,7 +359,7 @@ export function defenceOf(game, target, fromCell, order) {
   return COVER[game.terrain[target.cell]] * p.coverScale
     + Math.floor(hexDist(game.grid, fromCell, target.cell) / p.rangeStep)
     + Math.floor((order?.path.length ?? 0) / p.motionStep)
-    + (order?.dodge ?? 0) * target.aim
+    + (order?.dodge ?? 0) * (p.dodgeAimCap > 0 ? Math.min(target.aim, p.dodgeAimCap) : target.aim)
     + (target.dugIn ? 1 : 0);
 }
 

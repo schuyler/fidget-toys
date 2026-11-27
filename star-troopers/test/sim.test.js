@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createGame, resolveTurn, checkOrder, squadSizes, los, preview, stateHash, idle,
-  cellAt, ROCK, RUINS, HIGH, BRUSH, DRAW, DEFAULTS,
+  cellAt, ROCK, RUINS, HIGH, BRUSH, BUILDING, DRAW, DEFAULTS,
 } from '../src/sim.js';
 import { createGrid, reflect, axialToIndex, linePairs } from '../src/hex.js';
 import { createAI } from '../src/ai.js';
@@ -43,6 +43,19 @@ test('line of sight: ruins block, except to or from high ground', () => {
   assert.equal(los(game, C(3, 9), C(7, 9)), true);
   const brush = board([], { terrain: [[C(5, 9), BRUSH]] });
   assert.equal(los(brush, C(3, 9), C(7, 9)), true);
+});
+
+test('buildings block line of sight even from high ground, and give cover 3', () => {
+  const game = board([{ side: 0, cell: C(8, 9) }, { side: 1, cell: C(5, 9) }],
+    { terrain: [[C(4, 9), BUILDING], [C(7, 9), HIGH], [C(5, 9), BUILDING]] });
+  assert.equal(los(game, C(3, 9), C(7, 9)), false); // seen from high ground, still blocked
+  assert.equal(los(game, C(8, 9), C(5, 9)), true);  // the target's own building doesn't block
+  assert.equal(preview(game, game.troopers[0], game.troopers[1], 1).defence, 3 + 1);
+});
+
+test('victory hexes are buildings by default', () => {
+  const game = createGame({ seed: 5 });
+  assert.ok(game.victory.every((v) => game.terrain[v.cell] === BUILDING));
 });
 
 test('line of sight along an edge is blocked only if both cells block', () => {

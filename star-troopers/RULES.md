@@ -31,8 +31,12 @@ what it borrows and what it changes.
   | **Ruins** | 2 | 2 | blocks |
   | **High ground** | 2 to climb onto, 1 along or off | 1 | clear; see below |
   | **Rock** | impassable | — | blocks |
+  | **Building** | 2 | 3 | blocks, even from high ground |
 
-- Some cells are **victory hexes** (see Scenarios).
+- Some cells are **victory hexes** (see Scenarios). Every victory hex
+  is a building: a depot, a relay station, something worth holding.
+  Holding an objective means holding the best cover on the map, as
+  urban terrain was the strongest cover in the original.
 - Maps are mirror images top to bottom, reflected across the centre
   row, so in Meeting games neither side has an advantage. (Not rotated
   180°: on this grid a rotated map has no cell at its centre, so it
@@ -258,6 +262,8 @@ In any scenario, a side with no troopers left loses at once.
 | `noise` | 0 | 0 = off, 1 = ±1 on shots that land |
 | `coverScale` | 1 | Tuning: multiplies every cover value |
 | `recoverWhenHit` | 1 | Tuning: 0 = only troopers that weren't hit recover |
+| `hexTerrain` | building | Tuning: what victory hexes stand on (`building`, `ruins`, `brush`, `open`) |
+| `dodgeAimCap` | 0 | Tuning: dodge counts at most this much per point (0 = full Aim) |
 | `seed` | random | Same seed and same orders = same game |
 
 ## Later
@@ -327,15 +333,31 @@ None of this is in the first version, but it's the plan.
   damage divided by 3 rather than 2, and range counting every 2 cells
   rather than 3. That same Vell shot now deals 7, and games run to
   about turn 11.
-- **Where balance stands (open).** On the current defaults, in 100
-  CPU-vs-CPU games per pairing, the Orrin beat the Compact about 3
-  times in 4 and the Vell beat the Compact about 2 times in 3. Orrin
-  against Vell is roughly even. Most games run to the turn limit, so
-  they're settled by hexes held, where the Orrin's 12 points a turn
-  buy mobility. The CPU also hardly uses cover, which needs looking
-  into before these numbers mean much. Next levers to try, still
-  without touching faction numbers: turns in two stages like the
-  original, and scenario design.
+- **Where balance stands (open).** Measured over 200 CPU-vs-CPU games
+  per pairing, half from each side of the map, so each figure is good
+  to about ±7 points:
+  - With victory hexes as buildings (the default), troopers stand in
+    cover 38% of the time instead of 11%. The Orrin beat the Compact
+    57% of the time, which is close to even. But the Vell beat the
+    Compact 80% of the time, and the Orrin beat the Vell 61%.
+  - The Vell problem is dodging. The shot cap limits how hard anyone
+    can hit, but nothing limits dodging, and Aim 4 doubles every dodge
+    point. A Vell in a building dodging with 3 points is out of reach
+    of a Compact's or Orrin's biggest shot (attack 12). The original
+    had an answer: the Rame's countermeasures were halved on the
+    ground. `dodgeAimCap=2` (dodge counts at most ×2) is the nearest
+    thing here, and it brings Vell against Compact to 43%, but then
+    the Orrin beat the Vell 85% of the time. At `dodgeAimCap=3` it's
+    Orrin 57% against Compact, Vell 58% against Compact and Orrin 73%
+    against Vell.
+  - Whatever else moves, the Orrin come out on top. Their 12-point
+    pool is more of everything, every turn.
+  - 80–93% of games run to the turn limit and are settled by hexes
+    held. Raising the limit to 16 doesn't change that much.
+  - Earlier, the CPU hardly used cover. That wasn't a bug in how it
+    judged danger: it was piling onto victory hexes in open ground.
+    Victory hexes as buildings, and giving troopers taker and support
+    roles, fixed that.
 - **Why noise starts off.** Not knowing the other side's orders is
   already plenty of uncertainty, and the interesting kind. The worry
   with pure arithmetic is that defence can become absolute: two squads

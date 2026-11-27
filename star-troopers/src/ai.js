@@ -13,19 +13,21 @@
 import { createRng } from './rng.js';
 import { hexDist, reflect } from './hex.js';
 import {
-  living, usable, enterCost, los, defenceOf, baseShock, occupant, held, ROCK, idle,
+  living, usable, enterCost, los, defenceOf, baseShock, occupant, held, ROCK, COVER, idle,
 } from './sim.js';
 
 /** @typedef {import('./sim.js').Game} Game */
 /** @typedef {import('./sim.js').Trooper} Trooper */
 /** @typedef {import('./sim.js').Order} Order */
 
-const COVER = [0, 1, 2, 1, 0];
+/** How far from its hex a supporting trooper wants to be, at most. */
+const SUPPORT_RANGE = 4;
 
 /**
  * @param {number} side
  * @param {number} seed
- * @param {{level?: 'easy'|'hard'}} [opts]
+ * @param {{level?: 'easy'|'hard', onDecide?: (info: {trooper: Trooper, goal: number, chosen: any, cands: any[], threatAt: Map<number, number>}) => void}} [opts]
+ *   onDecide is a debugging hook: it sees every candidate and the pick.
  */
 export function createAI(side, seed, opts = {}) {
   const rng = createRng(seed);
@@ -58,7 +60,7 @@ export function createAI(side, seed, opts = {}) {
       return v;
     };
 
-    const goals = assignGoals(game, mine);
+    const { goals, takers } = assignGoals(game, mine);
     /** @type {Map<number, Int32Array>} */
     const goalDist = new Map();
     for (const cell of new Set(goals.values())) goalDist.set(cell, costField(game, cell));
@@ -102,11 +104,18 @@ export function createAI(side, seed, opts = {}) {
         .slice(0, 4).forEach((c) => ends.add(c));
       reachable.filter((c) => COVER[game.terrain[c]] > 0)
         .sort((a, b) => gd[a] - gd[b]).slice(0, 3).forEach((c) => ends.add(c));
+      // Support positions: near the goal, with a view of it, as safe as possible.
+      const taker = takers.has(t.id);
+      if (!taker) {
+        reachable.filter((c) => hexDist(g, c, goal) <= SUPPORT_RANGE && see(c, goal))
+          .sort((a, b) => /** @type {number} */ (threatAt.get(a)) - /** @type {number} */ (threatAt.get(b)) || gd[a] - gd[b])
+          .slice(0, 4).forEach((c) => ends.add(c));
+      }
 
       // Who can it shoot from where it stands? (Fire happens before moving.)
       const targets = foes.filter((f) => see(t.cell, f.cell));
 
-      /** @type {{order: Order, score: number, target: number, dealt: number}[]} */
+      /** @type {{order: Order, score: number, target: number, dealt: number, end: number}[]} */
       const cands = [];
       for (const end of ends) {
         const path = field.path(end);
@@ -128,14 +137,15 @@ export function createAI(side, seed, opts = {}) {
             if (bestTarget < 0) continue;
           }
           const order = { path, target: bestTarget, fire: bestTarget >= 0 ? sp.fire : 0, dodge: sp.dodge, overwatch: sp.overwatch };
-          const score = scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, /** @type {number} */ (threatAt.get(end)))
+          const score = scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, /** @type {number} */ (threatAt.get(end)), taker)
             + dealt + killBonus;
-          cands.push({ order, score, target: bestTarget, dealt });
+          cands.push({ order, score, target: bestTarget, dealt, end });
         }
       }
 
       cands.sort((a, b) => b.score - a.score);
       const pick = choose(cands, level, rng);
+      opts.onDecide?.({ trooper: t, goal, chosen: pick, cands, threatAt });
       if (!pick) { orders[t.id] = idle(); continue; }
       orders[t.id] = pick.order;
       friendPlans.push({ start: t.cell, path: pick.order.path });
@@ -152,7 +162,8 @@ export function createAI(side, seed, opts = {}) {
   /**
    * Gives each trooper a victory hex to head for or guard.
    * @param {Game} game @param {Trooper[]} mine
-   * @returns {Map<number, number>} trooper id -> goal cell
+   * @returns {{goals: Map<number, number>, takers: Set<number>}} goal cell per
+   *   trooper id, and which troopers go for the hex itself
    */
   function assignGoals(game, mine) {
     const p = game.params;
@@ -186,7 +197,15 @@ export function createAI(side, seed, opts = {}) {
       load.set(h, /** @type {number} */ (load.get(h)) + 1);
     }
     for (const t of mine) if (!goals.has(t.id)) goals.set(t.id, hexes[0]);
-    return goals;
+    // The nearest trooper to each hex takes it; the rest support it.
+    const takers = new Set();
+    const taken = new Set();
+    for (const { t, h } of pairs) {
+      if (goals.get(t.id) !== h || taken.has(h)) continue;
+      takers.add(t.id);
+      taken.add(h);
+    }
+    return { goals, takers };
   }
 
   return { side, plan };
@@ -292,8 +311,9 @@ function threatNextTurn(game, t, cell, foes, see) {
  * @param {number} goal @param {Int32Array} gd @param {Trooper[]} foes
  * @param {(a: number, b: number) => boolean} see @param {number} urgency
  * @param {number} threat  expected shock next turn at the end cell
+ * @param {boolean} taker  going for the hex itself, rather than supporting
  */
-function scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, threat) {
+function scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, threat, taker) {
   const p = game.params;
   const g = game.grid;
   let score = 0;
@@ -323,10 +343,19 @@ function scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, threat) {
   // Progress towards the goal hex. A badly hurt trooper cares less about
   // the objective and more about living to recover.
   const drive = urgency * (1 - 0.6 * hurt);
-  score += (gd[t.cell] - gd[end]) * 0.9 * drive;
   const dg = hexDist(g, end, goal);
-  if (dg === 0) score += 3 * drive;
-  else if (dg === 1) score += 1.2 * drive;
+  if (taker) {
+    score += (gd[t.cell] - gd[end]) * 0.9 * drive;
+    if (dg === 0) score += 3 * drive;
+    else if (dg === 1) score += 1.2 * drive;
+  } else {
+    // Supporters close in until they can cover the hex, then hold back:
+    // one trooper on a hex takes it, and the rest do better shooting at
+    // anyone who comes for it from somewhere safe.
+    if (hexDist(g, t.cell, goal) > SUPPORT_RANGE) score += (gd[t.cell] - gd[end]) * 0.5 * drive;
+    score -= Math.max(0, dg - SUPPORT_RANGE) * 0.6 * drive;
+    if (dg <= SUPPORT_RANGE && see(end, goal)) score += 1.2 * drive;
+  }
   // Standing next to our own hex stops the enemy taking it.
   for (const v of game.victory) {
     if (hexDist(g, end, v.cell) <= 1 && v.owner === t.side) score += 0.8;

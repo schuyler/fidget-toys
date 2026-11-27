@@ -66,8 +66,10 @@ export const DEFAULTS = {
   cover: 'draft',           // tuning knob: 'draft' or 'original' (the 1977 game's terrain values)
   coverScale: 1,            // tuning knob: multiplies every cover value
   damageDivisor: 3,
-  maxShot: 6,               // most points in one shot, 0 = no cap
-  maxSpend: 0,              // tuning knob: most points one trooper spends in a turn, 0 = no cap
+  stages: 2,                // stages per game-turn: 2 as in the original's Standard Game, or 1
+  stageCap: 6,              // most points a trooper spends in one stage (two-stage turns)
+  maxShot: 0,               // tuning knob: most points in one shot, 0 = no cap
+  maxSpend: 0,              // tuning knob: most points one trooper spends in a game-turn, 0 = no cap
   overwatchRange: 6,
   surplusPct: 120,
   holdToWin: 2,
@@ -75,7 +77,7 @@ export const DEFAULTS = {
   hexTerrain: 'building',   // what victory hexes stand on: 'building' | 'ruins' | 'brush' | 'open'
   noise: 0,
   dodgeAimCap: 0,           // tuning knob: dodge counts at most this much per point (0 = full Aim)
-  recoverWhenHit: 1,        // 0 = only troopers that weren't hit recover
+  recoverWhenHit: 0,        // tuning knob: 1 = troopers recover even when hit (the original: only if not hit)
   seed: 1,
 };
 
@@ -93,6 +95,7 @@ export const DEFAULTS = {
  * @property {number} shock
  * @property {boolean} down
  * @property {boolean} dugIn    Assault defenders until they leave their zone
+ * @property {number} spent    points already spent this game-turn (in its first stage)
  */
 
 /**
@@ -122,6 +125,7 @@ export const DEFAULTS = {
  * What happened in a turn, for playback and stats.
  * @typedef {Object} TurnEvents
  * @property {number} turn
+ * @property {number} stage    1 or 2 (always 1 with one-stage turns)
  * @property {Shot[]} shots
  * @property {{id: number, from: number, to: number}[][]} steps
  * @property {{id: number, step: number}[]} blocked
@@ -145,7 +149,8 @@ export const DEFAULTS = {
  * @property {Uint8Array} terrain
  * @property {Trooper[]} troopers   indexed by id; downed troopers stay in the list
  * @property {Victory[]} victory
- * @property {number} turn          the turn about to be played, from 1
+ * @property {number} turn          the game-turn being played, from 1
+ * @property {number} stage         the stage about to be played: 1, or 2 with two-stage turns
  * @property {number} winner        -1 while playing, 0, 1 or DRAW
  * @property {number} defender      Assault: the defending side, else -1
  * @property {TurnEvents|null} last
@@ -180,6 +185,7 @@ export function createGame(overrides = {}, layout) {
     troopers: [],
     victory: [],
     turn: 1,
+    stage: 1,
     winner: -1,
     defender: params.scenario === 'assault' ? 1 - params.attacker : -1,
     last: null,
@@ -212,7 +218,7 @@ function addTrooper(game, side, faction, cell) {
   const t = {
     id: game.troopers.length, side, faction,
     pool: f.pool, aim: f.aim, recovery: f.recovery,
-    cell, shock: 0, down: false, dugIn: false,
+    cell, shock: 0, down: false, dugIn: false, spent: 0,
   };
   game.troopers.push(t);
   return t;
@@ -322,14 +328,20 @@ export function usable(/** @type {Trooper} */ t) {
 }
 
 /**
- * Points a trooper can actually spend this turn: its usable points, within
- * the per-turn cap if there is one. Unspendable points still count towards
- * staying power, since shock comes out of the pool.
+ * Points a trooper can spend in the stage being plotted. With two-stage
+ * turns (the original's rules 15.21-15.24), that's its usable points less
+ * whatever it spent in the first stage, and never more than six in one
+ * stage. Points it can't spend still count towards staying power, since
+ * shock comes out of the pool.
  * @param {Game} game @param {Trooper} t
  */
 export function spendable(game, t) {
-  const u = usable(t);
-  return game.params.maxSpend > 0 ? Math.min(u, game.params.maxSpend) : u;
+  const p = game.params;
+  const two = p.stages === 2;
+  let room = usable(t) - (two ? t.spent : 0);
+  if (two) room = Math.min(room, p.stageCap);
+  if (p.maxSpend > 0) room = Math.min(room, p.maxSpend - (two ? t.spent : 0));
+  return Math.max(0, room);
 }
 
 /** Troopers still in the game. */
@@ -460,7 +472,11 @@ export function resolveTurn(game, orders) {
     if (why) throw new Error(`trooper ${t.id}: ${why}`);
   }
   /** @type {TurnEvents} */
-  const ev = { turn: game.turn, shots: [], steps: [], blocked: [], pinned: [], downs: [], recovered: [], captures: [] };
+  const ev = { turn: game.turn, stage: game.stage, shots: [], steps: [], blocked: [], pinned: [], downs: [], recovered: [], captures: [] };
+  for (const t of living(game)) {
+    const o = ord[t.id];
+    t.spent += pathCost(game, t.cell, o.path) + o.fire + o.dodge + o.overwatch;
+  }
   const shockBefore = game.troopers.map((t) => t.shock);
   const hit = new Uint8Array(game.troopers.length);
 
@@ -597,7 +613,15 @@ export function resolveTurn(game, orders) {
   // 6. Win check.
   game.winner = winCheck(game);
   game.last = ev;
-  if (game.winner < 0) game.turn++;
+  if (game.winner < 0) {
+    if (p.stages === 2 && game.stage === 1) {
+      game.stage = 2;
+    } else {
+      game.stage = 1;
+      game.turn++;
+      for (const t of game.troopers) t.spent = 0;
+    }
+  }
   return ev;
 }
 
@@ -609,6 +633,8 @@ export function held(/** @type {Game} */ game, /** @type {number} */ side) {
 /** @param {Game} game */
 function winCheck(game) {
   const p = game.params;
+  // The turn limit counts whole game-turns, so it only bites after the last stage.
+  const atLimit = game.turn >= p.turnLimit && (p.stages !== 2 || game.stage === 2);
   const a0 = living(game, 0).length, a1 = living(game, 1).length;
   if (a0 === 0 && a1 === 0) return DRAW;
   if (a0 === 0) return 1;
@@ -617,13 +643,13 @@ function winCheck(game) {
   if (p.scenario === 'assault') {
     const att = p.attacker;
     if (held(game, att) >= p.holdToWin) return att;
-    if (game.turn >= p.turnLimit) return 1 - att;
+    if (atLimit) return 1 - att;
     return -1;
   }
   const n = game.victory.length;
   if (n > 0 && h0 === n) return 0;
   if (n > 0 && h1 === n) return 1;
-  if (game.turn >= p.turnLimit) return h0 > h1 ? 0 : h1 > h0 ? 1 : DRAW;
+  if (atLimit) return h0 > h1 ? 0 : h1 > h0 ? 1 : DRAW;
   return -1;
 }
 
@@ -632,8 +658,8 @@ export function stateHash(/** @type {Game} */ game) {
   let h = 2166136261 >>> 0;
   /** @param {number} x */
   const mix = (x) => { h = Math.imul(h ^ (x & 0xffff), 16777619) >>> 0; h = Math.imul(h ^ (x >>> 16), 16777619) >>> 0; };
-  mix(game.turn); mix(game.winner + 1); mix(game.rng.state());
-  for (const t of game.troopers) { mix(t.cell); mix(t.shock); mix(t.down ? 1 : 0); mix(t.dugIn ? 1 : 0); }
+  mix(game.turn); mix(game.stage); mix(game.winner + 1); mix(game.rng.state());
+  for (const t of game.troopers) { mix(t.cell); mix(t.shock); mix(t.down ? 1 : 0); mix(t.dugIn ? 1 : 0); mix(t.spent); }
   for (const v of game.victory) { mix(v.cell); mix(v.owner + 1); }
   for (let i = 0; i < game.terrain.length; i++) mix(game.terrain[i]);
   return h;

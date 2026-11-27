@@ -1,15 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createGame, resolveTurn, checkOrder, squadSizes, los, preview, stateHash, idle,
+  createGame, resolveTurn, checkOrder, squadSizes, los, preview, stateHash, idle, spendable,
   cellAt, ROCK, RUINS, HIGH, BRUSH, BUILDING, DRAW, DEFAULTS,
 } from '../src/sim.js';
 import { createGrid, reflect, axialToIndex, linePairs } from '../src/hex.js';
 import { createAI } from '../src/ai.js';
 
-/** Open 13×19 board with the given troopers (and optional terrain, hexes). */
+/**
+ * Open 13×19 board with the given troopers (and optional terrain, hexes).
+ * One-stage turns unless asked, so each resolveTurn is a whole turn.
+ */
 function board(troopers, extra = {}, params = {}) {
-  return createGame(params, { troopers, ...extra });
+  return createGame({ stages: 1, ...params }, { troopers, ...extra });
 }
 const C = (col, row) => cellAt(createGrid(DEFAULTS.width, DEFAULTS.height), col, row);
 /** Orders: { id: partial order } -> array by id. */
@@ -159,18 +162,18 @@ test('overwatch ignores enemies standing still and fires once per turn', () => {
   assert.notEqual(ow[0].to, 1);
 });
 
-test('with recoverWhenHit off, only troopers that were not hit recover', () => {
+test('only troopers that were not hit recover (rule 6.31)', () => {
   const game = board([
     { side: 0, cell: C(2, 9), shock: 4 },
     { side: 1, cell: C(6, 9), shock: 4 },
-  ], {}, { recoverWhenHit: 0 });
+  ]);
   resolveTurn(game, orders(game, { 0: { target: 1, fire: 3 } }));
   assert.equal(game.troopers[0].shock, 1);      // Compact recovers 3
   assert.equal(game.troopers[1].shock, 4 + 1);  // attack 6 - range 2 = 4, divided by 3
 });
 
-test('by default troopers recover every turn, hit or not', () => {
-  const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9), shock: 4 }]);
+test('the recoverWhenHit knob lets troopers recover even when hit', () => {
+  const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9), shock: 4 }], {}, { recoverWhenHit: 1 });
   resolveTurn(game, orders(game, { 0: { target: 1, fire: 3 } }));
   assert.equal(game.troopers[1].shock, 4 + 1 - 3);
 });
@@ -263,6 +266,34 @@ test('the maxSpend knob caps points spent per turn, not the pool', () => {
   assert.equal(checkOrder(game, t, { ...idle(), dodge: 9 }), null);
   assert.equal(checkOrder(game, t, { ...idle(), dodge: 10 }), 'not enough points');
   assert.equal(t.pool, 12);
+});
+
+test('two stages: at most 6 points a stage, and the second gets what the first left', () => {
+  const two = { stages: 2 };
+  const game = createGame(two, { troopers: [{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9), faction: 'orrin' }] });
+  const [c, o] = game.troopers;
+  assert.equal(checkOrder(game, c, { ...idle(), dodge: 7 }), 'not enough points');
+  resolveTurn(game, orders(game, { 0: { dodge: 6 }, 1: { dodge: 6 } }));
+  assert.equal(game.stage, 2);
+  assert.equal(game.turn, 1);
+  assert.equal(spendable(game, c), 3);   // Compact: 9 - 6
+  assert.equal(spendable(game, o), 6);   // Orrin: 12 - 6, capped at 6
+  resolveTurn(game, orders(game, { 0: { dodge: 3 }, 1: { dodge: 6 } }));
+  assert.deepEqual([game.turn, game.stage], [2, 1]);
+  assert.equal(spendable(game, c), 6);   // a new game-turn
+});
+
+test('two stages: the turn limit counts game-turns, and recovery happens each stage', () => {
+  const game = createGame({ stages: 2, turnLimit: 1 }, {
+    troopers: [{ side: 0, cell: C(6, 15), shock: 6 }, { side: 1, cell: C(6, 2) }],
+    victory: [{ cell: C(6, 9), owner: -1 }, { cell: C(2, 9), owner: -1 }, { cell: C(10, 9), owner: -1 }],
+  });
+  resolveTurn(game, orders(game, {}));
+  assert.equal(game.winner, -1);                 // only stage 1 of turn 1
+  assert.equal(game.troopers[0].shock, 3);
+  resolveTurn(game, orders(game, {}));
+  assert.equal(game.winner, DRAW);               // end of turn 1, nobody holds anything
+  assert.equal(game.troopers[0].shock, 0);
 });
 
 test('Assault squads: the attacker fields at least 1.2x the defender\'s value', () => {

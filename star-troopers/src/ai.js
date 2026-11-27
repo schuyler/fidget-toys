@@ -123,6 +123,14 @@ export function createAI(side, seed, opts = {}) {
         if (friendPlans.some((f) => clash(t.cell, path, f.start, f.path))) continue;
         const left = budget - field.cost[end];
         const splits = splitsFor(left, targets.length > 0, p.maxShot);
+        // In the first of two stages, points not spent now are there to
+        // dodge with in the second: offer versions that hold some back.
+        if (p.stages === 2 && game.stage === 1) {
+          for (const sp of splits.slice()) {
+            if (sp.dodge > 0) splits.push({ ...sp, dodge: Math.floor(sp.dodge / 2), reserve: sp.dodge - Math.floor(sp.dodge / 2) });
+            if (sp.dodge > 1) splits.push({ ...sp, dodge: 0, reserve: sp.dodge });
+          }
+        }
         for (const sp of splits) {
           let bestTarget = -1, dealt = 0, killBonus = 0;
           if (sp.fire > 0) {
@@ -137,8 +145,16 @@ export function createAI(side, seed, opts = {}) {
             if (bestTarget < 0) continue;
           }
           const order = { path, target: bestTarget, fire: bestTarget >= 0 ? sp.fire : 0, dodge: sp.dodge, overwatch: sp.overwatch };
-          const score = scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, /** @type {number} */ (threatAt.get(end)), taker)
+          let score = scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, /** @type {number} */ (threatAt.get(end)), taker)
             + dealt + killBonus;
+          // Points held back for the second stage are worth the fire they
+          // could dodge there: each one takes Aim off every shot at it, up
+          // to the danger it will actually be in.
+          if (sp.reserve) {
+            const watchers = foes.filter((f) => see(f.cell, end)).length;
+            const saved = Math.min(/** @type {number} */ (threatAt.get(end)), (sp.reserve * t.aim * watchers) / p.damageDivisor);
+            score += saved * 0.4 * (1 + (2 * t.shock) / t.pool);
+          }
           cands.push({ order, score, target: bestTarget, dealt, end });
         }
       }
@@ -242,7 +258,7 @@ function clash(aStart, aPath, bStart, bPath) {
  * @param {number} left @param {boolean} canFire @param {number} maxShot
  */
 function splitsFor(left, canFire, maxShot) {
-  /** @type {{fire: number, dodge: number, overwatch: number}[]} */
+  /** @type {{fire: number, dodge: number, overwatch: number, reserve?: number}[]} */
   const out = [{ fire: 0, dodge: left, overwatch: 0 }];
   if (left <= 0) return out;
   const cap = maxShot > 0 ? maxShot : left;
@@ -263,7 +279,7 @@ function splitsFor(left, canFire, maxShot) {
  * @param {Game} game @param {Trooper} t @param {Trooper} f @param {number} points
  */
 function expectedShock(game, t, f, points) {
-  const guess = { path: [], target: -1, fire: 0, dodge: Math.floor(usable(f) / 3), overwatch: 0 };
+  const guess = { path: [], target: -1, fire: 0, dodge: Math.floor(spendable(game, f) / 3), overwatch: 0 };
   const s = baseShock(game.params, points * t.aim, defenceOf(game, f, t.cell, guess));
   return Math.max(0, s);
 }
@@ -274,8 +290,17 @@ function expectedShock(game, t, f, points) {
  * @param {Game} game @param {Trooper} f
  */
 function guessShot(game, f) {
-  const half = Math.ceil(usable(f) / 2);
-  return game.params.maxShot > 0 ? Math.min(half, game.params.maxShot) : half;
+  return Math.ceil(biggestShot(game, f) / 2);
+}
+
+/**
+ * The most points a foe could put into one shot this stage: what it can
+ * spend, within the shot cap if there is one.
+ * @param {Game} game @param {Trooper} f
+ */
+function biggestShot(game, f) {
+  const room = spendable(game, f);
+  return game.params.maxShot > 0 ? Math.min(room, game.params.maxShot) : room;
 }
 
 /**
@@ -298,7 +323,9 @@ function threatNextTurn(game, t, cell, foes, see) {
     const defence = coverValue(game, cell)
       + Math.floor(hexDist(game.grid, f.cell, cell) / p.rangeStep)
       + (t.dugIn ? 1 : 0);
-    const all = p.maxShot > 0 ? Math.min(usable(f), p.maxShot) : usable(f);
+    // Next stage it could have up to a full stage's worth again.
+    const next = p.stages === 2 ? Math.min(usable(f), p.stageCap) : usable(f);
+    const all = p.maxShot > 0 ? Math.min(next, p.maxShot) : next;
     const s = baseShock(p, all * f.aim, defence);
     if (s > 0) threat += s / Math.max(1, friends.filter((m) => m.id === t.id || see(f.cell, m.cell)).length);
   }

@@ -84,9 +84,10 @@ against each other. A standard squad is **4 troopers**.
 
 ## Orders
 
-At the start of each turn both sides plot orders for every trooper, in
-secret. The CPU plots without seeing yours. A trooper's usable points are
-split between four tasks, and points left unspent are wasted:
+Each game-turn has two **stages** (see A turn). At the start of each
+stage both sides plot orders for every trooper, in secret. The CPU plots
+without seeing yours. A trooper's points for the stage are split between
+four tasks:
 
 - **Move:** plot a path, paying each cell's move cost.
 - **Fire:** pick one enemy in line of sight and put any number of points
@@ -96,9 +97,20 @@ split between four tasks, and points left unspent are wasted:
 - **Overwatch:** points held back to shoot the first enemy that shows
   itself during movement (see A turn).
 
-A trooper can do all four in one turn, as long as the points add up.
-No single shot can use more than **6 points**, after the original's
-limit of 6 points per stage of a turn.
+A trooper can do all four in one stage, as long as the points add up.
+
+- In the first stage a trooper can spend up to **6 points**.
+- In the second it can spend whatever it didn't spend in the first,
+  again up to 6.
+- Points left unspent in the second stage are wasted.
+
+So a Vell (pool 6) that goes all-out in the first stage has nothing left
+to dodge or move with in the second, while an Orrin (pool 12) can spend 6
+in each. This is the original's rule, and its designers' notes say it's
+there for exactly this reason: the Rame "have the advantage of being able
+to concentrate on attacking with a maximum strength of twenty-four in a
+given Stage, and the disadvantage of having to stretch six Task Points
+to last an entire Game-turn."
 
 ## Shooting
 
@@ -145,7 +157,9 @@ orders.
 
 ## A turn
 
-1. **Plot:** both sides plot orders, then commit.
+A game-turn is two stages, and each stage runs the whole sequence below.
+
+1. **Plot:** both sides plot orders for this stage, then commit.
 2. **Fire:** every shot is resolved from where everyone starts the turn,
    all at the same time. Shock is applied together afterwards, so a
    trooper that goes down this phase still fires. Defence uses the
@@ -166,12 +180,12 @@ orders.
      it is.
    - A trooper that goes down stops and is removed at the end of the
      step.
-4. **Recovery:** every trooper still standing removes shock equal to
-   its Recovery, hit this turn or not. Over a few turns, a hurt trooper
-   that gets out of the line of fire is back in the fight, and the
-   Compact, at Recovery 3, bounce back fastest.
+4. **Recovery:** every trooper that took no shock this stage removes
+   shock equal to its Recovery. Since there are two stages, a trooper
+   that stays out of the line of fire recovers twice a game-turn: a
+   Compact trooper, at Recovery 3, can shake off 6 shock a turn.
 5. **Control:** victory hexes change hands (see below).
-6. **Win check.**
+6. **Win check.** The turn limit counts whole game-turns.
 
 ## Scenarios
 
@@ -254,14 +268,16 @@ In any scenario, a side with no troopers left loses at once.
 | `rangeStep` | 2 | Cells per +1 defence from range |
 | `motionStep` | 2 | Plotted cells moved per +1 defence |
 | `damageDivisor` | 3 | Shock = margin ÷ this, rounded down |
-| `maxShot` | 6 | Most points in one shot (0 = no cap) |
+| `stages` | 2 | Stages per game-turn (1 for a simpler, one-plot turn) |
+| `stageCap` | 6 | Most points a trooper spends in one stage |
+| `maxShot` | 0 | Tuning: most points in one shot (0 = no cap) |
 | `overwatchRange` | 6 | How far overwatch reaches |
 | `surplusPct` | 120 | Attacker's value as a percentage of the defender's |
 | `holdToWin` | 2 | Victory hexes the attacker needs in Assault |
 | `turnLimit` | 12 | Turns before a scenario is decided |
 | `noise` | 0 | 0 = off, 1 = ±1 on shots that land |
 | `coverScale` | 1 | Tuning: multiplies every cover value |
-| `recoverWhenHit` | 1 | Tuning: 0 = only troopers that weren't hit recover |
+| `recoverWhenHit` | 0 | Tuning: 1 = troopers recover even when hit |
 | `hexTerrain` | building | Tuning: what victory hexes stand on (`building`, `ruins`, `brush`, `open`) |
 | `dodgeAimCap` | 0 | Tuning: dodge counts at most this much per point (0 = full Aim) |
 | `seed` | random | Same seed and same orders = same game |
@@ -327,37 +343,40 @@ None of this is in the first version, but it's the plan.
   dice and a results table, this game does with a fixed formula, and
   that changes the balance. The first draft made everything kill
   everything: a Vell's 6 points at Aim 4 took down a fresh Compact
-  trooper in one shot, and games were over by turn 5. Headless runs
-  pointed at four changes: the 6-point shot cap and recovery every
-  turn (both closer to the original than the first draft was),
-  damage divided by 3 rather than 2, and range counting every 2 cells
-  rather than 3. That same Vell shot now deals 7, and games run to
-  about turn 11.
-- **Where balance stands (open).** Measured over 200 CPU-vs-CPU games
-  per pairing, half from each side of the map, so each figure is good
-  to about ±7 points:
-  - With victory hexes as buildings (the default), troopers stand in
-    cover 38% of the time instead of 11%. The Orrin beat the Compact
-    57% of the time, which is close to even. But the Vell beat the
-    Compact 80% of the time, and the Orrin beat the Vell 61%.
-  - The Vell problem is dodging. The shot cap limits how hard anyone
-    can hit, but nothing limits dodging, and Aim 4 doubles every dodge
-    point. A Vell in a building dodging with 3 points is out of reach
-    of a Compact's or Orrin's biggest shot (attack 12). The original
-    had an answer: the Rame's countermeasures were halved on the
-    ground. `dodgeAimCap=2` (dodge counts at most ×2) is the nearest
-    thing here, and it brings Vell against Compact to 43%, but then
-    the Orrin beat the Vell 85% of the time. At `dodgeAimCap=3` it's
-    Orrin 57% against Compact, Vell 58% against Compact and Orrin 73%
-    against Vell.
-  - Whatever else moves, the Orrin come out on top. Their 12-point
-    pool is more of everything, every turn.
-  - 80–93% of games run to the turn limit and are settled by hexes
-    held. Raising the limit to 16 doesn't change that much.
-  - Earlier, the CPU hardly used cover. That wasn't a bug in how it
-    judged danger: it was piling onto victory hexes in open ground.
-    Victory hexes as buildings, and giving troopers taker and support
-    roles, fixed that.
+  trooper in one shot, and games were over by turn 5. Damage divided by
+  3 rather than 2, and range counting every 2 cells rather than 3,
+  slowed that down.
+- **Where balance stands (open).** Measured in CPU-vs-CPU games, 200 per
+  pairing, half from each side of the map, so each figure is good to
+  about ±7 points.
+  - Mirror matches are fair, which is the check that the simulation and
+    the CPU don't favour a side.
+  - With two-stage turns (the current default), the Vell no longer beat
+    everyone: the Orrin beat them about 70% of the time. That's what
+    the original's designers built two stages for.
+  - The Compact lose to everyone: about 80–95% against the Orrin and
+    about 92% against the Vell. They deal almost no damage. An Orrin
+    spends 6 + 6 points a game-turn and a Compact 6 + 3, with the same
+    Aim, so in direct fire alone the Compact are simply weaker. In the
+    original their answer was recovery (up to 6 shock a game-turn while
+    unhit) and launched weapons, whose damage doesn't depend on
+    Efficiency: a blast hits at a fixed strength (30 in its hex, 15 and
+    5 further out) divided by the target's terrain value, and
+    Efficiency only decides whether a guided weapon lands where it was
+    aimed. List's tactics article says "the bulk of the damage to the
+    enemy will be done by Launched Weapons." That's the next thing to
+    add.
+  - Most games still run to the turn limit and are settled by hexes
+    held.
+  - History, briefly: one-stage turns with a 6-point shot cap left the
+    Vell untouchable in cover, since nothing limited dodging; capping
+    dodge at ×2 or ×3 per point just moved the imbalance around; a
+    per-turn spending cap flattened the factions; the original's large
+    terrain values (urban 6) without launched weapons turned the game
+    into a standoff the Orrin won on staying power. The CPU once
+    ignored cover because victory hexes sat in open ground; they're
+    buildings now, and troopers split into one taker per hex and
+    supporters.
 - **Why noise starts off.** Not knowing the other side's orders is
   already plenty of uncertainty, and the interesting kind. The worry
   with pure arithmetic is that defence can become absolute: two squads
@@ -403,8 +422,10 @@ None of this is in the first version, but it's the plan.
     altitude, launched weapons, search and so on).
   - Damage is a third of the margin by which attack beats defence,
     with optional ±1 noise, instead of dice and a results table.
-  - Single-stage turns, with a 6-point cap per shot in place of the
-    original's 6 points per stage.
+  - Two stages per game-turn with 6 points per stage, as in the
+    original's Standard Game, but no Command Communication (in the
+    original, troopers in contact with a leader fire first in each
+    stage).
   - Shots happen before anyone moves, from where everyone starts.
     Overwatch is the only fire during movement, and a hit pins.
   - No heavy-weapons troopers, androids or support platforms.

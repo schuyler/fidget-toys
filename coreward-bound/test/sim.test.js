@@ -532,27 +532,45 @@ test('a carrier can\'t found or research away its last fleets', () => {
 });
 
 test('a settlement taken this turn isn\'t working until its new owner\'s next turn', () => {
-  const a = at(createGame(), 0, 6), b = at(createGame(), 1, 6);
-  const game = board({ towns: [[a, 0, 3], [b, 1, 1], [at(createGame(), 0, -8), 1, 1]], stacks: [[a, 0, 12]] });
+  const a = at(createGame(), 0, 6), b = at(createGame(), 1, 6), far = at(createGame(), 0, 12);
+  const game = board({ towns: [[a, 0, 3], [b, 1, 2], [at(createGame(), 0, -8), 1, 1]], stacks: [[a, 0, 12]] });
   game.civs[0].rp = 10;
+  rig(game, [6, 1]); // take it, and no tech copied
   jump(game, a, b, 9);
   assert.equal(game.owner[b], 0, 'taken');
   assert.equal(preview(game, a, b).chain, false);
-  assert.match(buildOptions(game, b).build, /this turn/);
+  assert.match(buildOptions(game, b).build, /Founded this turn/);
+  assert.match(preview(game, b, far).error, /Too far/, 'no over-range launch from it yet');
   endTurn(game); endTurn(game);
   assert.equal(preview(game, a, b).chain, true);
+  assert.ok(!('error' in preview(game, b, far)));
+});
+
+test('a carrier that takes a settlement delivers at the start of its next turn', () => {
+  const a = at(createGame(), 0, 6), b = at(createGame(), 1, 6);
+  const game = board({ towns: [[a, 0, 3], [b, 1, 1], [at(createGame(), 0, -8), 1, 1]], stacks: [[a, 0, 9, 1]] });
+  rig(game, [6, 1]);
+  const ev = jump(game, a, b);
+  assert.equal(game.owner[b], 0, 'taken');
+  assert.equal(ev.some((e) => e.type === 'deliver'), false);
+  endTurn(game);
+  assert.ok(endTurn(game).some((e) => e.type === 'deliver'));
 });
 
 test('every fleet that ends its turn in the core rolls a d6 and is lost on a 1', () => {
   const inner = at(createGame(), 0, 2), outer = at(createGame(), 0, 5), theirs = at(createGame(), 2, -2);
-  const game = board({ stacks: [[outer, 0, 3], [inner, 0, 4], [theirs, 1, 3]] });
-  rig(game, [1, 6, 1, 6]);
+  const moved = at(createGame(), 1, 1);
+  const game = board({ stacks: [[outer, 0, 3], [inner, 0, 4], [theirs, 1, 3], [at(createGame(), 1, 2), 0, 2]] });
+  jump(game, at(game, 1, 2), moved); // a one-hex hop deeper in: moving doesn't excuse it
+  rig(game, [1, 6, 1, 6, 1, 1]);
   const ev = endTurn(game);
-  const h = ev.find((e) => e.type === 'hazard');
+  const h = ev.find((e) => e.type === 'hazard' && e.cell === inner);
   assert.ok(h, 'a hazard event');
-  assert.equal(h.cell, inner);
+  assert.equal(h.civ, 0);
   assert.equal(h.lost, 2);
+  assert.equal(h.left, 2);
   assert.equal(stackAt(game, 0, inner).fleets, 2);
+  assert.equal(stackAt(game, 0, moved), null, 'the stack that moved rolled too');
   assert.equal(stackAt(game, 0, outer).fleets, 3, 'outside the core: no roll');
   assert.equal(stackAt(game, 1, theirs).fleets, 3, 'the rival rolls at the end of its own turn');
 });
@@ -560,8 +578,10 @@ test('every fleet that ends its turn in the core rolls a d6 and is lost on a 1',
 test('the core\'s glare can wipe out a stack, which drops its relic there', () => {
   const inner = at(createGame(), 0, 2);
   const game = board({ stacks: [[inner, 0, 1, 1]] });
+  game.respawn = [3];
   rig(game, [1]);
   const ev = endTurn(game);
+  assert.deepEqual(game.respawn, [], 'a relic back on the board cancels a pending respawn');
   assert.equal(stackAt(game, 0, inner), null);
   assert.ok(ev.some((e) => e.type === 'drop' && e.cell === inner));
   assert.equal(game.relicAt[inner], 1);
@@ -583,13 +603,16 @@ test('a jump can\'t bring two relics together, except to be delivered', () => {
   const a = at(createGame(), 0, 5), b = at(createGame(), 0, 6);
   const game = board({ stacks: [[a, 0, 2, 1], [b, 0, 2, 1]] });
   assert.match(preview(game, a, b).error, /one relic/);
-  game.owner[b] = 0; game.value[b] = 1; game.epoch++;
+  game.owner[b] = 0; game.value[b] = 1; game.founded[b] = game.turn; game.epoch++;
+  assert.match(preview(game, a, b).error, /one relic/, 'founded this turn: nothing is delivered there yet');
+  game.founded[b] = -1;
   assert.ok(!('error' in preview(game, a, b)), 'into your own settlement it is delivered');
 });
 
 test('a carrier that scatters onto another of yours drops the extra relic', () => {
   const town = at(createGame(), 0, 9), a = at(createGame(), 0, 6), t = at(createGame(), 3, 6);
   const game = board({ towns: [[town, 0, 3]], stacks: [[a, 0, 3, 1]] });
+  game.civs[0].techs.push(0); // Reach: safe range 3
   const pv = preview(game, a, t);
   assert.equal(pv.need, 3);
   const d = pv.outcomes.slice(0, 6).findIndex((o) => !o.lost && o.cell >= 0 && o.cell !== a);
@@ -615,20 +638,27 @@ test('relics start on the centre and an opposite pair of its neighbours', () => 
     assert.equal(rotate(g, others[0]), others[1]);
     assert.equal(spawnTotal(game), 3);
   }
+  const layouts = new Set([1, 2, 3, 4, 5, 6, 7, 8].map((seed) => {
+    const game = createGame({ seed });
+    return game.spawns.filter((s) => game.relicAt[s]).sort((x, y) => x - y).join();
+  }));
+  assert.ok(layouts.size > 1, 'the opposite pair is chosen at random');
 });
 
 test('a new relic never appears where a stack stands, and waits while every spawn hex is taken', () => {
   const game = board();
   for (const s of game.spawns) game.relicAt[s] = 0;
   game.respawn = [1];
-  game.stacks = game.spawns.map((cell) => ({ owner: 1, cell, fleets: 1, ready: 1, idle: 1, relics: 0 }));
-  rig(game, [6, 6, 6, 6, 6, 6, 6]);
+  // five spawn hexes hold stacks, two already hold relics
+  game.stacks = game.spawns.slice(0, 5).map((cell) => ({ owner: 1, cell, fleets: 1, ready: 1, idle: 1, relics: 0 }));
+  for (const cell of game.spawns.slice(5)) game.relicAt[cell] = 1;
+  rig(game, [6, 6, 6, 6, 6]);
   endTurn(game); endTurn(game); // a round starts: the timer runs out with nowhere free
-  assert.equal(spawnTotal(game), 0);
+  assert.equal(spawnTotal(game), 2);
   assert.deepEqual(game.respawn, [0]);
   const freed = game.spawns[3];
   game.stacks = game.stacks.filter((s) => s.cell !== freed);
-  rig(game, [6, 6, 6, 6, 6, 6]);
+  rig(game, [6, 6, 6, 6]);
   endTurn(game); endTurn(game);
   assert.equal(game.relicAt[freed], 1, 'the only free spawn hex');
   assert.deepEqual(game.respawn, []);
@@ -654,7 +684,7 @@ test('a relic lost in space waits for a free spawn hex if none is free', () => {
   for (const cell of game.spawns) game.stacks.push({ owner: 1, cell, fleets: 1, ready: 1, idle: 1, relics: 0 });
   game.respawn = [];
   rig(game, [1]);
-  const ev = jump(game, from, at(game, 0, 5));
+  const ev = jump(game, from, at(game, 1, 3));
   assert.ok(ev.find((e) => e.type === 'jump').lost);
   assert.equal(spawnTotal(game), 0);
   assert.deepEqual(game.respawn, [0]);

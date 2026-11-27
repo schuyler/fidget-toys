@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1020">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Wooden Ships</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="safe-probe" aria-hidden="true"></div>
+
+  <button id="btn-menu" title="Menu" aria-label="Menu">☰</button>
+
+  <dialog id="start" class="menu">
+    <h1>Wooden Ships</h1>
+    <p class="tagline">You steer. The wind does the rest.</p>
+    <div class="pills">
+      <button id="start-new" class="pill primary" autofocus>New game</button>
+      <button id="start-settings" class="pill">Settings</button>
+      <button id="start-rules" class="pill">Rules</button>
+    </div>
+  </dialog>
+
+  <dialog id="pause" class="menu">
+    <h1>Paused</h1>
+    <div class="pills">
+      <button id="pause-resume" class="pill primary" autofocus>Resume</button>
+      <button id="pause-new" class="pill">New game</button>
+      <button id="pause-settings" class="pill">Settings</button>
+      <button id="pause-rules" class="pill">Rules</button>
+      <button id="pause-sound" class="pill">Sound: on</button>
+    </div>
+  </dialog>
+
+  <dialog id="rules">
+    <form method="dialog">
+      <h2>How to play</h2>
+      <ul class="rules">
+        <li><b>You only steer.</b> Drag sideways anywhere the way you want your bow to swing; the further you drag, the harder the rudder. Let go and it centres. The wind sets your speed. On a keyboard: ← → to steer.</li>
+        <li><b>You can't sail into the wind.</b> The faint wedge ahead of your bow is the no-go zone: point into it and you slow to a stop. To get upwind, zigzag, and turn through the wind with speed on, or you'll stop head to wind (in irons) and drift backwards. Going backwards, the rudder works the other way.</li>
+        <li><b>Turning is a brake.</b> The keel kills sideways motion, so a hard turn costs speed.</li>
+        <li><b>Two fire buttons,</b> left and right as you see the screen, whichever way your ship is pointing. Each arrow shows where that side's guns point; the ring refills as they reload (5 s). Z / X on a keyboard.</li>
+        <li><b>Guns aim themselves,</b> at the enemy as she is now, with no lead, and can swing 20° either way from square. Balls are slow: fire when she'll sail into them.</li>
+        <li><b>Cross her bow or stern</b> and your whole broadside can land while none of her guns bear on you. That's the best move in the game.</li>
+        <li><b>Crew is hit points.</b> Each hit kills one. A ship with none left strikes her colours, and the other side wins. Islands and the sea's edge stop you dead; shallows (the pale ring round islands) slow you down.</li>
+        <li><b>The sea is bigger than the screen.</b> The view follows you; when the CPU is out of sight, an arrow on the edge points at it and says how far.</li>
+        <li><b>The wind shifts</b> every so often without warning; the compass shows where it's blowing and how hard. With wind shadow on, a ship just downwind of another gets half the wind.</li>
+      </ul>
+      <p class="hint"><a href="https://github.com/schuyler/fidget-toys/blob/main/wooden-ships/RULES.md" target="_blank" rel="noopener">Full rules</a>, for the curious.</p>
+      <menu>
+        <button value="back" class="primary">Back</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="settings">
+    <form id="settings-form" method="dialog">
+      <h2>Wooden Ships</h2>
+      <div class="row">
+        <div class="row-name" id="lbl-mode">CPU</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-mode">
+          <label><input type="radio" name="mode" value="cpu-easy"><span>Easy</span></label>
+          <label><input type="radio" name="mode" value="cpu"><span>Hard</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-name" id="lbl-islands">Islands</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-islands">
+          <label><input type="radio" name="islands" value="none"><span>None</span></label>
+          <label><input type="radio" name="islands" value="some"><span>Some</span></label>
+          <label><input type="radio" name="islands" value="many"><span>Many</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-name" id="lbl-wind">Wind</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-wind">
+          <label><input type="radio" name="wind" value="steady"><span>Steady</span></label>
+          <label><input type="radio" name="wind" value="shifty"><span>Shifty</span></label>
+          <label><input type="radio" name="wind" value="gusty"><span>Gusty</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-name" id="lbl-shadow">Wind shadow</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-shadow">
+          <label><input type="radio" name="shadow" value="off"><span>Off</span></label>
+          <label><input type="radio" name="shadow" value="on"><span>On</span></label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-name" id="lbl-crew">Crew per gun</div>
+        <div class="opts" role="radiogroup" aria-labelledby="lbl-crew">
+          <label><input type="radio" name="crew" value="2"><span>2</span></label>
+          <label><input type="radio" name="crew" value="3"><span>3</span></label>
+          <label><input type="radio" name="crew" value="5"><span>5</span></label>
+        </div>
+      </div>
+      <p class="hint">You're blue. Steady wind never shifts; Gusty shifts twice as often, and further. With wind shadow on, a ship just downwind of another gets half the wind. Crew per gun sets how many hits a ship takes (×8 guns). <a href="https://github.com/schuyler/fidget-toys/blob/main/wooden-ships/RULES.md" target="_blank" rel="noopener">Full rules</a></p>
+      <menu>
+        <button value="reset" formnovalidate>Defaults</button>
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="apply" class="primary">New game</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

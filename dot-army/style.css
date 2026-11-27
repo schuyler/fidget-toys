@@ -27,6 +27,19 @@ canvas {
   touch-action: none;
 }
 
+/* Measures the safe-area insets for the renderer, which can't read env(). */
+#safe-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* One menu button, tucked into a corner of the HUD strip so it never
    covers the board: top-right in landscape, bottom-right in portrait. */
 #btn-menu {

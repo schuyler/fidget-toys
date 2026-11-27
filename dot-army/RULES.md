@@ -173,6 +173,8 @@ never goes back to neutral, so at least one player always owns a spawn.
   is nearest them. Start one with Play online (share the link or code) or
   Join with code. If the other player leaves, or the room is full, or the
   server can't be reached, the game says so and a tap goes back to the menu.
+  A code nobody is hosting gets "no one here yet" after five seconds; the
+  game keeps waiting for the host, and ☰ leaves.
 - Every page load opens a start menu (New game, Play online, Join with
   code, Settings, Rules), unless it's a shared link, which joins the game
   directly. The ☰ button in a corner of the HUD pauses and opens a menu

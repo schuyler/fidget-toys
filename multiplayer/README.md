@@ -34,7 +34,8 @@ transport and the dice. With the static server and a relay running:
 - `RELAY=ws://127.0.0.1:8788 node multiplayer/tools/e2e-relay.cjs` plays a
   game between two isolated browser contexts and compares their state.
 - `node dot-army/tools/e2e-online.cjs` goes through the lobby, joining by
-  code and by link, leaving, ROOM FULL and an unreachable relay.
+  code and by link, a code with no host yet, leaving, ROOM FULL and an
+  unreachable relay.
   `RELAY=default` runs it against the deployed relay.
 
 ## Hosting it

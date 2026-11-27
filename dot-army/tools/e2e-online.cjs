@@ -34,6 +34,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     while (Date.now() < end) { d = await dbg(p); if (d.status === status) return true; await sleep(100); }
     return false;
   }
+  /** Polls until `playing`; true if the no-host message showed up on the way. */
+  async function sawNoHost(p, ms = 8000) {
+    const end = Date.now() + ms;
+    let seen = false, d;
+    while (Date.now() < end) {
+      d = await dbg(p);
+      if (d.overlay?.lines?.[0] === 'NO ONE') seen = true;
+      if (d.status === 'playing') break;
+      await sleep(100);
+    }
+    return seen;
+  }
   const startMenuOpen = (p) => p.evaluate(() => document.getElementById('start').open);
   async function hostRoom() {
     const host = await page();
@@ -62,6 +74,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // R2: the guest joins by typing the code; both play the same game.
   const guest = await joinByCode(code);
+  check(!(await sawNoHost(guest)), 'J2: no "no host" message when the host is there (join by code)');
   check(await waitStatus(host, 'playing') && await waitStatus(guest, 'playing'), 'R2: both reach playing after join by code');
   check(!(await host.evaluate(() => document.getElementById('lobby').open)), 'R2: the lobby closes when the game starts');
   await sleep(5000); // countdown plus some play, and more than two ping intervals
@@ -101,12 +114,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // R6 (and R1's link): a guest who opened the shared link leaves from the pause menu.
   const r2 = await hostRoom();
   const linkGuest = await page(`${r2.link}${r2.link.includes('?') ? '&' : '?'}debug`);
+  check(!(await sawNoHost(linkGuest)), 'J2: no "no host" message when the host is there (join by link)');
   check(await waitStatus(linkGuest, 'playing') && await waitStatus(r2.host, 'playing'), 'R1: the shared link joins as guest');
   await linkGuest.click('#btn-menu');
   await linkGuest.click('#pause-leave');
   await sleep(300);
   check(await startMenuOpen(linkGuest), 'R6: Leave game returns to the start menu');
   check(await waitStatus(r2.host, 'left'), 'R6: the other player sees OPPONENT LEFT');
+
+  // J1: a guest who joins a code nobody is hosting is told so within a few
+  // seconds, and keeps waiting: a host who opens the room later still starts it.
+  {
+    const orphanCode = 'N' + Math.floor(100 + Math.random() * 900);
+    const lone = await joinByCode(orphanCode);
+    const clicked = Date.now();
+    let d;
+    do { d = await dbg(lone); if (d.overlay?.lines?.[0] === 'NO ONE') break; await sleep(100); } while (Date.now() - clicked < 6000);
+    check(JSON.stringify(d.overlay?.lines) === JSON.stringify(['NO ONE', 'HERE YET']) && d.status === 'lobby',
+      `J1: NO ONE HERE YET within 6 s of joining (${JSON.stringify(d.overlay)}, ${d.status})`);
+    check(!!d.overlay?.sub?.includes(orphanCode) && /☰/.test(d.overlay?.sub ?? ''), `J1: the message names room ${orphanCode} and how to leave`);
+    const lateHost = await page(`${BASE}?room=${orphanCode}&host&debug${relayParam}`);
+    check(await waitStatus(lone, 'playing') && await waitStatus(lateHost, 'playing'), 'J1: a host who arrives later still starts the game');
+    await lone.close();
+    await lateHost.close();
+  }
 
   // R5: an unreachable relay is reported.
   const lost = await page(`${BASE}?room=ZZZZ&debug&relay=${encodeURIComponent('ws://127.0.0.1:1')}`);

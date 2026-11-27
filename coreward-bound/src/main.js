@@ -347,7 +347,7 @@ function renderPanel() {
     if (o === YOU) {
       lines.push(btn('build', `Build fleet (${g.params.fleetCost} RP)`, opts.build) + btn('grow', 'Grow +1 (1 fleet)', opts.grow));
       const fresh = g.founded[cell] === g.turn;
-      if (fresh) lines.push('<span class="why">Ready next turn: it can\'t build, grow or launch jumps yet.</span>');
+      if (fresh) lines.push('<span class="why">Ready next turn: until then it can\'t build or grow, launch long jumps, let stacks chain on, or take a relic.</span>');
       const why = [opts.build, opts.grow].filter((x) => x && !/^Not your/.test(x) && !(fresh && /^Founded this turn/.test(x)));
       if (why.length) lines.push(`<span class="why">${[...new Set(why)].join(' ')}</span>`);
     }
@@ -392,7 +392,7 @@ function refresh() {
     return `${ICONS.coin} ${civ.rp} · ${ICONS.flask} ${civ.techs.length} · <b>◆ ${civ.relics}/3</b>`;
   };
   $('hud-you').innerHTML = side(YOU);
-  $('hud-cpu').innerHTML = `CPU · ${side(CPU)}`;
+  $('hud-cpu').innerHTML = side(CPU);
   $('hud-turn').textContent = game.winner >= 0 ? 'Game over' : cpuRunning || game.current === CPU ? 'CPU moving…' : `Round ${(game.turn >> 1) + 1}`;
   const endBtn = /** @type {HTMLButtonElement} */ ($('btn-end'));
   endBtn.disabled = cpuRunning || game.current !== YOU || game.winner >= 0;

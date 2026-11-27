@@ -73,6 +73,7 @@ test('C2: with two targets and a wall, each dot heads to the nearer one by path,
   assert.ok(toRight.get(a) < toLeft.get(a), 'premise: path favours right');
   placeDot(game, BLUE, a, E);
   placeDot(game, BLUE, b, E);
+  assert.ok(placeDot(game, RED, at(game, 8, -6), E), 'a red dot far away keeps red alive');
   const dotA = game.occ[a], dotB = game.occ[b];
   assert.ok(dotA && dotB);
   step(game);
@@ -113,6 +114,7 @@ test('C6: dots gather into an outward-facing hedgehog at each of two targets', (
     placeDot(game, BLUE, t, E);
     for (let d = 0; d < 6; d++) placeDot(game, BLUE, nb(game, t, d), (d + 3) % 6); // all facing inward
   }
+  assert.ok(placeDot(game, RED, at(game, 0, -7), E), 'a red dot far away keeps red alive');
   step(game);
   for (const t of [t0, t1]) {
     for (let d = 0; d < 6; d++) assert.equal(game.occ[nb(game, t, d)]?.facing, d, `ring dot ${d} at ${t} faces outward`);

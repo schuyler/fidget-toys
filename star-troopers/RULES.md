@@ -352,7 +352,6 @@ Portrait first, built for a phone. You play the bottom squad, in blue.
   - **Fall back:** somewhere in reach no enemy can see, the rest into
     dodge, so it can recover.
 
-  A quick order moves on to the next trooper with no orders.
 - **Swarms** (with the setting on) are one counter with one plot, which
   every member carries out.
 - **Committing:** the bar shows the selected trooper's points as pips,

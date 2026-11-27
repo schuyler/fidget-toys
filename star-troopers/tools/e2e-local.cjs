@@ -78,6 +78,28 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     const { p, ctx } = await open(vp, '&seed=21');
     await p.click('#start-new');
     await p.waitForTimeout(200);
+    // A first tap on a trooper (on the board) selects it (R5).
+    {
+      const s0 = await dbg(p);
+      let tapped = false;
+      for (const u of s0.units) {
+        const pos = await at(p, u.cell);
+        if (!onScreen(vp, pos)) continue;
+        await p.mouse.click(pos[0], pos[1]);
+        await p.waitForTimeout(30);
+        const s1 = await dbg(p);
+        check(s1.selected === u.lead && s1.reach.length > 0 && s1.pop === null, `tapping a trooper selects it and shows its move range (${s1.reach.length} cells)`);
+        // and a popover never outlives a change of selection
+        await p.mouse.click(pos[0], pos[1]);
+        const other = s0.units.find((x) => x.lead !== u.lead);
+        await p.click(`.unit-chip[data-lead="${other.lead}"]`);
+        await p.waitForTimeout(30);
+        check(await p.$eval('#popover', (e) => e.hidden), 'changing the selection closes the popover');
+        tapped = true;
+        break;
+      }
+      check(tapped, 'found a trooper on screen to tap');
+    }
     let stages = 0, moved = 0, fired = 0, popovers = 0, presets = 0, selectedOk = 0;
     while (stages < 40) {
       let s = await dbg(p);

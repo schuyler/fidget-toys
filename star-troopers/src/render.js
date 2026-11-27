@@ -37,7 +37,7 @@ export const BASE_SIZE = 24;
 /**
  * A trooper (or a swarm) as drawn. x, y are in board units (hex radius 1).
  * @typedef {{ id: number, x: number, y: number, side: number, faction: string, shock: number, pool: number,
- *   down: boolean, leader: boolean, count: number, dim?: boolean, selected?: boolean, done?: boolean }} Piece
+ *   leader: boolean, count: number, dim?: boolean, selected?: boolean, done?: boolean }} Piece
  */
 
 /**
@@ -141,10 +141,6 @@ export function createRenderer(canvas) {
   function cellAtPoint(/** @type {number} */ px, /** @type {number} */ py) {
     if (!game) return -1;
     return pixelToCell(game.grid, px - ox, py - oy, size);
-  }
-  /** Board units under a screen point. */
-  function toBoard(/** @type {number} */ px, /** @type {number} */ py) {
-    return { x: (px - ox) / size, y: (py - oy) / size };
   }
 
   // ---- Drawing ----
@@ -312,7 +308,6 @@ export function createRenderer(canvas) {
 
   function drawPieces(/** @type {Piece[]} */ pieces) {
     for (const p of pieces) {
-      if (p.down) continue;
       const x = sx(p.x), y = sy(p.y), r = size * 0.56;
       ctx.globalAlpha = p.dim ? 0.4 : 1;
       if (p.selected) {
@@ -458,7 +453,7 @@ export function createRenderer(canvas) {
   };
 
   return {
-    setGame, layout, home, pan, zoom, reveal, toScreen, toBoard, cellAtPoint, draw, effects,
+    setGame, layout, home, pan, zoom, reveal, toScreen, cellAtPoint, draw, effects,
     get size() { return size; },
     get centres() { return centres; },
   };

@@ -93,7 +93,7 @@ function unitName(/** @type {Unit} */ u) {
 function select(/** @type {number} */ lead) {
   selected = lead;
   aiming = false;
-  pop = null;
+  closePopover();
   const u = unitByLead(lead);
   if (!u) { selReach = null; selSight = null; selVisible = new Set(); return; }
   refreshReach();
@@ -240,7 +240,7 @@ function tap(/** @type {number} */ cell) {
     else toast('Not enough points for a bomb');
     return;
   }
-  if (cell < 0) { closePopover(); return; }
+  if (cell < 0) return; // off the board
   const mine = unitAt(cell);
   if (mine) {
     if (mine.lead === selected) { if (pop?.kind === 'unit') closePopover(); else openPopover({ kind: 'unit' }); }
@@ -255,8 +255,8 @@ function tap(/** @type {number} */ cell) {
     if (setDraft(u, plot.setFire(game, u, d, foe.id, Math.max(1, points)))) openPopover({ kind: 'fire', target: foe.id });
     return;
   }
-  if (u && pop) { closePopover(); return; }
-  if (u && selReach && selReach[cell] >= 0) { dropUnit(u.lead, cell); return; }
+  if (u && selReach && selReach[cell] >= 0) { closePopover(); dropUnit(u.lead, cell); return; }
+  if (pop) { closePopover(); return; }
   select(-1);
   updateUI();
 }
@@ -305,7 +305,7 @@ function renderPopover() {
         ${presets.map(([k, label, v]) => `<button data-preset="${k}" ${v ? '' : 'disabled'}>${label}</button>`).join('')}
         <button data-act="clear">Clear</button>
       </div>
-      <p class="note">Dodge makes every shot at it harder this stage. Watch shoots the first enemy that moves into view.</p>`;
+      <p class="note">Dodge makes every shot at it harder this stage. Watch shoots the nearest enemy that moves within 6 cells in sight.</p>`;
   } else if (pop.kind === 'fire') {
     const target = pop.target;
     const pv = plot.shotPreview(game, u, target, d.fire);
@@ -371,10 +371,10 @@ popEl.addEventListener('click', (e) => {
     if (pop?.kind === 'bomb' && !(draftOf(u).launch ?? 0)) pop = { kind: 'unit' };
   } else if (b.dataset.preset) {
     const p = presetCache.get(b.dataset.preset);
-    if (p) { setDraft(u, p); closePopover(); nextUnit(); return; }
+    if (p) { setDraft(u, p); closePopover(); return; }
   } else {
     const act = b.dataset.act;
-    if (act === 'bomb') { aiming = true; closePopover(); toast('Tap a cell to bomb'); updateUI(); return; }
+    if (act === 'bomb') { aiming = true; hoverCell = -1; closePopover(); toast('Tap a cell to bomb'); updateUI(); return; }
     if (act === 'clear') { drafts.delete(u.lead); refreshReach(); updateUI(); }
     if (act === 'nofire') setDraft(u, { ...d, target: -1, fire: 0 });
     if (act === 'nobomb') { setDraft(u, { ...d, launch: 0, launchAt: -1 }); pop = { kind: 'unit' }; }
@@ -382,17 +382,6 @@ popEl.addEventListener('click', (e) => {
   }
   renderPopover();
 });
-
-/** After a quick order, move on to the next unit with no orders. */
-function nextUnit() {
-  const i = units.findIndex((u) => u.lead === selected);
-  for (let k = 1; k <= units.length; k++) {
-    const u = units[(i + k) % units.length];
-    if (!drafts.has(u.lead)) { select(u.lead); renderer.reveal(u.cell); updateUI(); return; }
-  }
-  select(-1);
-  updateUI();
-}
 
 // ---------------------------------------------------------------------------
 // HUD and bar
@@ -501,6 +490,7 @@ $('btn-commit').addEventListener('click', () => {
       ? `Repeat their last orders (${repeatable} have some), or leave them standing idle?`
       : 'They have no last orders to repeat. Leave them standing idle?';
     /** @type {HTMLButtonElement} */ (confirmDialog.querySelector('button[value="repeat"]')).disabled = !repeatable;
+    confirmDialog.returnValue = '';
     confirmDialog.showModal();
     return;
   }
@@ -601,7 +591,8 @@ function beatDuration(/** @type {Beat} */ b) {
 function startBeat(/** @type {Beat} */ b, /** @type {number} */ now) {
   const fx = renderer.effects;
   const s = /** @type {NonNullable<typeof show>} */ (show);
-  const at = stateAfter(s.before, s.beats, s.k - 1);
+  // overwatch fires after its step's moves, so a step's effects use where everyone ended up
+  const at = stateAfter(s.before, s.beats, b.kind === 'step' ? s.k : s.k - 1);
   /** @param {import('./sim.js').Shot} shot @param {number} i */
   const shotFx = (shot, i) => {
     const from = shot.kind === 'blast' ? -1 : at.cell[shot.from];
@@ -673,7 +664,7 @@ function piecesNow(/** @type {number} */ now) {
     }
     const unit = phase === 'plot' && t.side === ME ? units.find((x2) => x2.ids.includes(t.id)) : null;
     byPos.set(key, {
-      id: t.id, x, y, side: t.side, faction: t.faction, shock, pool: t.pool, down: false, leader: t.leader, count: 1,
+      id: t.id, x, y, side: t.side, faction: t.faction, shock, pool: t.pool, leader: t.leader, count: 1,
       selected: !!u && u.ids.includes(t.id),
       dim: !!u && t.side === CPU && !selVisible.has(t.id),
       done: !!unit && drafts.has(unit.lead),
@@ -783,7 +774,7 @@ function renderLog() {
   body.innerHTML = html;
 }
 
-$('btn-log').addEventListener('click', () => { renderLog(); logDialog.showModal(); });
+$('btn-log').addEventListener('click', () => { renderLog(); logDialog.returnValue = ''; logDialog.showModal(); });
 logDialog.addEventListener('close', () => {
   if (logDialog.returnValue === 'replay' && show && phase !== 'playback') {
     show.replaying = true;
@@ -811,7 +802,7 @@ function showOver() {
 }
 function hideOver() { if (overDialog.open) overDialog.close(); }
 $('over-new').addEventListener('click', () => newGame());
-$('over-log').addEventListener('click', () => { hideOver(); renderLog(); logDialog.showModal(); });
+$('over-log').addEventListener('click', () => { hideOver(); renderLog(); logDialog.returnValue = ''; logDialog.showModal(); });
 $('over-board').addEventListener('click', () => hideOver());
 
 // ---------------------------------------------------------------------------

@@ -320,7 +320,7 @@ export function bombAt(game, u, d, cell) {
   const base = { ...d, launch: 0, launchAt: cell, dodge: 0 };
   const avail = free(game, u, base);
   const min = game.params.minLaunch;
-  if (avail < min || !game.params.launched) return null;
+  if (avail < min) return null;
   const aim = game.troopers[u.lead].aim;
   const rating = Math.ceil(hexDist(game.grid, u.cell, cell) / 5);
   let k = avail;

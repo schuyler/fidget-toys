@@ -88,7 +88,7 @@ browser game's forces are under Settings.
 Each game-turn has two **stages** (see A turn). At the start of each
 stage both sides plot orders for every trooper, in secret. The CPU plots
 without seeing yours. A trooper's points for the stage are split between
-four tasks:
+five tasks:
 
 - **Move:** plot a path, paying each cell's move cost.
 - **Fire:** pick one enemy in line of sight and put any number of points
@@ -119,7 +119,7 @@ to last an entire Game-turn."
 
 This is the draft formula, the tuning tools' default. The browser game
 plays the 1977 rules instead (`combat=dice`, `defence=original`): the
-defence is the original's terrain value, +1 per 10 cells of range, +1 per
+defence is the original's terrain value, +1 per 10 cells of range or part of 10, +1 per
 point plotted to be spent moving, plus dodge, and a shot that beats it by
 +1 or more rolls two dice on the original's results table (see Parameters
 and Notes).
@@ -422,7 +422,7 @@ candidates under those rules (see Notes) and live in one table in
 | `swarm` | 0 | Vell swarms on (1) or off (0) |
 | `command` | 0 | Command Communication on (1) or off (0) |
 | `combat` | formula | Damage: `formula`, `dice` (the 1977 tables) or `mean` (their averages) |
-| `defence` | draft | `draft`, or `original` (terrain values, 1 per 10 cells of range, 1 per point moved) |
+| `defence` | draft | `draft`, or `original` (terrain values, 1 per 10 cells of range or part of 10, 1 per point moved) |
 | `noise` | 0 | 0 = off, 1 = ±1 on shots that land |
 | `coverScale` | 1 | Tuning: multiplies every cover value |
 | `recoverWhenHit` | 0 | Tuning: 1 = troopers recover even when hit |

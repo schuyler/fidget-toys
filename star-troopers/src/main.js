@@ -433,14 +433,15 @@ function pips(/** @type {Unit} */ u) {
   while (cells.length < b) cells.push('');
   const t = game.troopers[u.lead];
   const free = plot.free(game, u, d);
-  // Stage 2 gets what's left of the pool, up to the stage cap (less any shock taken meanwhile).
+  // Stage 2 gets what's left of the pool, up to the stage cap. A trooper
+  // that isn't hit recovers first (recoverWhenHit is off in the browser game).
   const spend = plot.used(game, u, d);
   const next = Math.min(...u.ids.map((id) => {
     const m = game.troopers[id];
-    return Math.max(0, Math.min(m.pool - m.shock - m.spent - spend, game.params.stageCap));
+    return Math.max(0, Math.min(m.pool - Math.max(0, m.shock - m.recovery) - m.spent - spend, game.params.stageCap));
   }));
   const after = game.params.stages === 2 && game.stage === 1
-    ? `stage 2: up to ${next}`
+    ? `stage 2: ${next} if not hit`
     : (free > 0 ? `${free} unspent (wasted)` : '');
   return `<span class="pips">${cells.map((c) => `<span class="pip ${c}"></span>`).join('')}</span>
     <span>${t.shock ? `shock ${t.shock}/${t.pool}` : ''} ${after}</span>`;
@@ -624,7 +625,8 @@ function startBeat(/** @type {Beat} */ b, /** @type {number} */ now) {
   } else if (b.kind === 'blast') {
     caption.textContent = 'Bombs go off';
     for (const l of b.launches) {
-      if (l.landed >= 0 && l.landed !== l.aimed) fx.arrow(l.aimed, l.landed, now);
+      if (l.landed < 0) fx.text(l.aimed, 'off the map', COLORS.bomb, now);
+      else if (l.landed !== l.aimed) fx.arrow(l.aimed, l.landed, now);
       if (l.landed >= 0) fx.blast(blastCells(game, l.landed).map((x) => x.cell), l.landed, now + 200);
     }
     b.shots.forEach(shotFx);

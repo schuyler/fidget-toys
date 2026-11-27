@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createGame, resolveTurn, checkOrder, squadSizes, los, preview, stateHash, idle, spendable,
+  createGame, resolveTurn, checkOrder, squadSizes, los, preview, stateHash, idle, spendable, blastCells,
   cellAt, ROCK, RUINS, HIGH, BRUSH, BUILDING, DRAW, DEFAULTS,
 } from '../src/sim.js';
 import { createGrid, reflect, axialToIndex, linePairs } from '../src/hex.js';
@@ -296,6 +296,65 @@ test('two stages: the turn limit counts game-turns, and recovery happens each st
   assert.equal(game.troopers[0].shock, 0);
 });
 
+test('a guided bomb that lands: 30 on the hex, 15 next door, 5 two away, friends included', () => {
+  const game = board([
+    { side: 0, cell: C(2, 9) },            // launcher
+    { side: 1, cell: C(6, 9) },            // aimed at: 30 / 1 / 2.5 = 12, down
+    { side: 1, cell: C(7, 9) },            // adjacent: 15 / 1 / 2.5 = 6
+    { side: 1, cell: C(8, 9) },            // two away: 5 / 1 / 2.5 = 2
+    { side: 0, cell: C(5, 9) },            // a friend, adjacent: 6
+  ], {}, { blastOddsCap: 0 });
+  const ev = resolveTurn(game, orders(game, { 0: { launch: 5, launchAt: C(6, 9) } }));
+  assert.deepEqual(ev.launches, [{ from: 0, aimed: C(6, 9), landed: C(6, 9), sd: 10 - 1 }]);
+  assert.equal(game.troopers[1].down, true);
+  assert.deepEqual([2, 3, 4].map((i) => game.troopers[i].shock), [6, 2, 6]);
+});
+
+test('blast odds are capped: a direct hit in the open is 10 to 1, not 30 to 1', () => {
+  const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }, { side: 1, cell: C(8, 9) }], {}, { blastOddsCap: 10 });
+  resolveTurn(game, orders(game, { 0: { launch: 5, launchAt: C(6, 9) } }));
+  assert.equal(game.troopers[1].shock, 4);   // floor(10 / 2.5)
+  assert.equal(game.troopers[2].shock, 2);   // 5 to 1, under the cap
+});
+
+test('blasts are shielded by woods and buildings, and hit a building direct for 2', () => {
+  const game = board([], { terrain: [[C(7, 9), BUILDING], [C(5, 9), BRUSH]] });
+  const reach = blastCells(game, C(6, 9)).map((b) => b.cell);
+  assert.ok(!reach.includes(C(7, 9)) && !reach.includes(C(5, 9)));
+  const hit = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], { terrain: [[C(6, 9), BUILDING]] });
+  resolveTurn(hit, orders(hit, { 0: { launch: 5, launchAt: C(6, 9) } }));
+  assert.equal(hit.troopers[1].shock, 2);
+});
+
+test('bombs go off after movement, so a target that moves away escapes', () => {
+  const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }]);
+  resolveTurn(game, orders(game, { 0: { launch: 5, launchAt: C(6, 9) }, 1: { path: [C(6, 8), C(6, 7), C(6, 6)] } }));
+  assert.equal(game.troopers[1].shock, 0);
+});
+
+test('launch orders are checked, and a blast counts as being hit (no recovery)', () => {
+  const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(8, 9), shock: 2 }]);
+  const t = game.troopers[0];
+  assert.equal(checkOrder(game, t, { ...idle(), launch: 2, launchAt: C(6, 9) }), 'launch too small');
+  assert.equal(checkOrder(game, t, { ...idle(), launch: 6, launchAt: C(6, 9), dodge: 4 }), 'not enough points');
+  assert.equal(checkOrder(game, t, { ...idle(), launch: 3, launchAt: -1 }), 'bad launch target');
+  resolveTurn(game, orders(game, { 0: { launch: 5, launchAt: C(6, 9) } }));
+  assert.equal(game.troopers[1].shock, 2 + 2);   // two away, and no recovery
+});
+
+test('bombs only scatter when the scatter differential is negative', () => {
+  let scattered = 0;
+  for (let seed = 1; seed <= 60; seed++) {
+    // 3 points at Aim 2 = 6, against range 1 + the target's 9 dodge x 2 = 19: SD -13
+    const bad = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], {}, { seed });
+    const ev = resolveTurn(bad, orders(bad, { 0: { launch: 3, launchAt: C(6, 9) }, 1: { dodge: 9 } }));
+    if (ev.launches[0].landed !== C(6, 9)) scattered++;
+    const good = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], {}, { seed });
+    assert.equal(resolveTurn(good, orders(good, { 0: { launch: 5, launchAt: C(6, 9) } })).launches[0].landed, C(6, 9));
+  }
+  assert.ok(scattered >= 38 && scattered <= 60, `scattered ${scattered} of 60, expected about 50`);
+});
+
 test('Assault squads: the attacker fields at least 1.2x the defender\'s value', () => {
   const a = { ...DEFAULTS, scenario: 'assault', attacker: 0 };
   assert.deepEqual(squadSizes({ ...a }), [5, 4]);                                         // 70 vs 56
@@ -349,8 +408,10 @@ test('same seeds, same game; and the CPU only gives legal orders', () => {
 });
 
 test('no side advantage: identical CPUs on a mirrored map play mirror-image games', () => {
+  // Without bombs: a scattering bomb picks its direction at random, so with
+  // them on, the two sides' games stop being exact mirror images by chance.
   for (const seed of [11, 12, 13]) {
-    const { game, trace } = playOut({ seed }, [99, 99]);
+    const { game, trace } = playOut({ seed, launched: 0 }, [99, 99]);
     const g = game.grid;
     const n = game.troopers.length / 2;
     for (const turn of trace) {

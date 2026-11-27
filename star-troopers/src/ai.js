@@ -13,7 +13,7 @@
 import { createRng } from './rng.js';
 import { hexDist, reflect } from './hex.js';
 import {
-  living, usable, spendable, enterCost, los, defenceOf, baseShock, occupant, held, ROCK, coverValue, isCover, idle,
+  living, usable, spendable, enterCost, blastCells, blastShock, scatterThreshold, dodgeValue, BLAST, los, defenceOf, baseShock, occupant, held, ROCK, coverValue, isCover, idle,
 } from './sim.js';
 
 /** @typedef {import('./sim.js').Game} Game */
@@ -98,7 +98,8 @@ export function createAI(side, seed, opts = {}) {
       // The safest places to be next turn, and cover on the way to the goal.
       /** @type {Map<number, number>} */
       const threatAt = new Map();
-      for (const c of reachable) threatAt.set(c, threatNextTurn(game, t, c, foes, see));
+      const friendEnds = new Set(friendPlans.map((f) => (f.path.length ? f.path[f.path.length - 1] : f.start)));
+      for (const c of reachable) threatAt.set(c, threatNextTurn(game, t, c, foes, see, friendEnds));
       reachable.slice()
         .sort((a, b) => /** @type {number} */ (threatAt.get(a)) - /** @type {number} */ (threatAt.get(b)) || gd[a] - gd[b])
         .slice(0, 4).forEach((c) => ends.add(c));
@@ -115,7 +116,10 @@ export function createAI(side, seed, opts = {}) {
       // Who can it shoot from where it stands? (Fire happens before moving.)
       const targets = foes.filter((f) => see(t.cell, f.cell));
 
-      /** @type {{order: Order, score: number, target: number, dealt: number, end: number}[]} */
+      // The best bomb it could launch from here, if any is worth it.
+      const bomb = p.launched ? planLaunch(game, t, budget, foes, friendPlans, allocated) : null;
+
+      /** @type {{order: Order, score: number, target: number, dealt: number, end: number, bomb: boolean}[]} */
       const cands = [];
       for (const end of ends) {
         const path = field.path(end);
@@ -123,6 +127,10 @@ export function createAI(side, seed, opts = {}) {
         if (friendPlans.some((f) => clash(t.cell, path, f.start, f.path))) continue;
         const left = budget - field.cost[end];
         const splits = splitsFor(left, targets.length > 0, p.maxShot);
+        // A bomb, if there's one worth launching and it won't land on us.
+        if (bomb && left >= bomb.points && !bomb.reach.has(end)) {
+          splits.push({ fire: 0, dodge: left - bomb.points, overwatch: 0, launch: bomb.points });
+        }
         // In the first of two stages, points not spent now are there to
         // dodge with in the second: offer versions that hold some back.
         if (p.stages === 2 && game.stage === 1) {
@@ -144,9 +152,11 @@ export function createAI(side, seed, opts = {}) {
             }
             if (bestTarget < 0) continue;
           }
-          const order = { path, target: bestTarget, fire: bestTarget >= 0 ? sp.fire : 0, dodge: sp.dodge, overwatch: sp.overwatch };
+          const launching = (sp.launch ?? 0) > 0 && bomb !== null;
+          const order = { path, target: bestTarget, fire: bestTarget >= 0 ? sp.fire : 0, dodge: sp.dodge, overwatch: sp.overwatch,
+            launch: launching ? sp.launch : 0, launchAt: launching && bomb ? bomb.cell : -1 };
           let score = scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, /** @type {number} */ (threatAt.get(end)), taker)
-            + dealt + killBonus;
+            + dealt + killBonus + (launching && bomb ? bomb.value : 0);
           // Points held back for the second stage are worth the fire they
           // could dodge there: each one takes Aim off every shot at it, up
           // to the danger it will actually be in.
@@ -155,7 +165,7 @@ export function createAI(side, seed, opts = {}) {
             const saved = Math.min(/** @type {number} */ (threatAt.get(end)), (sp.reserve * t.aim * watchers) / p.damageDivisor);
             score += saved * 0.4 * (1 + (2 * t.shock) / t.pool);
           }
-          cands.push({ order, score, target: bestTarget, dealt, end });
+          cands.push({ order, score, target: bestTarget, dealt, end, bomb: launching });
         }
       }
 
@@ -171,6 +181,7 @@ export function createAI(side, seed, opts = {}) {
         const fi = foes.findIndex((f) => f.id === pick.target);
         allocated[fi] += pick.dealt;
       }
+      if (pick.bomb && bomb) for (const { fi, amount } of bomb.alloc) allocated[fi] += amount;
     }
     return orders;
   }
@@ -254,11 +265,65 @@ function clash(aStart, aPath, bStart, bPath) {
 }
 
 /**
+ * The most promising guided bomb a trooper could launch this stage: aimed
+ * at an enemy's cell, with enough points to land if it can afford them.
+ * It's worth the shock it should do to enemies, weighted by how likely
+ * they are to still be there after moving (bombs go off after movement),
+ * less anything it would do to friends.
+ * @param {Game} game @param {Trooper} t @param {number} budget
+ * @param {Trooper[]} foes @param {{start: number, path: number[]}[]} friendPlans
+ * @param {number[]} allocated  shock friends already expect to deal each foe
+ * @returns {{cell: number, points: number, value: number, reach: Set<number>, alloc: {fi: number, amount: number}[]}|null}
+ */
+function planLaunch(game, t, budget, foes, friendPlans, allocated) {
+  const p = game.params;
+  if (budget < p.minLaunch) return null;
+  // Where friends will be: their planned end cells, or where they stand.
+  const friendEnds = new Set(friendPlans.map((f) => (f.path.length ? f.path[f.path.length - 1] : f.start)));
+  for (const m of living(game, t.side)) if (m.id !== t.id && !friendPlans.some((f) => f.start === m.cell)) friendEnds.add(m.cell);
+  const hexes = new Set(game.victory.map((v) => v.cell));
+  let best = null;
+  for (const target of foes) {
+    const reach = blastCells(game, target.cell);
+    let value = 0, cm = 0;
+    /** @type {{fi: number, amount: number}[]} */
+    const alloc = [];
+    for (const { cell, dist } of reach) {
+      const shock = blastShock(game, BLAST[dist], cell);
+      if (friendEnds.has(cell)) value -= 1.5 * shock;
+      const f = foes.find((x) => x.cell === cell);
+      if (!f) continue;
+      cm += dodgeValue(game, f, Math.floor(spendable(game, f) / 3));
+      const fi = foes.indexOf(f);
+      const remaining = Math.max(0, usable(f) - allocated[fi]);
+      const stay = hexes.has(cell) ? 0.85 : 0.5;
+      const useful = Math.min(shock, remaining);
+      value += stay * (useful + (shock >= remaining && remaining > 0 ? 4 + f.pool / 3 : 0));
+      alloc.push({ fi, amount: stay * useful });
+    }
+    if (value <= 0) continue;
+    // Fewest points that should land it; otherwise everything it has.
+    const rangeRating = Math.ceil(hexDist(game.grid, t.cell, target.cell) / 5);
+    let points = budget;
+    for (let k = p.minLaunch; k <= budget; k++) {
+      if (t.aim * k - (rangeRating + cm) >= 0) { points = k; break; }
+    }
+    const sd = t.aim * points - (rangeRating + cm);
+    const land = sd >= 0 ? 1 : 1 - (7 - scatterThreshold(sd)) / 6;
+    const total = value * land;
+    if (total > 0.5 && (!best || total > best.value)) {
+      best = { cell: target.cell, points, value: total, reach: new Set(reach.map((r) => r.cell)), alloc: alloc.map((a) => ({ ...a, amount: a.amount * land })) };
+    }
+  }
+  return best;
+}
+
+/**
  * Ways to split leftover points between fire, dodge and overwatch.
  * @param {number} left @param {boolean} canFire @param {number} maxShot
  */
 function splitsFor(left, canFire, maxShot) {
-  /** @type {{fire: number, dodge: number, overwatch: number, reserve?: number}[]} */
+  /** @type {{fire: number, dodge: number, overwatch: number, reserve?: number, launch?: number}[]} */
   const out = [{ fire: 0, dodge: left, overwatch: 0 }];
   if (left <= 0) return out;
   const cap = maxShot > 0 ? maxShot : left;
@@ -313,8 +378,9 @@ function biggestShot(game, f) {
  * this one number.
  * @param {Game} game @param {Trooper} t @param {number} cell @param {Trooper[]} foes
  * @param {(a: number, b: number) => boolean} see
+ * @param {Set<number>} friendEnds  where friends planned so far will end up
  */
-function threatNextTurn(game, t, cell, foes, see) {
+function threatNextTurn(game, t, cell, foes, see, friendEnds) {
   const p = game.params;
   const friends = living(game, t.side);
   let threat = 0;
@@ -328,6 +394,19 @@ function threatNextTurn(game, t, cell, foes, see) {
     const all = p.maxShot > 0 ? Math.min(next, p.maxShot) : next;
     const s = baseShock(p, all * f.aim, defence);
     if (s > 0) threat += s / Math.max(1, friends.filter((m) => m.id === t.id || see(f.cell, m.cell)).length);
+  }
+  // Bombs need no line of sight. The more enemies that could launch one,
+  // the likelier one lands here, and the harder it hits the less cover
+  // there is. Ending up near friends is risky too: one bomb, several hits.
+  if (p.launched) {
+    const launchers = foes.filter((f) => usable(f) >= p.minLaunch).length;
+    if (launchers > 0) {
+      threat += blastShock(game, BLAST[0], cell) * Math.min(1, 0.25 * launchers);
+      for (const e of friendEnds) {
+        const d = hexDist(game.grid, e, cell);
+        if (d <= 2) threat += blastShock(game, BLAST[d], cell) * 0.15;
+      }
+    }
   }
   return threat;
 }

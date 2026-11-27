@@ -31,7 +31,7 @@ function combos(ax) {
 }
 
 /** Per-faction running totals. */
-const blankProfile = () => ({ move: 0, fire: 0, dodge: 0, overwatch: 0, dealt: 0, taken: 0, turns: 0 });
+const blankProfile = () => ({ move: 0, fire: 0, dodge: 0, overwatch: 0, launch: 0, dealt: 0, taken: 0, turns: 0, blastDealt: 0 });
 
 /**
  * @param {Record<string, string|number>} params
@@ -57,11 +57,12 @@ function evaluate(params) {
           if (isCover(game, t.cell)) inCover++;
           if (!o) continue;
           p.move += pathCost(game, t.cell, o.path);
-          p.fire += o.fire; p.dodge += o.dodge; p.overwatch += o.overwatch;
+          p.fire += o.fire; p.dodge += o.dodge; p.overwatch += o.overwatch; p.launch += o.launch ?? 0;
         }
         const ev = resolveTurn(game, orders);
         for (const sh of ev.shots) {
           prof[game.troopers[sh.from].faction].dealt += sh.shock;
+          if (sh.kind === 'blast') prof[game.troopers[sh.from].faction].blastDealt += sh.shock;
           prof[game.troopers[sh.to].faction].taken += sh.shock;
         }
       }
@@ -76,15 +77,17 @@ function evaluate(params) {
     shares.push(Math.round((100 * aw) / Math.max(1, aw + bw)));
   }
   // Where each faction's points go, as percentages of points spent.
-  /** @type {Record<string, {move: number, fire: number, dodge: number, overwatch: number, dealt: number, taken: number}>} */
+  /** @type {Record<string, {move: number, fire: number, dodge: number, overwatch: number, launch: number, dealt: number, fromBombs: number, taken: number}>} */
   const profiles = {};
   for (const f of FACTIONS) {
     const p = prof[f];
-    const spent = Math.max(1, p.move + p.fire + p.dodge + p.overwatch);
+    const spent = Math.max(1, p.move + p.fire + p.dodge + p.overwatch + p.launch);
     profiles[f] = {
       move: Math.round((100 * p.move) / spent), fire: Math.round((100 * p.fire) / spent),
       dodge: Math.round((100 * p.dodge) / spent), overwatch: Math.round((100 * p.overwatch) / spent),
-      dealt: +(p.dealt / Math.max(1, p.turns)).toFixed(2), taken: +(p.taken / Math.max(1, p.turns)).toFixed(2),
+      launch: Math.round((100 * p.launch) / spent),
+      dealt: +(p.dealt / Math.max(1, p.turns)).toFixed(2), fromBombs: Math.round((100 * p.blastDealt) / Math.max(1, p.dealt)),
+      taken: +(p.taken / Math.max(1, p.turns)).toFixed(2),
     };
   }
   // How differently the factions play: the smallest difference between any
@@ -92,7 +95,7 @@ function evaluate(params) {
   let distinct = Infinity;
   for (let i = 0; i < FACTIONS.length; i++) for (let j = i + 1; j < FACTIONS.length; j++) {
     const p = profiles[FACTIONS[i]], q = profiles[FACTIONS[j]];
-    const d = Math.abs(p.move - q.move) + Math.abs(p.fire - q.fire) + Math.abs(p.dodge - q.dodge) + Math.abs(p.overwatch - q.overwatch);
+    const d = Math.abs(p.move - q.move) + Math.abs(p.fire - q.fire) + Math.abs(p.dodge - q.dodge) + Math.abs(p.overwatch - q.overwatch) + Math.abs(p.launch - q.launch);
     distinct = Math.min(distinct, d);
   }
   return {

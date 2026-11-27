@@ -71,6 +71,10 @@ export const DEFAULTS = {
   maxShot: 0,               // tuning knob: most points in one shot, 0 = no cap
   maxSpend: 0,              // tuning knob: most points one trooper spends in a game-turn, 0 = no cap
   overwatchRange: 6,
+  launched: 1,              // launched weapons (guided bombs) on or off
+  minLaunch: 3,             // fewest points a launch takes (rule 10.1)
+  blastPer: 2.5,            // stand-in for the LW results table: shock = odds / this
+  blastOddsCap: 10,         // stand-in: odds above this count as this (the table's columns top out)
   surplusPct: 120,
   holdToWin: 2,
   turnLimit: 12,
@@ -106,11 +110,13 @@ export const DEFAULTS = {
  * @property {number} fire      points in the shot
  * @property {number} dodge
  * @property {number} overwatch
+ * @property {number} [launch]    points put into launching a guided bomb (0 = none)
+ * @property {number} [launchAt]  the cell it's aimed at, or -1
  */
 
 /**
  * @typedef {Object} Shot
- * @property {'fire'|'overwatch'} kind
+ * @property {'fire'|'overwatch'|'blast'} kind
  * @property {number} from       trooper id
  * @property {number} to         trooper id
  * @property {number} attack
@@ -118,7 +124,7 @@ export const DEFAULTS = {
  * @property {number} shock      0 on a miss
  * @property {boolean} miss      attack < defence
  * @property {number} shockBefore  target's shock at the start of the turn
- * @property {number} step       movement step for overwatch, -1 for fire
+ * @property {number} step       movement step for overwatch, -1 for fire, -2 for a blast
  */
 
 /**
@@ -133,6 +139,7 @@ export const DEFAULTS = {
  * @property {{id: number, step: number}[]} downs   step -1 = fire phase
  * @property {{id: number, amount: number}[]} recovered
  * @property {{cell: number, from: number, to: number}[]} captures
+ * @property {{from: number, aimed: number, landed: number, sd: number}[]} launches  landed -1 = off the map
  */
 
 /**
@@ -402,7 +409,7 @@ export function defenceOf(game, target, fromCell, order) {
   return coverValue(game, target.cell)
     + Math.floor(hexDist(game.grid, fromCell, target.cell) / p.rangeStep)
     + Math.floor((order?.path.length ?? 0) / p.motionStep)
-    + (order?.dodge ?? 0) * (p.dodgeAimCap > 0 ? Math.min(target.aim, p.dodgeAimCap) : target.aim)
+    + dodgeValue(game, target, order?.dodge ?? 0)
     + (target.dugIn ? 1 : 0);
 }
 
@@ -424,33 +431,111 @@ export function preview(game, shooter, target, points) {
   return { attack, defence: still, shock, cancel };
 }
 
+// ---- Launched weapons ----
+
+/** Blast strength by distance from where a bomb explodes (rule 10.3). */
+export const BLAST = [30, 15, 5];
+
+/**
+ * The original's terrain values (clear 1, broken 2, woods 3, urban 6),
+ * used for blasts whatever the cover setting, as in rule 12.3. Rock can't
+ * hold a trooper; it's listed as impassable.
+ */
+export const TERRAIN_VALUE = [1, 3, 2, 3, Infinity, 6];
+
+/**
+ * The cells a blast reaches: where it explodes, plus every cell within two
+ * points of movement at the terrain's cost (rule 10.3), so it spreads into
+ * open ground but not into woods or buildings next door.
+ * @param {Game} game @param {number} at
+ * @returns {{cell: number, dist: number}[]}
+ */
+export function blastCells(game, at) {
+  const out = [{ cell: at, dist: 0 }];
+  const best = new Map([[at, 0]]);
+  const frontier = [{ cell: at, cost: 0 }];
+  while (frontier.length) {
+    const { cell, cost } = /** @type {{cell: number, cost: number}} */ (frontier.shift());
+    for (let d = 0; d < 6; d++) {
+      const n = game.grid.nbr[cell * 6 + d];
+      if (n < 0) continue;
+      const c = cost + TERRAIN_VALUE[game.terrain[n]];
+      if (c > 2 || (best.get(n) ?? Infinity) <= c) continue;
+      if (!best.has(n)) out.push({ cell: n, dist: hexDist(game.grid, at, n) });
+      best.set(n, c);
+      frontier.push({ cell: n, cost: c });
+    }
+  }
+  return out;
+}
+
+/**
+ * Shock from a blast of the given strength on a trooper in `cell`. A
+ * stand-in for the original's LW results table, which isn't available:
+ * the odds (strength over terrain value), capped at blastOddsCap, over
+ * blastPer. It matches the rulebook's worked example (15 against terrain 2
+ * costs 3 points). The cap is an inference: the original's columns are
+ * banded ("6-1 through 10-1"), which suggests the table tops out rather
+ * than growing without limit.
+ * @param {Game} game @param {number} blast @param {number} cell
+ */
+export function blastShock(game, blast, cell) {
+  const p = game.params;
+  let odds = blast / TERRAIN_VALUE[game.terrain[cell]];
+  if (p.blastOddsCap > 0) odds = Math.min(odds, p.blastOddsCap);
+  return Math.floor(odds / p.blastPer);
+}
+
+/**
+ * The die roll (1-6) at or above which a bomb with a negative scatter
+ * differential scatters. A stand-in for the original's scatter table,
+ * chosen to agree with the rulebook's examples: at -1 a five scatters, at
+ * -5 a six does.
+ * @param {number} sd
+ */
+export function scatterThreshold(sd) {
+  return Math.max(2, 6 + sd);
+}
+
+/** A trooper's dodge (countermeasures) value for the points given. */
+export function dodgeValue(/** @type {Game} */ game, /** @type {Trooper} */ t, /** @type {number} */ points) {
+  const cap = game.params.dodgeAimCap;
+  return points * (cap > 0 ? Math.min(t.aim, cap) : t.aim);
+}
+
 // ---- Orders ----
 
 /**
  * Checks one trooper's orders. Returns null if they're legal, otherwise
  * a reason.
- * @param {Game} game @param {Trooper} t @param {Order} o
+ * @param {Game} game @param {Trooper} t @param {Order} order
  */
-export function checkOrder(game, t, o) {
+export function checkOrder(game, t, order) {
+  const o = { ...idle(), ...order };
   if (t.down) return 'trooper is down';
-  for (const k of /** @type {const} */ (['fire', 'dodge', 'overwatch'])) {
-    if (!Number.isInteger(o[k]) || o[k] < 0) return `bad ${k}`;
+  for (const k of /** @type {const} */ (['fire', 'dodge', 'overwatch', 'launch'])) {
+    if (!Number.isInteger(o[k]) || /** @type {number} */ (o[k]) < 0) return `bad ${k}`;
   }
   const move = pathCost(game, t.cell, o.path);
   if (move === Infinity) return 'illegal path';
-  if (move + o.fire + o.dodge + o.overwatch > spendable(game, t)) return 'not enough points';
+  if (move + o.fire + o.dodge + o.overwatch + o.launch > spendable(game, t)) return 'not enough points';
   if (o.fire > 0) {
     const target = game.troopers[o.target];
     if (!target || target.down || target.side === t.side) return 'bad target';
     if (!los(game, t.cell, target.cell)) return 'no line of sight';
     if (game.params.maxShot > 0 && o.fire > game.params.maxShot) return 'shot too big';
   }
+  if (o.launch > 0) {
+    if (!game.params.launched) return 'no launched weapons';
+    if (o.launch < game.params.minLaunch) return 'launch too small';
+    if (!Number.isInteger(o.launchAt) || o.launchAt < 0 || o.launchAt >= game.grid.N) return 'bad launch target';
+  }
   return null;
 }
 
 /** An order that does nothing. */
 export function idle() {
-  return { path: [], target: -1, fire: 0, dodge: 0, overwatch: 0 };
+  return { path: [], target: -1, fire: 0, dodge: 0, overwatch: 0, launch: 0, launchAt: -1 };
 }
 
 // ---- The turn ----
@@ -465,17 +550,17 @@ export function idle() {
 export function resolveTurn(game, orders) {
   if (game.winner >= 0) throw new Error('game is over');
   const p = game.params;
-  /** @type {Order[]} */
-  const ord = game.troopers.map((t) => orders[t.id] ?? idle());
+  /** @type {Required<Order>[]} */
+  const ord = game.troopers.map((t) => ({ ...idle(), ...(orders[t.id] ?? {}) }));
   for (const t of living(game)) {
     const why = checkOrder(game, t, ord[t.id]);
     if (why) throw new Error(`trooper ${t.id}: ${why}`);
   }
   /** @type {TurnEvents} */
-  const ev = { turn: game.turn, stage: game.stage, shots: [], steps: [], blocked: [], pinned: [], downs: [], recovered: [], captures: [] };
+  const ev = { turn: game.turn, stage: game.stage, shots: [], steps: [], blocked: [], pinned: [], downs: [], recovered: [], captures: [], launches: [] };
   for (const t of living(game)) {
     const o = ord[t.id];
-    t.spent += pathCost(game, t.cell, o.path) + o.fire + o.dodge + o.overwatch;
+    t.spent += pathCost(game, t.cell, o.path) + o.fire + o.dodge + o.overwatch + o.launch;
   }
   const shockBefore = game.troopers.map((t) => t.shock);
   const hit = new Uint8Array(game.troopers.length);
@@ -517,6 +602,15 @@ export function resolveTurn(game, orders) {
       if (o.fire > 0) shoot('fire', t, game.troopers[o.target], o.fire, -1, pending);
     }
     applyShock(pending, -1);
+  }
+
+  // 2b. Launch: guided bombs leave from where their launchers stand. A
+  // trooper downed by fire never gets its launch off.
+  /** @type {{t: Trooper, from: number, aimed: number, points: number}[]} */
+  const launches = [];
+  for (const t of living(game)) {
+    const o = ord[t.id];
+    if (o.launch > 0) launches.push({ t, from: t.cell, aimed: o.launchAt, points: o.launch });
   }
 
   // 3. Move: one cell per step, all at once, with overwatch after each step.
@@ -584,6 +678,38 @@ export function resolveTurn(game, orders) {
       }
       applyShock(pending, s);
     }
+  }
+
+  // 3b. Projectiles: each bomb checks whether it scatters, then explodes.
+  // All blasts land together.
+  if (launches.length) {
+    const pending = game.troopers.map(() => 0);
+    for (const L of launches) {
+      const range = hexDist(game.grid, L.from, L.aimed);
+      const rangeRating = Math.ceil(range / 5);
+      let cm = 0;
+      for (const { cell } of blastCells(game, L.aimed)) {
+        const occ = occupant(game, cell);
+        if (occ) cm += dodgeValue(game, occ, ord[occ.id].dodge);
+      }
+      const sd = L.t.aim * L.points - (rangeRating + cm);
+      let landed = L.aimed;
+      if (sd < 0 && game.rng.int(6) + 1 >= scatterThreshold(sd)) {
+        landed = game.grid.nbr[L.aimed * 6 + game.rng.int(6)];
+      }
+      ev.launches.push({ from: L.t.id, aimed: L.aimed, landed, sd });
+      if (landed < 0) continue;
+      for (const { cell, dist } of blastCells(game, landed)) {
+        const occ = occupant(game, cell);
+        if (!occ) continue;
+        const blast = BLAST[dist];
+        const shock = blastShock(game, blast, cell);
+        pending[occ.id] += shock;
+        ev.shots.push({ kind: 'blast', from: L.t.id, to: occ.id, attack: blast, defence: TERRAIN_VALUE[game.terrain[cell]],
+          shock, miss: false, shockBefore: shockBefore[occ.id], step: -2 });
+      }
+    }
+    applyShock(pending, -2);
   }
 
   // 4. Recovery: troopers that weren't hit shake off some shock.

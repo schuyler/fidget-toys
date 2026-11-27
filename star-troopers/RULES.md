@@ -96,8 +96,10 @@ four tasks:
   make every shot at this trooper harder this turn.
 - **Overwatch:** points held back to shoot the first enemy that shows
   itself during movement (see A turn).
+- **Launch:** at least 3 points to fire a guided bomb at a cell (see
+  Launched weapons).
 
-A trooper can do all four in one stage, as long as the points add up.
+A trooper can do all five in one stage, as long as the points add up.
 
 - In the first stage a trooper can spend up to **6 points**.
 - In the second it can spend whatever it didn't spend in the first,
@@ -148,6 +150,43 @@ dodging (+4), it would have taken `floor(6 / 3) = 2`.
   be seen over them.
 - Troopers never block line of sight. **(open)**
 
+### Launched weapons
+
+Every trooper carries guided bombs, after the original's Guided Positron
+Bomb. The original's tactics advice was to "hole up in mountainous or
+wooded terrain to avoid enemy DF and spend all TPs on LW and CM": hide
+from direct fire, and lob bombs, which need no line of sight.
+
+- **Launching:** plot a target cell and at least 3 points. Bombs leave
+  after the fire phase, from where their launchers stand (a trooper
+  downed by fire doesn't get its launch off), and go off after
+  movement, so a target that moves away escapes.
+- **Does it land where it was aimed?** Work out
+  `Aim × points − (range rating + countermeasures)`, where the range
+  rating is 1 per 5 cells (rounded up) and the countermeasures are the
+  dodge (points × Aim) of everyone, friend or enemy, within the blast
+  radius of the target cell. Zero or more and it lands. Below zero, roll
+  a die: at −1 it scatters on a 5 or 6, at −2 on a 4 or more, and so
+  on, down to 2 or more at −4 and worse. A bomb that scatters lands one
+  cell away in a random direction, or off the map. **(Stand-in: the
+  original's scatter table isn't available. This one agrees with the
+  rulebook's worked examples.)**
+- **The blast:** strength 30 in the cell where it goes off, 15 one cell
+  away, 5 two cells away. It only spreads into cells within 2 points of
+  movement at the original's terrain costs, so it reaches into open
+  ground and ruins next door but not into brush or buildings, and only
+  open ground two cells away.
+- **Damage:** divide the strength by the original's terrain value of
+  the trooper's cell (open 1, ruins 2, brush and high ground 3,
+  buildings 6) to get odds, count anything above 10 to 1 as 10 to 1,
+  and divide by 2.5, rounding down. A direct hit in the open deals 4; on
+  a building, 2. **(Stand-in for the original's results table, which
+  isn't available. It matches the rulebook's example, where 15 against
+  terrain 2 costs 3 points. The cap is an inference from the table's
+  banded columns, like "6-1 through 10-1".)**
+- Blasts hit everyone, friends included, and count as being hit, so no
+  recovery that stage.
+
 ### Preview
 
 When you plot a shot, the game shows what it would deal if the target
@@ -180,6 +219,8 @@ A game-turn is two stages, and each stage runs the whole sequence below.
      it is.
    - A trooper that goes down stops and is removed at the end of the
      step.
+   - **Bombs go off:** each bomb checks whether it scatters, then
+     explodes. All blasts land together.
 4. **Recovery:** every trooper that took no shock this stage removes
    shock equal to its Recovery. Since there are two stages, a trooper
    that stays out of the line of fire recovers twice a game-turn: a
@@ -272,6 +313,10 @@ In any scenario, a side with no troopers left loses at once.
 | `stageCap` | 6 | Most points a trooper spends in one stage |
 | `maxShot` | 0 | Tuning: most points in one shot (0 = no cap) |
 | `overwatchRange` | 6 | How far overwatch reaches |
+| `launched` | 1 | Launched weapons on (1) or off (0) |
+| `minLaunch` | 3 | Fewest points a launch takes |
+| `blastPer` | 2.5 | Stand-in: blast shock = odds ÷ this |
+| `blastOddsCap` | 10 | Stand-in: blast odds above this count as this |
 | `surplusPct` | 120 | Attacker's value as a percentage of the defender's |
 | `holdToWin` | 2 | Victory hexes the attacker needs in Assault |
 | `turnLimit` | 12 | Turns before a scenario is decided |
@@ -364,8 +409,22 @@ None of this is in the first version, but it's the plan.
     5 further out) divided by the target's terrain value, and
     Efficiency only decides whether a guided weapon lands where it was
     aimed. List's tactics article says "the bulk of the damage to the
-    enemy will be done by Launched Weapons." That's the next thing to
-    add.
+    enemy will be done by Launched Weapons."
+  - With launched weapons in (the current default), the Compact finally
+    deal real damage: about 1 shock per trooper-turn, up from 0.04, most
+    of it from bombs. Games are faster (5–6 turns) and mostly end by
+    fighting, not at the turn limit. But because a bomb's damage ignores
+    Aim, the pool becomes the deciding number: it's both how much a
+    trooper can take and how many bombs it can throw. The Orrin (pool
+    12) now beat everyone: about 85–93% against the Compact and 98%+
+    against the Vell. Their weakness, Recovery 1, only tells in long
+    fights, and games are short.
+  - So each piece of the original added so far has shifted the
+    imbalance to whichever number the rest of the system rewards. The
+    original balanced its scenarios with force composition as much as
+    rules, so matching forces by measured strength, rather than equal
+    headcounts, is the obvious next lever. It leaves the factions
+    untouched.
   - Most games still run to the turn limit and are settled by hexes
     held.
   - History, briefly: one-stage turns with a 6-point shot cap left the
@@ -418,8 +477,10 @@ None of this is in the first version, but it's the plan.
 - **What changed from the 1977 game:**
   - The computer does the bookkeeping. Tracking points and writing
     orders was what reviewers complained about most.
-  - Four tasks instead of the original's longer list (grounding,
-    altitude, launched weapons, search and so on).
+  - Five tasks instead of the original's longer list (grounding,
+    altitude, free-flight missiles, homing missiles, search and so on).
+    The one launched weapon is the guided bomb, and its scatter and
+    damage tables are stand-ins.
   - Damage is a third of the margin by which attack beats defence,
     with optional ±1 noise, instead of dice and a results table.
   - Two stages per game-turn with 6 points per stage, as in the

@@ -428,7 +428,9 @@ export function preview(game, from, to, n) {
   const fromOwn = game.owner[from] === c;
   const toOwn = game.owner[to] === c;
   const over = dist > safeRange(game, c);
-  if (over && !working(game, c, from)) return { error: 'Too far. Long jumps can only start from your own settlement.' };
+  if (over && !working(game, c, from)) {
+    return { error: fromOwn ? 'Too far. Long jumps from a settlement founded or taken this turn have to wait a turn.' : 'Too far. Long jumps can only start from your own settlement.' };
+  }
   if (dist > 1 && crossesDust(game, from, to) && !(fromOwn && toOwn)) {
     return { error: 'Dust in the way. Only a one-hex hop, or a jump between your own settlements, can cross it.' };
   }

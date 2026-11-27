@@ -1,8 +1,8 @@
 # Dot Army: online play
 
-Status: **phase 1 of 3 done.** Two tabs in one browser can play each other
-and stay in sync. There is no server yet, so two devices can't connect. This
-document is the design, what exists, and the plan for the rest.
+Status: **phases 1 and 2 done, phase 3 partly.** Two devices play through
+the relay in `multiplayer/`, starting from Play online or Join with code.
+This document is the design, what exists, and the plan for the rest.
 
 ## Decisions already made
 
@@ -80,9 +80,11 @@ marker.
 
 ## Phase 2: relay and lobby (next)
 
-> **The relay is built, in `multiplayer/`, and its README replaces the relay
-> design below.** Dot Army uses it with `?relay=wss://...`. The lobby (Play
-> online, QR code, Join with code) is still to do.
+> **Done.** The relay is in `multiplayer/`, and its README replaces the
+> relay design below. The lobby is `multiplayer/lobby.js`: Play online shows
+> the code, the link and Share; Join with code takes a typed code. The
+> deployed relay is the default; `?relay=` overrides it and `?relay=bc` is
+> the two-tab development mode. Still to do from this section: the QR code.
 
 ### The relay: `relay/` (new)
 
@@ -149,13 +151,14 @@ then gets a custom domain in `wrangler.toml`
 - **Shared pause.** The ☰ menu or backgrounding the app sends `{k:'pause'}`
   and both devices pause. Right now one side pausing just makes the other
   show "WAITING".
-- **Peer left.** On `peer-left`, show "Opponent left" with a way back to the
-  menu, after a short grace period for reconnects.
+- **Peer left.** Done, without the grace period (there's no reconnect yet):
+  OPPONENT LEFT, and a tap goes back to the menu. ROOM FULL, CAN'T REACH THE
+  SERVER and CONNECTION LOST work the same way.
 - **Reconnect.** A guest who reloads sends `hello` mid-game. The host replies
   with `start` plus the input log and current tick, and the guest replays to
   catch up (the sim runs about 5,000 ticks/s, so a 10-minute game replays in
   about a second). A host who reloads ends the game; that's acceptable.
-- **Leave game** in the pause menu online.
+- **Leave game** in the pause menu online. Done.
 - **Version skew.** Already handled by `PROTOCOL` (see Messages); make sure
   the error tells people to reload.
 

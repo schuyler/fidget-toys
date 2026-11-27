@@ -15,8 +15,10 @@ node dot-army/tools/headless.js 20 [key=value ...]   # CPU-vs-CPU balance runs
 ```
 
 Browser checks use the preinstalled Playwright (`require('playwright')`).
-`dot-army/tools/e2e-two-tab.cjs` plays a network game between two tabs and
-compares their state; it needs the static server running on port 8765.
+Dot Army's browser checks need the static server on port 8765:
+`tools/e2e-local.cjs` (CPU play), `tools/e2e-two-tab.cjs` (two tabs,
+`?relay=bc`), and `tools/e2e-online.cjs` (lobby, leaving, errors; also needs
+a relay, `node multiplayer/server.js`).
 
 ## Rules for dot-army code
 
@@ -28,7 +30,8 @@ compares their state; it needs the static server running on port 8765.
 - The CPU (`src/ai.js`) has its own RNG and only ever moves its target, like
   a human. It must never touch game state directly.
 - `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `lockstep.js`,
-  `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`. Keep them type-clean.
+  `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`, `lobby.js`, `netpanel.js`.
+  Keep them type-clean.
 - A rule change means updating, together: `sim.js`, a test in
   `test/sim.test.js`, `RULES.md`, and the How to play card in `index.html`.
   Then run the headless balance tool to check games still finish.

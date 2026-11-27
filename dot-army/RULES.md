@@ -170,7 +170,9 @@ never goes back to neutral, so at least one player always owns a spawn.
   easy and 18 on hard, at average speed.
 - **Online:** another person plays from their own device. The host is blue
   and their settings apply; the guest's board is turned 180° so their home
-  is nearest them. For now a game starts from a link (see `NETWORK.md`).
+  is nearest them. Start one with Play online (share the link or code) or
+  Join with code. If the other player leaves, or the room is full, or the
+  server can't be reached, the game says so and a tap goes back to the menu.
 - Every page load opens a start menu (New game, Settings, Rules). The ☰
   button in a corner of the HUD pauses and opens a menu with Resume,
   New game, Settings, Rules and Sound. Settings are remembered between

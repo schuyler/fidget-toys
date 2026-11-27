@@ -4,7 +4,7 @@ Two swarms of little arrowheads fight over spawn points, and all you control is 
 
 Drag your marker and your dots stream after it. A dot destroys any enemy it's facing, unless that enemy is facing it back, in which case they're stuck glaring at each other until someone circles round behind. Park your marker on a spawn point and your dots throw themselves at it until it's yours. Take all of your opponent's spawn points and mop up their last dots to win.
 
-It's built for two people sharing one phone (multitouch, so you can both drag at once), but there's a CPU opponent too. The [full rules](RULES.md) are short and worth a skim, because the facing rule is the whole game.
+You play the CPU, or another person on their own device online. To play someone online, one of you chooses Play online and sends the link (or the code), and the other opens it or chooses Join with code. [NETWORK.md](NETWORK.md) has the details. The [full rules](RULES.md) are short and worth a skim, because the facing rule is the whole game.
 
 ## Running it
 
@@ -18,12 +18,12 @@ Then open <http://localhost:8000/dot-army/>. To play on a phone, use your comput
 
 ## Online play
 
-Half built. Two tabs in one browser can already play each other in perfect sync (`?room=TEST&host` in one, `?room=TEST` in the other), but there's no relay server yet, so two phones can't. [NETWORK.md](NETWORK.md) has the design and the plan.
+Works between two devices through the relay in [`multiplayer/`](../multiplayer/), deployed on Cloudflare. Start from Play online or Join with code. Not there yet: a QR code, reconnecting after a reload, and a pause that pauses both sides. For development, `?room=TEST&host&relay=bc` and `?room=TEST&relay=bc` in two tabs of one browser play each other with no server. [NETWORK.md](NETWORK.md) has the design and what's left.
 
 ## Tests
 
 ```
-npm test            # simulation rules, headless (node:test, no dependencies)
+npm test            # simulation rules and the relay, headless (node:test; run npm install once)
 npm run typecheck   # optional; fetches TypeScript via npx
 node dot-army/tools/headless.js 20   # CPU-vs-CPU games, for tuning
 ```

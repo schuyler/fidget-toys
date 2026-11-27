@@ -14,8 +14,9 @@ and destroying their last dot.
 - Each cell holds at most one thing: a dot, part of a spawn point, or a
   rock. Dots never overlap.
 - The layout is point-symmetric (rotated 180° about the centre), so
-  neither side has an advantage. In portrait, blue is at the bottom and
-  red at the top, so two people can face each other across a phone.
+  neither side has an advantage. Blue starts at the bottom (left in
+  landscape) and red at the top; online, the guest's board is turned
+  180° so red's home is nearest them.
 - **Obstacles:** none (the default), some, or many rocks. Rocks are
   impassable, and dots path around them. Every spawn point is always
   reachable.
@@ -161,20 +162,26 @@ never goes back to neutral, so at least one player always owns a spawn.
 
 ## Controls
 
-- **Two players, one screen** (the default): each player drags their own
-  colour's marker, and multitouch lets both drag at once. Tapping empty
-  space in your own half of the screen jumps your marker there. Halves
-  are bottom and top in portrait, left and right in landscape.
-- **vs CPU** (easy or hard): you're blue, and the CPU moves red's
+- **One player per screen.** Drag your marker, or tap anywhere to jump it
+  there.
+- **vs CPU** (easy, the default, or hard): you're blue, and the CPU moves red's
   marker under the same rules a human does. It drags the marker at a
   limited speed rather than jumping it: about 9 cells per second on
   easy and 18 on hard, at average speed.
-- Every page load opens a start menu (New game, Settings, Rules). The ☰
-  button in a corner of the HUD pauses and opens a menu with Resume,
-  New game, Settings, Rules and Sound. Settings are remembered between
+- **Online:** another person plays from their own device. The host is blue
+  and their settings apply; the guest's board is turned 180° so their home
+  is nearest them. Start one with Play online (share the link or code) or
+  Join with code. If the other player leaves, or the room is full, or the
+  server can't be reached, the game says so and a tap goes back to the menu.
+- Every page load opens a start menu (New game, Play online, Join with
+  code, Settings, Rules), unless it's a shared link, which joins the game
+  directly. The ☰ button in a corner of the HUD pauses and opens a menu
+  with Resume, New game, Settings, Rules and Sound; online it has Resume,
+  Rules, Sound and Leave game. Settings are remembered between
   visits.
 - The board is laid out for the orientation the game starts in. Turning
-  the phone mid-game pauses it until you turn it back.
+  the phone mid-game pauses it until you turn it back (not online, where
+  the other player would be left waiting).
 - A spawn you own that's being drained by the enemy throbs: its meter
   ring swells and glows until the attack stops.
 - The win screen shows each side's totals: dots made, kills, losses,
@@ -187,7 +194,7 @@ table below is fixed at its default.
 
 | Setting | Choices |
 |---|---|
-| Opponent | Human, Easy CPU, Hard CPU |
+| CPU | Easy, Hard |
 | Board | Small, Medium, Large (24 / 34 / 46 cells across the short side) |
 | Speed | Slow, Average, Fast (5 / 8 / 12 ticks per second) |
 | Spawns | Few, Some, Many (4 / 6 / 10 neutral spawns) |
@@ -213,9 +220,9 @@ table below is fixed at its default.
 
 - **Deterministic core.** The simulation uses only integers, a seeded
   random generator and the players' target positions. Same seed and
-  same inputs give the same game in any browser. That's what will make
-  lockstep network play (each side exchanging only inputs) and replays
-  straightforward later.
+  same inputs give the same game in any browser. That's what makes
+  lockstep network play work (each side exchanges only inputs), and it
+  would make replays straightforward too.
 - **Why movement isn't simultaneous.** If every dot moved at once, a dot
   could only step into a cell that was empty at the start of the tick.
   A packed column would then advance one gap at a time, at about half

@@ -7,12 +7,14 @@ import { createAudio } from './audio.js';
 import { cellCenter, pixelToCell } from './hex.js';
 import { createLockstep } from './lockstep.js';
 import { broadcastTransport, PROTOCOL } from './net.js';
-import { relayTransport } from '../../multiplayer/relay.js';
+import { relayTransport, DEFAULT_RELAY, SEAT_TAKEN } from '../../multiplayer/relay.js';
+import { createLobby, roomCode, cleanCode } from '../../multiplayer/lobby.js';
+import { createNetPanel } from '../../multiplayer/netpanel.js';
 
 // The settings players see: five simple choices, each a preset. Everything
 // else (meters, regen, spawn interval, facing arc) stays at the sim defaults.
 const CHOICES = {
-  mode: ['2p', 'cpu-easy', 'cpu'],
+  mode: ['cpu-easy', 'cpu'],
   /** cells across the screen's short side; the long side fills the screen */
   size: { small: 24, medium: 34, large: 46 },
   /** ticks per second */
@@ -27,7 +29,7 @@ const SQRT3 = Math.sqrt(3);
 // v2: only the five simple choices are stored, so values from the old
 // advanced fields can't linger invisibly.
 const SETTINGS_KEY = 'dot-army-settings-v2';
-const defaultSettings = { mode: '2p', size: 'medium', speed: 'average', spawns: 'some', obstacles: 'none' };
+const defaultSettings = { mode: 'cpu-easy', size: 'medium', speed: 'average', spawns: 'some', obstacles: 'none' };
 /** @param {any} raw */
 function sanitize(raw) {
   const out = { ...defaultSettings };
@@ -42,6 +44,9 @@ let settings = { ...defaultSettings };
 try {
   settings = sanitize(JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'));
 } catch { /* storage unavailable: use defaults */ }
+
+const query = new URLSearchParams(location.search);
+const debug = query.has('debug');
 
 const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('game'));
 const renderer = createRenderer(canvas);
@@ -70,10 +75,13 @@ const rotated = () => !net && screenPortrait() !== gamePortrait;
  *   role: 'host'|'guest', local: number, room: string,
  *   transport: import('./net.js').Transport,
  *   ls: ReturnType<typeof createLockstep> | null,
- *   gameNo: number, waitingSince: number, status: string,
+ *   gameNo: number, waitingSince: number,
+ *   status: 'lobby'|'playing'|'version'|'desync'|'left'|'full'|'unreachable'|'lost',
  * }}
  */
 let net = null;
+/** The one player on this screen: blue locally, or this device's seat online. */
+const me = () => (net ? net.local : 0);
 /** In a network game, the cell the local player last aimed at (applied a few ticks later). */
 let localAim = -1;
 
@@ -116,8 +124,8 @@ function newGame(start = true, fixed) {
     seed: (Math.random() * 2 ** 31) >>> 0,
   });
   localAim = -1;
-  renderer.setView(net ? { single: true, flip: net.local === 1, local: net.local } : { single: false, flip: false, local: 0 });
-  ais = [null, net || settings.mode === '2p' ? null
+  renderer.setView({ flip: !!net && net.local === 1, local: me() });
+  ais = [null, net ? null
     : createAI(1, game.params.seed, settings.mode === 'cpu-easy'
       ? { thinkEvery: 16, caution: 8, noise: 14, dragSpeed: 1.1 }
       : { dragSpeed: 2.2 })];
@@ -138,17 +146,11 @@ function cellPx(/** @type {number} */ cell) {
 }
 
 // ---------------------------------------------------------------------------
-// Input: each finger grabs a marker; multitouch lets both players drag at once.
+// Input: the whole screen is yours. A press anywhere moves your marker there,
+// and dragging keeps it under your finger.
 
 function humanPlayers() {
-  if (net) return [net.local === 0, net.local === 1];
-  return [true, settings.mode === '2p'];
-}
-
-/** Which player "owns" this half of the screen (blue: bottom/left). */
-function sideOf(/** @type {number} */ x, /** @type {number} */ y) {
-  if (net) return net.local; // your own device: the whole screen is yours
-  return renderer.portrait ? (y > window.innerHeight / 2 ? 0 : 1) : (x < window.innerWidth / 2 ? 0 : 1);
+  return [me() === 0, me() === 1];
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -157,6 +159,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (phase === 'over') {
     if (performance.now() - overAt < 900) return;
     if (!net) newGame();
+    else if (NET_ERRORS[net.status]) leaveToMenu();
     else if (net.role === 'host' && net.status === 'playing') hostStart(); // rematch
     return;
   }
@@ -164,21 +167,9 @@ canvas.addEventListener('pointerdown', (e) => {
     if (!rotated()) paused = false; // can't resume until the phone is turned back
     return;
   }
+  const player = me();
+  if ([...drags.values()].includes(player)) return; // another finger already has it
   const b = renderer.toBoard(e.clientX, e.clientY);
-  const human = humanPlayers();
-  const grab = Math.max(40, renderer.size * 3.5);
-  let player = -1, bestD = Infinity;
-  const side = sideOf(e.clientX, e.clientY);
-  for (let p = 0; p < 2; p++) {
-    if (!human[p] || [...drags.values()].includes(p)) continue;
-    const t = targetsPx[p];
-    // prefer your own side's marker when both are in reach
-    const d = Math.hypot(t.x - b.x, t.y - b.y) - (p === side ? grab * 0.5 : 0);
-    if (d < grab && d < bestD) { bestD = d; player = p; }
-  }
-  // Not on a marker: a tap on your own half jumps your marker there.
-  if (player < 0 && human[side] && ![...drags.values()].includes(side)) player = side;
-  if (player < 0) return;
   drags.set(e.pointerId, player);
   try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic or stale pointer */ }
   moveTarget(player, b.x, b.y);
@@ -292,6 +283,8 @@ function overlay() {
   if (net) {
     if (net.status === 'version') return { lines: ['UPDATE NEEDED'], sub: 'the two devices are running different versions · reload both' };
     if (net.status === 'desync') return { lines: ['OUT OF SYNC'], sub: `the two devices disagree at tick ${net.ls?.desyncAt} · please report this` };
+    const err = NET_ERRORS[net.status];
+    if (err) return { lines: err, sub: 'tap for the menu' };
     if (net.status === 'lobby') {
       return net.role === 'host'
         ? { lines: [net.room], sub: 'waiting for the other player to join…' }
@@ -306,15 +299,14 @@ function overlay() {
   }
   if (phase === 'countdown' && !paused) {
     const c = Math.ceil(countdown);
-    const who = net ? (net.local ? 'you are red' : 'you are blue') : settings.mode === '2p' ? 'blue vs red' : 'you are blue';
+    const who = me() ? 'you are red' : 'you are blue';
     return { lines: [String(c)], sub: who };
   }
   if (paused) return { lines: ['PAUSED'], sub: 'tap to resume' };
   if (phase === 'over') {
-    const cpuWon = !net && settings.mode !== '2p' && game.winner === 1;
     const again = !net ? 'tap to play again' : net.role === 'host' ? 'tap for a rematch' : 'waiting for the host to start a rematch';
     return {
-      lines: [net ? (game.winner === net.local ? 'YOU WIN' : 'YOU LOSE') : cpuWon ? 'CPU WINS' : `${game.winner === 0 ? 'BLUE' : 'RED'} WINS`],
+      lines: [game.winner === me() ? 'YOU WIN' : net ? 'YOU LOSE' : 'CPU WINS'],
       color: COLORS.players[game.winner],
       sub: `${Math.round(game.tick / game.params.tickRate)}s · ${again}`,
       stats: statRows(),
@@ -326,8 +318,7 @@ function overlay() {
 /** End-of-game table: [label, blue, red]. */
 function statRows() {
   const st = game.stats;
-  const names = net ? (net.local === 0 ? ['You', 'Them'] : ['Them', 'You'])
-    : settings.mode === '2p' ? ['Blue', 'Red'] : ['You', 'CPU'];
+  const names = !net ? ['You', 'CPU'] : net.local === 0 ? ['You', 'Them'] : ['Them', 'You'];
   return {
     names,
     rows: /** @type {[string, number, number][]} */ ([
@@ -432,6 +423,7 @@ $('btn-menu').addEventListener('click', () => {
   // In a network game the host's settings rule and rematches go through the host.
   $('pause-new').hidden = !!net;
   $('pause-settings').hidden = !!net;
+  $('pause-leave').hidden = !net;
   syncMute();
   pauseDialog.showModal();
 });
@@ -441,6 +433,7 @@ function resume() {
 }
 $('pause-resume').addEventListener('click', resume);
 pauseDialog.addEventListener('cancel', (e) => { e.preventDefault(); resume(); });
+$('pause-leave').addEventListener('click', () => leaveToMenu());
 $('pause-new').addEventListener('click', () => { pauseDialog.close(); newGame(); });
 $('pause-settings').addEventListener('click', () => detour(pauseDialog, openSettings));
 $('pause-rules').addEventListener('click', () => detour(pauseDialog, () => rulesDialog.showModal()));
@@ -450,24 +443,94 @@ muteBtn.addEventListener('click', () => { audio.setMuted(!audio.muted); syncMute
 // Network play: the host (blue) picks the board and settings and sends them
 // to the guest (red); after that only lockstep inputs and hashes flow.
 
+/** Statuses that end a network session, and what they say. */
+const NET_ERRORS = /** @type {Record<string, string[] | undefined>} */ ({
+  left: ['OPPONENT LEFT'],
+  full: ['ROOM FULL'],
+  unreachable: ["CAN'T REACH", 'THE SERVER'],
+  lost: ['CONNECTION LOST'],
+});
+
+// ?relay=bc: two tabs in one browser, no server. ?relay=wss://...: that relay. Neither: the default.
+const relayParam = query.get('relay');
+
+/** The link that brings the other player into this room as guest. */
+function linkFor(/** @type {string} */ code) {
+  const relay = relayParam ? `&relay=${encodeURIComponent(relayParam)}` : '';
+  return `${location.origin}${location.pathname}?room=${code}${relay}`;
+}
+
 /** @param {string} room @param {'host'|'guest'} role */
 function startNet(room, role) {
-  const relay = query.get('relay');
-  const transport = relay
-    ? relayTransport(relay, 'dot-army', room, role === 'host' ? 0 : 1)
-    : broadcastTransport(room, role);
-  net = { role, local: role === 'host' ? 0 : 1, room, transport, ls: null, gameNo: 0, waitingSince: 0, status: 'lobby' };
+  const seat = role === 'host' ? 0 : 1;
+  const transport = relayParam === 'bc'
+    ? broadcastTransport(room, role)
+    : relayTransport(relayParam || DEFAULT_RELAY, 'dot-army', room, seat, { ping: debug });
+  const session = { role, local: seat, room, transport, ls: null, gameNo: 0, waitingSince: 0, status: 'lobby' };
+  net = session;
   transport.onMessage(onNetMessage);
+  transport.onEvent(onNetEvent);
   newGame(false); // a board to look at while waiting; replaced when the game starts
   if (role === 'guest') {
     const hello = () => {
-      if (!net || net.status !== 'lobby') return;
-      net.transport.send({ k: 'hello', v: PROTOCOL });
+      if (net !== session || session.status !== 'lobby') return;
+      session.transport.send({ k: 'hello', v: PROTOCOL });
       setTimeout(hello, 500); // until the host answers
     };
     hello();
   }
 }
+
+/** @param {import('../../multiplayer/relay.js').RelayEvent} e */
+function onNetEvent(e) {
+  if (!net) return;
+  const s = net.status;
+  if (s === 'version' || s === 'desync' || NET_ERRORS[s]) return; // the first problem is the one shown
+  let status;
+  if (e.type === 'peer-left') {
+    // A guest leaving before the game starts just leaves the host waiting.
+    if (s === 'playing' || net.role === 'guest') status = 'left';
+  } else {
+    status = e.code === SEAT_TAKEN ? 'full' : !e.opened ? 'unreachable' : 'lost';
+  }
+  if (!status) return;
+  net.status = status;
+  if (status === 'left') net.transport.close(); // free the seat: the game is over
+  phase = 'over';
+  overAt = performance.now();
+  lobby.close();
+}
+
+/** End any network session and go back to the start menu. */
+function leaveToMenu() {
+  if (net) net.transport.close();
+  net = null;
+  lobby.close();
+  if (pauseDialog.open) pauseDialog.close();
+  newGame(false);
+  if (!startDialog.open) startDialog.showModal();
+}
+
+const lobby = createLobby(/** @type {HTMLDialogElement} */ ($('lobby')), {
+  onJoin(code) {
+    lobby.close();
+    startNet(code, 'guest');
+  },
+  onBack: leaveToMenu,
+});
+
+$('start-online').addEventListener('click', () => {
+  audio.unlock();
+  startDialog.close();
+  const code = roomCode();
+  startNet(code, 'host');
+  lobby.openHosting(code, linkFor(code));
+});
+$('start-join').addEventListener('click', () => {
+  audio.unlock();
+  startDialog.close();
+  lobby.openJoin();
+});
 
 /** @param {any} msg */
 function onNetMessage(msg) {
@@ -492,6 +555,7 @@ function onNetMessage(msg) {
 /** Host: deal a fresh game (also used for rematches) and tell the guest. */
 function hostStart() {
   if (!net) return;
+  lobby.close();
   net.gameNo++;
   newGame(true); // the host's settings and screen pick the board
   const p = game.params;
@@ -510,18 +574,21 @@ function attachLockstep() {
   net.status = 'playing';
 }
 
-// ?room=ABCD&host joins a network game directly: through the room relay at
-// ?relay=wss://..., or between tabs in one browser without it.
-const query = new URLSearchParams(location.search);
+// ?room=ABCD joins a game as guest straight away (that's what shared links
+// are); &host makes this device the host instead.
 const room = query.get('room');
 if (room) {
-  startNet(room.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8), query.has('host') ? 'host' : 'guest');
+  startNet(cleanCode(room), query.has('host') ? 'host' : 'guest');
 } else {
   newGame(false);
   startDialog.showModal();
 }
-// ?debug exposes a state fingerprint for automated two-tab tests.
-if (query.has('debug')) {
-  /** @type {any} */ (window).dotArmyDebug = () => ({ tick: game.tick, hash: stateHash(game), status: net?.status, desync: net?.ls?.desyncAt ?? -1, winner: game.winner });
+// ?debug shows the network panel and exposes a state fingerprint for automated tests.
+if (debug) {
+  createNetPanel(() => net?.transport.stats() ?? null);
+  /** @type {any} */ (window).dotArmyDebug = () => ({
+    tick: game.tick, hash: stateHash(game), status: net?.status, desync: net?.ls?.desyncAt ?? -1,
+    winner: game.winner, targets: [...game.targets], net: net?.transport.stats() ?? null,
+  });
 }
 requestAnimationFrame(frame);

@@ -43,17 +43,42 @@ test('R3: rooms with the same code under different games are separate', async ()
   for (const c of [a0, a1, b0, b1]) c.ws.close();
 });
 
-test('R3: a second connection for a taken seat is refused with 409', async () => {
+test('R3: a second connection for a taken seat is accepted, then closed with 4409', async () => {
   const first = await connect('/room/game-a/TAKEN?seat=0');
   assert.equal(first.status, 101);
   const second = await connect('/room/game-a/TAKEN?seat=0');
-  assert.equal(second.status, 409);
-  first.ws.close();
+  assert.equal(second.status, 101); // the handshake completes so a browser can read the close code
+  const code = await new Promise((r) => second.ws.on('close', (c) => r(c)));
+  assert.equal(code, 4409);
+  // the first occupant is undisturbed
+  const got = collect(first.ws);
+  const other = await connect('/room/game-a/TAKEN?seat=1');
+  other.ws.send(JSON.stringify({ msg: 'still here' }));
+  assert.deepEqual(await got, [{ from: 1, msg: 'still here' }]);
+  first.ws.close(); other.ws.close();
 });
 
 test('R5: a disallowed or missing Origin is refused with 403', async () => {
   assert.equal((await connect('/room/game-a/ORIG?seat=0', 'https://evil.example')).status, 403);
   assert.equal((await connect('/room/game-a/ORIG?seat=0', null)).status, 403);
+});
+
+test('a client that sends a malformed frame on a taken seat does not crash the server', async () => {
+  // The 4409 socket completes the handshake, so ws parses its frames. An unmasked client frame is a
+  // protocol error; without an error listener on that socket it was an uncaught exception.
+  const occupant = await connect('/room/game-a/BADFRAME?seat=0');
+  await new Promise((done) => {
+    const c = net.connect(server.port, '127.0.0.1', () => {
+      c.write('GET /room/game-a/BADFRAME?seat=0 HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
+        + `Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: ${ORIGIN}\r\n\r\n`);
+      c.write(Buffer.from([0x81, 0x02, 0x68, 0x69])); // unmasked text frame
+      setTimeout(() => { c.destroy(); done(); }, 300);
+    });
+    c.on('error', () => {});
+  });
+  const other = await connect('/room/game-a/BADFRAME?seat=1');
+  assert.equal(other.status, 101);
+  occupant.ws.close(); other.ws.close();
 });
 
 test('a client that resets the connection after being refused does not crash the server', async () => {

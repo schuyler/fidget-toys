@@ -1,13 +1,15 @@
 # multiplayer
 
-A room relay for this repo's network games, plus networked dice that no
-player can predict or steer. The same relay runs as a Node server at home or
-as a Cloudflare Worker.
+A room relay for this repo's network games, the lobby and debug panel that
+go with it, and networked dice that no player can predict or steer. The same
+relay runs as a Node server at home or as a Cloudflare Worker; the games use
+the one deployed at `wss://fidget-rooms.erle.workers.dev` unless told
+otherwise.
 
-Status: **step 1 of the plan below.** The relay works: Dot Army plays
-through it with `?relay=`. Peer-to-peer comes next, so for now every game
-message goes through the relay. The dice are built and unit-tested but no
-game uses them yet. Nothing here is on `main`.
+Status: **step 1 of the plan below.** Dot Army plays online through the
+relay, with a Play online / Join with code lobby. Every game message goes
+through the relay; peer-to-peer would come later, if it's ever worth it. The
+dice are built and unit-tested but no game uses them yet.
 
 ## Try it
 
@@ -17,20 +19,23 @@ node multiplayer/server.js                   # relay on ws://127.0.0.1:8788
 python3 -m http.server 8765 --bind 127.0.0.1
 ```
 
-Then open these two, ideally on different browsers or devices:
+Then open `http://127.0.0.1:8765/dot-army/?relay=ws://127.0.0.1:8788` in
+two browsers (or two windows side by side), choose **Play online** in one
+and **Join with code** in the other. The share link carries the `relay=`
+override with it. `?debug` adds the network panel.
 
-```
-http://127.0.0.1:8765/dot-army/?room=TEST&host&relay=ws://127.0.0.1:8788
-http://127.0.0.1:8765/dot-army/?room=TEST&relay=ws://127.0.0.1:8788
-```
+Which relay a page uses: `?relay=ws://…` or `wss://…` picks one; no `relay=`
+means the deployed default; `?relay=bc` skips the server and talks between
+tabs of one browser, for development.
 
-Leave out `relay=` and Dot Army falls back to talking between tabs of one
-browser, as before.
+Checks: `npm test` covers the room logic, the Node server, the browser-side
+transport and the dice. With the static server and a relay running:
 
-Checks: `npm test` covers the room logic, the Node server and the dice.
-`RELAY=ws://127.0.0.1:8788 node multiplayer/tools/e2e-relay.cjs` plays a
-game between two isolated browser contexts and compares their state; it
-needs the static server above and a running relay.
+- `RELAY=ws://127.0.0.1:8788 node multiplayer/tools/e2e-relay.cjs` plays a
+  game between two isolated browser contexts and compares their state.
+- `node dot-army/tools/e2e-online.cjs` goes through the lobby, joining by
+  code and by link, leaving, ROOM FULL and an unreachable relay.
+  `RELAY=default` runs it against the deployed relay.
 
 ## Hosting it
 
@@ -65,8 +70,10 @@ Then point the game at it: `?relay=wss://your-host`.
 
 Connect to `/room/<game>/<code>?seat=<n>`: game is `[a-z0-9-]`, 1–32
 characters; code is `[A-Z0-9]`, 1–8 characters; seat 0–7. A bad path gets
-400, a request that isn't a WebSocket upgrade 426, a disallowed Origin 403,
-a taken seat 409.
+400, a request that isn't a WebSocket upgrade 426, a disallowed Origin 403.
+A taken seat is different: the handshake completes and the relay closes the
+socket with code **4409**, because a browser can't see the HTTP status of a
+refused handshake but can see a close code.
 
 ```
 client → relay   { to?: seat, msg }   to every other seat, or just `to`
@@ -79,10 +86,32 @@ and so do more than 60 in a second (1008). Those limits and the Origin check
 are all that stop a public relay from being used by strangers, and a script
 can fake an Origin. Fine among friends; not a security boundary.
 
-`relay.js` is the browser side: `relayTransport(url, game, code, seat)` with
-the same `send` / `onMessage` / `close` as Dot Army's transports. It doesn't
-reconnect, and if the relay refuses it the game just keeps waiting for the
-other player, with no error.
+## The browser side
+
+`relay.js` exports `relayTransport(url, game, code, seat, { ping })`,
+`DEFAULT_RELAY` and the `Transport` type:
+
+- `send(msg)` / `onMessage(cb)` carry the game's messages.
+- `onEvent(cb)` reports `{ type: 'peer-left', seat }` and
+  `{ type: 'closed', code, reason, opened }`. Read the code first: a taken
+  seat opens and then closes with 4409; anything else that never opened
+  means the relay couldn't be reached.
+- `stats()` gives `{ state, rtt, sent, received, close }`. With `ping: true`
+  the transport measures round-trip time to the other seat every 2 s, using
+  `_ping` / `_pong` messages the game never sees.
+- `close()` is leaving on purpose: no event, nothing more delivered.
+
+It doesn't reconnect.
+
+`lobby.js` fills a `<dialog>` the game provides with **Your room** (the
+code, the link and a Share button, which copies the link where there's no
+share sheet) or **Join a game** (type a code). It uses only the class names
+`pills`, `pill`, `primary` and `hint`, so the game's CSS styles it. The game
+builds the link and decides what Back does. `roomCode()` makes 4-character
+codes without look-alike characters.
+
+`netpanel.js` puts a small readout in the corner: connection state,
+round-trip time, messages out and in, and the last close code.
 
 ## Dice
 
@@ -232,8 +261,8 @@ mostly for the real-time games.
 
 ### Transport
 
-All transports share the interface that `net.js` already defines:
-`send(msg)`, `onMessage(cb)`, `close()`.
+All transports share the `Transport` interface defined in `relay.js`:
+`send`, `onMessage`, `onEvent`, `stats` and `close`.
 
 - `p2pTransport`: a WebRTC DataChannel, set up through the Worker. One
   connection to each other seat (a full mesh), fine up to about 4–6 players.
@@ -242,8 +271,8 @@ All transports share the interface that `net.js` already defines:
   exists.
 
 The session tries P2P first and falls back to the relay if no channel opens
-within a few seconds. A query parameter will force one, for testing; today
-`?relay=` picks the relay and leaving it out picks BroadcastChannel.
+within a few seconds. `?relay=bc` picks BroadcastChannel, `?relay=<url>` a relay, and neither the
+deployed default.
 
 ### Session
 

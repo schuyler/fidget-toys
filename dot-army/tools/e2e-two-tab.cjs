@@ -18,9 +18,9 @@ const BASE = process.env.BASE ?? 'http://127.0.0.1:8765/dot-army/';
   const guest = await ctx.newPage();
   for (const p of [host, guest]) p.on('pageerror', (e) => errors.push(e.message));
   const room = 'T' + Math.floor(Math.random() * 1000);
-  await host.goto(`${BASE}?room=${room}&host&debug`);
+  await host.goto(`${BASE}?room=${room}&host&debug&relay=bc`);
   await host.waitForTimeout(500);
-  await guest.goto(`${BASE}?room=${room}&debug`);
+  await guest.goto(`${BASE}?room=${room}&debug&relay=bc`);
   await host.waitForTimeout(4500); // countdown
 
   // Each player drags their own marker (bottom of their own screen) upward.

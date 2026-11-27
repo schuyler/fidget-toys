@@ -1,18 +1,20 @@
 # Dot Army: online play
 
-Status: **phase 1 of 3 done.** Two tabs in one browser can play each other
-and stay in sync. There is no server yet, so two devices can't connect. This
-document is the design, what exists, and the plan for the rest.
+Status: **phases 1 and 2 done, phase 3 partly.** Two devices play through
+the relay in `multiplayer/`, starting from Play online or Join with code.
+This document is the design, what exists, and the plan for the rest.
 
 ## Decisions already made
 
 - **Host is blue, and the host's settings apply.** The host's screen also
   decides the board's dimensions; the guest fits that board to its screen.
-- **Lockstep over a relay.** Devices exchange inputs only, through a
-  Cloudflare Worker with one Durable Object per room.
-- **The owner deploys the relay** (`npx wrangler deploy`) and will point a
-  domain at Cloudflare for it.
-- **No accounts, no strangers.** You join by link, QR code or room code.
+- **Lockstep over a relay.** Devices exchange inputs only, through the relay
+  in `multiplayer/`: a Cloudflare Worker with one Durable Object per room, or
+  the same room logic as a Node server.
+- **The owner deploys the relay** (`npx wrangler@4.158.0 deploy` from
+  `multiplayer/`). It's at `wss://fidget-rooms.erle.workers.dev` for now; a
+  custom domain is optional.
+- **No accounts, no strangers.** You join by link or room code (a QR code is still to do).
 
 ## How it works
 
@@ -68,23 +70,25 @@ marker.
   laggy fake network stay identical for a whole CPU-vs-CPU game; a device
   that hears nothing stalls after `delay` ticks; corrupting one copy is
   detected.
-- `src/net.js`: `PROTOCOL`, `roomCode()`, and a development transport over
-  `BroadcastChannel`.
+- `src/net.js`: `PROTOCOL` and a development transport over
+  `BroadcastChannel`. (`roomCode()` has since moved to `multiplayer/lobby.js`.)
 - `src/main.js`: network session (handshake, host deals games, rematches by
   host tap), "You win/You lose", the pause menu hides New game and Settings
   online, and rotating the phone doesn't pause an online game.
-- Try it: open `/dot-army/?room=TEST&host` in one tab and `/dot-army/?room=TEST`
-  in another tab of the same browser. Add `&debug` to expose
+- Try it: open `/dot-army/?room=TEST&host&relay=bc` in one tab and
+  `/dot-army/?room=TEST&relay=bc` in another tab of the same browser. Add `&debug` to expose
   `window.dotArmyDebug()` (tick, state hash, status) for automated checks.
   `tools/e2e-two-tab.cjs` does exactly that.
 
-## Phase 2: relay and lobby (next)
+## Phase 2: relay and lobby
 
-> **The relay is built, in `multiplayer/`, and its README replaces the relay
-> design below.** Dot Army uses it with `?relay=wss://...`. The lobby (Play
-> online, QR code, Join with code) is still to do.
+> **Done.** The relay is in `multiplayer/`, and its README replaces the
+> relay design below. The lobby is `multiplayer/lobby.js`: Play online shows
+> the code, the link and Share; Join with code takes a typed code. The
+> deployed relay is the default; `?relay=` overrides it and `?relay=bc` is
+> the two-tab development mode. Still to do from this section: the QR code.
 
-### The relay: `relay/` (new)
+### The relay (superseded: see `multiplayer/README.md`)
 
 A Worker plus a Durable Object class, about 50 lines:
 
@@ -111,7 +115,7 @@ A Worker plus a Durable Object class, about 50 lines:
 100,000 requests and 13,000 GB-s of Durable Object duration per day. Incoming
 WebSocket messages count as 1/20 of a request each, and outgoing messages are
 free. A 10-minute game at 8 ticks/s is about 9,600 incoming messages (480
-requests) and about 75 GB-s of duration (128 MB × 600 s, since a busy room
+requests) and about 77 GB-s of duration (128 MB × 600 s, since a busy room
 never hibernates). Duration is the binding limit: **roughly 170 ten-minute
 games a day.** Over the limit, new connections fail for the rest of the day;
 the free plan doesn't bill. Sources:
@@ -128,7 +132,7 @@ then gets a custom domain in `wrangler.toml`
 (`routes = [{ pattern = "dots.schuyler.info", custom_domain = true }]`). A
 `*.workers.dev` address works with no DNS changes at all, if that's simpler.
 
-### Client
+### Client (superseded: built as `multiplayer/relay.js` and `lobby.js`, without reconnect)
 
 - `net.js`: add `websocketTransport(url, room, role)` with the same interface
   as `broadcastTransport`. It reconnects with backoff, and keeps `bc` as a
@@ -149,13 +153,14 @@ then gets a custom domain in `wrangler.toml`
 - **Shared pause.** The ☰ menu or backgrounding the app sends `{k:'pause'}`
   and both devices pause. Right now one side pausing just makes the other
   show "WAITING".
-- **Peer left.** On `peer-left`, show "Opponent left" with a way back to the
-  menu, after a short grace period for reconnects.
+- **Peer left.** Done, without the grace period (there's no reconnect yet):
+  OPPONENT LEFT, and a tap goes back to the menu. ROOM FULL, CAN'T REACH THE
+  SERVER and CONNECTION LOST work the same way.
 - **Reconnect.** A guest who reloads sends `hello` mid-game. The host replies
   with `start` plus the input log and current tick, and the guest replays to
   catch up (the sim runs about 5,000 ticks/s, so a 10-minute game replays in
   about a second). A host who reloads ends the game; that's acceptable.
-- **Leave game** in the pause menu online.
+- **Leave game** in the pause menu online. Done.
 - **Version skew.** Already handled by `PROTOCOL` (see Messages); make sure
   the error tells people to reload.
 
@@ -171,9 +176,6 @@ then gets a custom domain in `wrangler.toml`
   lost 30% of the time, so not severe. Watch human games; the first lever to
   try is a home-spawn advantage (faster regen or higher meter at homes).
 - **The "drag me" hint overlaps each home spawn** at game start (cosmetic).
-- **Landscape two-player on one screen:** the countdown and win text are
-  drawn upright, so both players read them sideways. Portrait is the better
-  shared-screen mode.
 - **iOS Safari audio** may need the first `touchend` rather than
   `pointerdown` to unlock. Untested.
 - **Dense obstacles:** before the elimination rule, 1 in 12 CPU games on

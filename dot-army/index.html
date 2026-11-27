@@ -18,6 +18,8 @@
     <p class="tagline">Two swarms. One rule: never turn your back.</p>
     <div class="pills">
       <button id="start-new" class="pill primary" autofocus>New game</button>
+      <button id="start-online" class="pill">Play online</button>
+      <button id="start-join" class="pill">Join with code</button>
       <button id="start-settings" class="pill">Settings</button>
       <button id="start-rules" class="pill">Rules</button>
     </div>
@@ -31,8 +33,11 @@
       <button id="pause-settings" class="pill">Settings</button>
       <button id="pause-rules" class="pill">Rules</button>
       <button id="pause-sound" class="pill">Sound: on</button>
+      <button id="pause-leave" class="pill">Leave game</button>
     </div>
   </dialog>
+
+  <dialog id="lobby" class="menu"></dialog>
 
   <dialog id="rules">
     <form method="dialog">
@@ -43,7 +48,7 @@
         <li><b>Dots that reach your marker bunch up</b> into a hedgehog, facing outward.</li>
         <li><b>Park your marker on or beside a spawn point</b> and your dots throw themselves at it, draining its ring. Empty the ring and it's yours: it starts making dots for you.</li>
         <li><b>Wipe out the other side to win:</b> take all their spawn points and destroy every last dot. Neutral spawns don't need capturing, and while you still have dots you're not out yet.</li>
-        <li><b>Playing a friend?</b> Each of you drags your own colour. Tap in your half of the screen to jump your marker there.</li>
+        <li><b>Tap anywhere</b> to jump your marker there. Against the CPU you're blue.</li>
       </ul>
       <p class="hint"><a href="https://github.com/schuyler/fidget-toys/blob/main/dot-army/RULES.md" target="_blank" rel="noopener">Full rules</a>, for the curious.</p>
       <menu>
@@ -56,11 +61,10 @@
     <form id="settings-form" method="dialog">
       <h2>Dot Army</h2>
       <div class="row">
-        <div class="row-name" id="lbl-mode">Opponent</div>
+        <div class="row-name" id="lbl-mode">CPU</div>
         <div class="opts" role="radiogroup" aria-labelledby="lbl-mode">
-          <label><input type="radio" name="mode" value="2p"><span>Human</span></label>
-          <label><input type="radio" name="mode" value="cpu-easy"><span>Easy CPU</span></label>
-          <label><input type="radio" name="mode" value="cpu"><span>Hard CPU</span></label>
+          <label><input type="radio" name="mode" value="cpu-easy"><span>Easy</span></label>
+          <label><input type="radio" name="mode" value="cpu"><span>Hard</span></label>
         </div>
       </div>
       <div class="row">
@@ -95,7 +99,7 @@
           <label><input type="radio" name="obstacles" value="many"><span>Many</span></label>
         </div>
       </div>
-      <p class="hint">Drag your marker; your dots follow. A dot destroys an enemy it's facing, unless that enemy faces it back. Park your marker on or beside a spawn point to attack it. With a CPU opponent, you're blue. Win by taking all the enemy's spawns and destroying every last enemy dot. <a href="https://github.com/schuyler/fidget-toys/blob/main/dot-army/RULES.md" target="_blank" rel="noopener">Full rules</a></p>
+      <p class="hint">Drag your marker; your dots follow. A dot destroys an enemy it's facing, unless that enemy faces it back. Park your marker on or beside a spawn point to attack it. Against the CPU you're blue; online, the host is blue. Win by taking all the enemy's spawns and destroying every last enemy dot. <a href="https://github.com/schuyler/fidget-toys/blob/main/dot-army/RULES.md" target="_blank" rel="noopener">Full rules</a></p>
       <menu>
         <button value="reset" formnovalidate>Defaults</button>
         <button value="cancel" formnovalidate>Cancel</button>

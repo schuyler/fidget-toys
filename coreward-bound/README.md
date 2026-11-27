@@ -1,8 +1,8 @@
 # Coreward Bound
 
-Two civilizations jump fleets across a spiral galaxy, racing to bring three relics home from its core.
+Two civilizations jump fleets across a spiral galaxy, racing to carry three relics out of its core.
 
-Jumps are instant but inaccurate. Tap a stack, tap a hex, and before you commit the game shows the odds of landing on target and every hex you might scatter to, with a red ✕ on the ones where you'd be lost. The longer the jump, the worse the miss. Settle hexes to make resources, build fleets, and research techs that stretch your range or steady your aim. A chain of settlements lets a stack cross half the galaxy in one turn. Grab a relic by holding a core hex through the CPU's turn, then run it home before the CPU catches you. Taking every one of its settlements also wins.
+Jumps are instant but inaccurate. Tap a stack, tap a hex, and before you commit the game shows the odds of landing on target and every hex you might scatter to, with a red ✕ on the ones where you'd be lost. The longer the jump, the worse the miss. Settle hexes to make resources, build fleets, and research techs that stretch your range or steady your aim. A chain of settlements lets a stack cross half the galaxy in one turn. Grab a relic by holding its hex at the centre through the CPU's turn, then run it to one of your settlements before the CPU catches you. Don't linger: the core's glare destroys fleets that end a turn there. Taking every one of its settlements also wins.
 
 You play the CPU (Easy or Hard) on a small, medium or large galaxy. The [full rules](RULES.md) cover the numbers.
 
@@ -31,8 +31,8 @@ node coreward-bound/tools/e2e.cjs           # in a browser; needs the repo serve
 
 This is the first playable version. Things I know about:
 
-- Games are short: about 11 rounds between two CPUs. Whoever reaches the core first usually wins, and a delivered relic (+1 to everything) snowballs.
+- Games are short: about 12 rounds between two CPUs, nearly all won by relics. Whoever delivers the first relic wins about 90% of the time; a delivered relic (+1 to everything) snowballs. Most of the map never gets visited. [IDEAS.md](IDEAS.md) lists the fixes we're considering.
 - The CPU rarely picks a fight it isn't sure of, so CPU-vs-CPU games average less than one battle. It also leaves its settlements thinly guarded, which a person can punish.
-- Hard is better than Easy, but not by a lot: Hard wins about 70% of games against it.
-- Stances (cooperate, neutral, hostile), tech trading and network play are in the draft rules but not in the game yet. See [RULES.md](RULES.md).
+- Hard is better than Easy, but not by a lot: Hard wins about two games in three against it.
+- Stances (cooperate, neutral, hostile), tech trading and network play aren't in the game yet. See [IDEAS.md](IDEAS.md).
 - No sound.

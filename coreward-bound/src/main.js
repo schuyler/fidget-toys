@@ -443,7 +443,7 @@ function narrate(e) {
   const mine = 'civ' in e && e.civ === YOU;
   switch (e.type) {
     case 'jump':
-      if (e.lost) toast(mine ? `Lost in space: ${e.n} fleet${e.n > 1 ? 's' : ''}${e.relics ? ' and the relic, which goes back to the centre' : ''}.` : 'A CPU stack was lost in space.', mine ? 'bad' : 'cpu');
+      if (e.lost) toast(mine ? `Lost in space: ${e.n} fleet${e.n > 1 ? 's' : ''}${e.relics ? ' and the relic, which goes back to a hex at the centre' : ''}.` : 'A CPU stack was lost in space.', mine ? 'bad' : 'cpu');
       else if (e.scatter && mine) toast(`Missed: scattered ${e.scatter} hex${e.scatter > 1 ? 'es' : ''}${e.losses ? `, lost ${e.losses}` : ''}.`, 'bad');
       break;
     case 'combat': {

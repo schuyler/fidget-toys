@@ -361,5 +361,6 @@ network play and more civs, are in [IDEAS.md](IDEAS.md).
   - Each tech does one small thing, instead of one "level" feeding every
     system.
   - Relics are the only big prize.
-  - There are no random disasters.
+  - There are no random disasters. The core's glare is the one random
+    loss, and you choose to risk it.
   - Scatter odds are always shown before you commit.

@@ -92,7 +92,7 @@ export function createAI(player, seed, opts = {}) {
       if (issue({ op: 'move', index: roles.indexOf(role), cell: stepFor(role) })) travel -= 1;
       else { travel = 0; break; }
     }
-    travel = Math.min(travel, Math.max(1, dragSpeed));
+    // The loop leaves travel < 1 (or resets it), so the carry is always within max(1, dragSpeed).
     return out;
   }
 

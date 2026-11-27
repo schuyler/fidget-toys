@@ -58,7 +58,7 @@ console.table(results);
 const done = results.filter((r) => r.winner >= 0);
 const avg = (k) => (done.reduce((a, r) => a + r[k], 0) / Math.max(1, done.length)).toFixed(1);
 const se = (k) => { const n = done.length, m = done.reduce((a, r) => a + r[k], 0) / n; return Math.sqrt(done.reduce((a, r) => a + (r[k] - m) ** 2, 0) / (n - 1) / n).toFixed(1); };
-console.log(`finished ${done.length}/${games}  blue ${done.filter((r) => r.winner === 0).length}  red ${done.filter((r) => r.winner === 1).length}  avg secs ${avg('secs')}  avg captures ${avg('captures')}  avg lead changes ${avg('flips')} ±${se('flips')}  avg peak ${avg('peak')}`);
+console.log(`finished ${done.length}/${games * (swap ? 2 : 1)}  blue ${done.filter((r) => r.winner === 0).length}  red ${done.filter((r) => r.winner === 1).length}  avg secs ${avg('secs')}  avg captures ${avg('captures')}  avg lead changes ${avg('flips')} ±${se('flips')}  avg peak ${avg('peak')}`);
 
 // average targets held per tick, over all games (finished or not)
 const heldAvg = (k) => (results.reduce((a, r) => a + r[k], 0) / results.length).toFixed(2);

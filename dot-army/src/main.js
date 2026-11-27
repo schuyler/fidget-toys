@@ -190,8 +190,7 @@ const actionsOn = () => (phase === 'countdown' || phase === 'play') && (!net || 
  */
 function issue(input) {
   if (!applyInputTo(mine, input, game.params.maxTargets, game.grid.N)) return false;
-  if (net && net.ls) net.ls.queue(input);
-  else applyInput(game, me(), input);
+  if (net) { if (net.ls) net.ls.queue(input); } else applyInput(game, me(), input);
   if (input.op === 'add') markersPx[me()].push(cellPx(input.cell));
   else if (input.op === 'remove') markersPx[me()].splice(input.index, 1);
   return true;
@@ -692,7 +691,7 @@ if (debug) {
   createNetPanel(() => net?.transport.stats() ?? null);
   /** @type {any} */ (window).dotArmyDebug = () => ({
     tick: game.tick, hash: stateHash(game), status: net?.status, desync: net?.ls?.desyncAt ?? -1,
-    winner: game.winner, targets: [...game.targets], net: net?.transport.stats() ?? null,
+    winner: game.winner, targets: game.targets.map((t) => [...t]), net: net?.transport.stats() ?? null,
     overlay: (() => { const o = overlay(); return o ? { lines: o.lines, sub: o.sub } : null; })(),
     board: renderer.board,
   });

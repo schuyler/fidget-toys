@@ -2,7 +2,7 @@
 
 Two civilizations jump fleets across a spiral galaxy, racing to carry three relics out of its core.
 
-Jumps are instant but inaccurate. Tap a stack, tap a hex, and before you commit the game shows the odds of landing on target and every hex you might scatter to, with a red ✕ on the ones where you'd be lost. The longer the jump, the worse the miss. Settle hexes to make resources, build fleets, and research techs that stretch your range or steady your aim. A chain of settlements lets a stack cross half the galaxy in one turn. Grab a relic by holding its hex at the centre through the CPU's turn, then run it to one of your settlements before the CPU catches you. Don't linger: the core's glare destroys fleets that end a turn there. Taking every one of its settlements also wins.
+Jumps are instant but inaccurate. Tap a stack, tap a hex, and before you commit the game shows the odds of landing on target and every hex you might scatter to, with a red ✕ on the ones where you'd be lost. The longer the jump, the worse the miss. Settle hexes to make resources, build fleets, and research techs that stretch your range or steady your aim. A chain of settlements lets a stack cross half the galaxy in one turn. Land on a relic near the centre and hold it through the CPU's turn, then run it to one of your settlements before the CPU catches you. Don't linger: the core's glare can destroy fleets that end a turn there. Taking every one of its settlements also wins.
 
 You play the CPU (Easy or Hard) on a small, medium or large galaxy. The [full rules](RULES.md) cover the numbers.
 

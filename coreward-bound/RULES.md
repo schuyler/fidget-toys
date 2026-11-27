@@ -31,7 +31,7 @@ civs and network play can be added later (see Later).
     settled, though stacks can jump through it and stand in it.
   - **Core:** every hex within 2 of the centre. Can't be settled. A
     jump into or out of the core that scatters destroys the stack, and
-    the core's glare destroys fleets that end a turn there (see The
+    the core's glare can destroy fleets that end a turn there (see The
     core). Relics appear on the centre hex and the six around it.
 - **Beacons:** two very bright stars on each arm. Jumps aimed at a
   beacon hex get +1.

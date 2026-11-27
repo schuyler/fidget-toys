@@ -93,11 +93,8 @@ the headless tool. Settings the player sees are the five presets in
   processing files. Browsers may cache for ~10 minutes.
 - Work happens on a `claude/...` branch. The owner approves each change, then
   it is **squash-merged** to `main` via a pull request.
-- After a squash merge the branch and `main` have the same content but
-  different history, and force-pushing the branch is not allowed. Before the
-  next PR, confirm `git diff origin/main HEAD` is empty for already-merged
-  work, then record main in the branch with
-  `git merge -s ours origin/main` so the next PR doesn't conflict.
+- Dev branches are throwaway: each is used for one PR and never reused after
+  its squash merge. Force-pushing a `claude/...` branch is fine.
 - The network relay lives in `multiplayer/` (see its README): a Node server
   for the owner's home host, or a Cloudflare Worker the owner deploys with
   `npx wrangler@4.158.0 deploy` from `multiplayer/`. Games stay dependency-free in the browser;

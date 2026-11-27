@@ -93,22 +93,22 @@ split between four tasks, and points left unspent are wasted:
   itself during movement (see A turn).
 
 A trooper can do all four in one turn, as long as the points add up.
-**(open: a cap on points per shot, like the original's limit of 6
-points per stage of a turn)**
+No single shot can use more than **6 points**, after the original's
+limit of 6 points per stage of a turn.
 
 ## Shooting
 
 ```
 attack  = fire points × Aim
 defence = cover            (of the cell the target is in when shot)
-        + floor(range / 3)
+        + floor(range / 2)
         + floor(cells the target plotted to move / 2)
         + dodge points × Aim
         + 1 if the target is dug in (see Assault)
 ```
 
 - If `attack < defence`, the shot misses.
-- Otherwise it deals `floor((attack − defence) / 2)` shock.
+- Otherwise it deals `floor((attack − defence) / 3)` shock.
 - **Noise (setting, off by default):** when it's on, a shot that didn't
   miss also adds one of −1, 0, 0 or +1 to its shock, chosen at random
   (minimum 0). The average stays the same. Near-threshold shots
@@ -117,10 +117,10 @@ defence = cover            (of the cell the target is in when shot)
 - There's no combined fire: every shot is worked out on its own, and
   their shock adds up.
 
-For example, a fresh Compact trooper puts 5 points into a shot (attack
-10) at another standing in the open 4 cells away (range 1). With no
-dodge, that's `floor(9 / 2) = 4` shock. If the target had put 3 points
-into dodging (+6), it would have taken `floor(3 / 2) = 1`.
+For example, a Compact trooper puts 6 points into a shot (attack 12)
+at another standing in the open 4 cells away (range 2). With no dodge,
+that's `floor(10 / 3) = 3` shock. If the target had put 2 points into
+dodging (+4), it would have taken `floor(6 / 3) = 2`.
 
 ### Line of sight
 
@@ -162,10 +162,10 @@ orders.
      it is.
    - A trooper that goes down stops and is removed at the end of the
      step.
-4. **Recovery:** every trooper that took no shock this turn removes
-   shock equal to its Recovery. A hurt trooper that gets into cover and
-   keeps its head down will get back into the fight; one that's still
-   being shot at won't.
+4. **Recovery:** every trooper still standing removes shock equal to
+   its Recovery, hit this turn or not. Over a few turns, a hurt trooper
+   that gets out of the line of fire is back in the fight, and the
+   Compact, at Recovery 3, bounce back fastest.
 5. **Control:** victory hexes change hands (see below).
 6. **Win check.**
 
@@ -247,17 +247,17 @@ In any scenario, a side with no troopers left loses at once.
 | Name | Default | Meaning |
 |---|---|---|
 | `squad` | 4 | Troopers in a standard squad |
-| `rangeStep` | 3 | Cells per +1 defence from range |
+| `rangeStep` | 2 | Cells per +1 defence from range |
 | `motionStep` | 2 | Plotted cells moved per +1 defence |
-| `damageDivisor` | 2 | Shock = margin ÷ this, rounded down |
-| `maxShot` | 0 | Most points in one shot (0 = no cap) |
+| `damageDivisor` | 3 | Shock = margin ÷ this, rounded down |
+| `maxShot` | 6 | Most points in one shot (0 = no cap) |
 | `overwatchRange` | 6 | How far overwatch reaches |
 | `surplusPct` | 120 | Attacker's value as a percentage of the defender's |
 | `holdToWin` | 2 | Victory hexes the attacker needs in Assault |
 | `turnLimit` | 12 | Turns before a scenario is decided |
 | `noise` | 0 | 0 = off, 1 = ±1 on shots that land |
 | `coverScale` | 1 | Tuning: multiplies every cover value |
-| `recoverWhenHit` | 0 | Tuning: 1 = troopers recover every turn, hit or not |
+| `recoverWhenHit` | 1 | Tuning: 0 = only troopers that weren't hit recover |
 | `seed` | random | Same seed and same orders = same game |
 
 ## Later
@@ -319,12 +319,23 @@ None of this is in the first version, but it's the plan.
 - **Tune the formulas, not the factions.** The faction numbers are the
   original's and stay put. What the original turned into damage with
   dice and a results table, this game does with a fixed formula, and
-  that changes the balance. Run the Vell through it: 6 points of fire
-  at Aim 4 is attack 24. Against a Compact trooper in the open 3 cells
-  away (defence 1), that's 11 shock, dead from full. A Compact trooper
-  putting all 9 points into a shot (attack 18) at a Vell that isn't
-  dodging deals 8, more than the Vell's whole pool. If everything kills
-  everything, the fix is in `damageDivisor`, `rangeStep` and `maxShot`.
+  that changes the balance. The first draft made everything kill
+  everything: a Vell's 6 points at Aim 4 took down a fresh Compact
+  trooper in one shot, and games were over by turn 5. Headless runs
+  pointed at four changes: the 6-point shot cap and recovery every
+  turn (both closer to the original than the first draft was),
+  damage divided by 3 rather than 2, and range counting every 2 cells
+  rather than 3. That same Vell shot now deals 7, and games run to
+  about turn 11.
+- **Where balance stands (open).** On the current defaults, in 100
+  CPU-vs-CPU games per pairing, the Orrin beat the Compact about 3
+  times in 4 and the Vell beat the Compact about 2 times in 3. Orrin
+  against Vell is roughly even. Most games run to the turn limit, so
+  they're settled by hexes held, where the Orrin's 12 points a turn
+  buy mobility. The CPU also hardly uses cover, which needs looking
+  into before these numbers mean much. Next levers to try, still
+  without touching faction numbers: turns in two stages like the
+  original, and scenario design.
 - **Why noise starts off.** Not knowing the other side's orders is
   already plenty of uncertainty, and the interesting kind. The worry
   with pure arithmetic is that defence can become absolute: two squads
@@ -368,10 +379,10 @@ None of this is in the first version, but it's the plan.
     orders was what reviewers complained about most.
   - Four tasks instead of the original's longer list (grounding,
     altitude, launched weapons, search and so on).
-  - Damage is half the margin by which attack beats defence, with
-    optional ±1 noise, instead of dice and a results table.
-  - Single-stage turns, with no per-stage spending limit (yet).
-  - Recovery only happens in a turn the trooper wasn't hit.
+  - Damage is a third of the margin by which attack beats defence,
+    with optional ±1 noise, instead of dice and a results table.
+  - Single-stage turns, with a 6-point cap per shot in place of the
+    original's 6 points per stage.
   - Shots happen before anyone moves, from where everyone starts.
     Overwatch is the only fire during movement, and a hit pins.
   - No heavy-weapons troopers, androids or support platforms.

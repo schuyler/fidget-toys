@@ -93,6 +93,15 @@ export function createAI(side, seed, opts = {}) {
         .filter((c) => COVER[game.terrain[c]] > 0 && foes.some((f) => see(c, f.cell)))
         .sort((a, b) => COVER[game.terrain[b]] - COVER[game.terrain[a]] || gd[a] - gd[b])
         .slice(0, 4).forEach((c) => ends.add(c));
+      // The safest places to be next turn, and cover on the way to the goal.
+      /** @type {Map<number, number>} */
+      const threatAt = new Map();
+      for (const c of reachable) threatAt.set(c, threatNextTurn(game, t, c, foes, see));
+      reachable.slice()
+        .sort((a, b) => /** @type {number} */ (threatAt.get(a)) - /** @type {number} */ (threatAt.get(b)) || gd[a] - gd[b])
+        .slice(0, 4).forEach((c) => ends.add(c));
+      reachable.filter((c) => COVER[game.terrain[c]] > 0)
+        .sort((a, b) => gd[a] - gd[b]).slice(0, 3).forEach((c) => ends.add(c));
 
       // Who can it shoot from where it stands? (Fire happens before moving.)
       const targets = foes.filter((f) => see(t.cell, f.cell));
@@ -119,7 +128,8 @@ export function createAI(side, seed, opts = {}) {
             if (bestTarget < 0) continue;
           }
           const order = { path, target: bestTarget, fire: bestTarget >= 0 ? sp.fire : 0, dodge: sp.dodge, overwatch: sp.overwatch };
-          const score = scoreOrder(game, t, order, end, goal, gd, foes, see, urgency) + dealt + killBonus;
+          const score = scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, /** @type {number} */ (threatAt.get(end)))
+            + dealt + killBonus;
           cands.push({ order, score, target: bestTarget, dealt });
         }
       }
@@ -240,44 +250,84 @@ function expectedShock(game, t, f, points) {
 }
 
 /**
+ * A guess at the points a foe puts into one shot: half what it has, within
+ * the shot cap.
+ * @param {Game} game @param {Trooper} f
+ */
+function guessShot(game, f) {
+  const half = Math.ceil(usable(f) / 2);
+  return game.params.maxShot > 0 ? Math.min(half, game.params.maxShot) : half;
+}
+
+/**
+ * How badly a trooper could be hurt next turn if it ends this turn at
+ * `cell`: every foe that can see the cell takes the biggest shot it's
+ * allowed, split among the troopers it can see, against cover and range
+ * only. It's deliberately pessimistic (no dodge): a gentler guess makes
+ * most cells look perfectly safe, and then cover and distance stop
+ * mattering. Cover, distance and staying out of sight all fall out of
+ * this one number.
+ * @param {Game} game @param {Trooper} t @param {number} cell @param {Trooper[]} foes
+ * @param {(a: number, b: number) => boolean} see
+ */
+function threatNextTurn(game, t, cell, foes, see) {
+  const p = game.params;
+  const friends = living(game, t.side);
+  let threat = 0;
+  for (const f of foes) {
+    if (!see(f.cell, cell)) continue;
+    const defence = COVER[game.terrain[cell]] * p.coverScale
+      + Math.floor(hexDist(game.grid, f.cell, cell) / p.rangeStep)
+      + (t.dugIn ? 1 : 0);
+    const all = p.maxShot > 0 ? Math.min(usable(f), p.maxShot) : usable(f);
+    const s = baseShock(p, all * f.aim, defence);
+    if (s > 0) threat += s / Math.max(1, friends.filter((m) => m.id === t.id || see(f.cell, m.cell)).length);
+  }
+  return threat;
+}
+
+/**
  * Everything about an order except the damage it deals.
  * @param {Game} game @param {Trooper} t @param {Order} order @param {number} end
  * @param {number} goal @param {Int32Array} gd @param {Trooper[]} foes
  * @param {(a: number, b: number) => boolean} see @param {number} urgency
+ * @param {number} threat  expected shock next turn at the end cell
  */
-function scoreOrder(game, t, order, end, goal, gd, foes, see, urgency) {
+function scoreOrder(game, t, order, end, goal, gd, foes, see, urgency, threat) {
   const p = game.params;
   const g = game.grid;
   let score = 0;
+  // How much it matters to stay alive: more the more hurt it already is.
+  const hurt = t.shock / t.pool;
+  const care = 1 + 2 * hurt;
 
-  // Fire coming in this turn, at where it starts. Each foe that can see it
-  // is guessed to put half its points into a shot, split among the targets
-  // it can see.
+  // Fire coming in this turn, at where it starts (fire happens before
+  // anyone moves), softened by dodging and by how far it plans to move.
   let incoming = 0;
   for (const f of foes) {
     if (!see(f.cell, t.cell)) continue;
-    const attack = Math.ceil(usable(f) / 2) * f.aim;
-    const s = baseShock(p, attack, defenceOf(game, t, f.cell, order));
+    const s = baseShock(p, guessShot(game, f) * f.aim, defenceOf(game, t, f.cell, order));
     if (s > 0) incoming += s / Math.max(1, living(game, t.side).filter((m) => see(f.cell, m.cell)).length);
   }
-  const hurt = t.shock * 2 >= t.pool;
-  score -= incoming * (hurt ? 1.6 : 1.1);
+  score -= incoming * 1.1 * care;
   if (t.shock + incoming >= t.pool) score -= 6;
 
-  // Overwatch risk along the way, and how exposed the end cell is.
+  // Overwatch risk along the way, and the fire it will draw next turn
+  // where it ends up.
   for (const c of order.path) {
     for (const f of foes) if (hexDist(g, c, f.cell) <= p.overwatchRange && see(c, f.cell)) score -= 0.15;
   }
-  const exposedTo = foes.filter((f) => see(end, f.cell)).length;
-  score += COVER[game.terrain[end]] * 0.8 - exposedTo * (hurt ? 0.6 : 0.2);
+  score -= threat * 0.4 * care;
+  if (t.shock + threat >= t.pool) score -= 4;
 
-  // Progress towards the goal hex.
-  score += (gd[t.cell] - gd[end]) * 0.9 * urgency;
+  // Progress towards the goal hex. A badly hurt trooper cares less about
+  // the objective and more about living to recover.
+  const drive = urgency * (1 - 0.6 * hurt);
+  score += (gd[t.cell] - gd[end]) * 0.9 * drive;
   const dg = hexDist(g, end, goal);
-  if (dg === 0) score += 3 * urgency;
-  else if (dg === 1) score += 1.2 * urgency;
-  // Standing next to an enemy-held hex stops it changing hands; standing
-  // next to our own stops the enemy taking it.
+  if (dg === 0) score += 3 * drive;
+  else if (dg === 1) score += 1.2 * drive;
+  // Standing next to our own hex stops the enemy taking it.
   for (const v of game.victory) {
     if (hexDist(g, end, v.cell) <= 1 && v.owner === t.side) score += 0.8;
   }

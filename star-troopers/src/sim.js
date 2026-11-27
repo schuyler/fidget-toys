@@ -42,17 +42,17 @@ export const DEFAULTS = {
   faction1: 'compact',      // side 1 starts at the top
   attacker: 0,              // Assault: which side attacks
   squad: 4,
-  rangeStep: 3,
+  rangeStep: 2,
   motionStep: 2,
   coverScale: 1,            // tuning knob: multiplies every cover value
-  damageDivisor: 2,
-  maxShot: 0,               // most points in one shot, 0 = no cap
+  damageDivisor: 3,
+  maxShot: 6,               // most points in one shot, 0 = no cap
   overwatchRange: 6,
   surplusPct: 120,
   holdToWin: 2,
   turnLimit: 12,
   noise: 0,
-  recoverWhenHit: 0,        // tuning knob: 1 = recover every turn, hit or not
+  recoverWhenHit: 1,        // 0 = only troopers that weren't hit recover
   seed: 1,
 };
 
@@ -223,7 +223,7 @@ export function squadSizes(/** @type {Params} */ p) {
 function generate(game) {
   const { grid, params } = game;
   const mid = (grid.H - 1) >> 1;
-  const counts = { open: 2, some: 7, dense: 12 };
+  const counts = { open: 3, some: 11, dense: 16 };
   const features = counts[/** @type {keyof typeof counts} */ (params.terrain)] ?? 7;
   const vcols = [Math.round((grid.W - 1) / 6), (grid.W - 1) >> 1, grid.W - 1 - Math.round((grid.W - 1) / 6)];
   const vrow = params.scenario === 'assault'

@@ -62,19 +62,20 @@ test('line of sight is the same in both directions', () => {
   }
 });
 
-test('the rules example: 5 points at range 4 deals 4, or 1 if the target dodges 3', () => {
-  for (const [dodge, expected] of [[0, 4], [3, 1]]) {
-    const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }]);
-    const ev = resolveTurn(game, orders(game, { 0: { target: 1, fire: 5 }, 1: { dodge } }));
-    assert.equal(ev.shots[0].attack, 10);
+test('the rules example: 6 points at range 4 deals 3, or 2 if the target dodges 2', () => {
+  for (const [dodge, expected] of [[0, 3], [2, 2]]) {
+    const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], {}, { recoverWhenHit: 0 });
+    const ev = resolveTurn(game, orders(game, { 0: { target: 1, fire: 6 }, 1: { dodge } }));
+    assert.equal(ev.shots[0].attack, 12);
+    assert.equal(ev.shots[0].defence, 2 + 2 * dodge);
     assert.equal(game.troopers[1].shock, expected);
   }
 });
 
 test('a shot misses when attack is below defence, and the preview says so', () => {
   const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9) }], { terrain: [[C(6, 9), RUINS]] });
-  // attack 2 against cover 2 + range 1 = 3
-  assert.deepEqual(preview(game, game.troopers[0], game.troopers[1], 1), { attack: 2, defence: 3, shock: 0, cancel: 0 });
+  // attack 2 against cover 2 + range 2 = 4
+  assert.deepEqual(preview(game, game.troopers[0], game.troopers[1], 1), { attack: 2, defence: 4, shock: 0, cancel: 0 });
   const ev = resolveTurn(game, orders(game, { 0: { target: 1, fire: 1 } }));
   assert.equal(ev.shots[0].miss, true);
   assert.equal(game.troopers[1].shock, 0);
@@ -137,26 +138,29 @@ test('overwatch ignores enemies standing still and fires once per turn', () => {
   assert.notEqual(ow[0].to, 1);
 });
 
-test('recovery only happens in a turn the trooper was not hit', () => {
+test('with recoverWhenHit off, only troopers that were not hit recover', () => {
   const game = board([
     { side: 0, cell: C(2, 9), shock: 4 },
     { side: 1, cell: C(6, 9), shock: 4 },
-  ]);
+  ], {}, { recoverWhenHit: 0 });
   resolveTurn(game, orders(game, { 0: { target: 1, fire: 3 } }));
   assert.equal(game.troopers[0].shock, 1);      // Compact recovers 3
-  assert.equal(game.troopers[1].shock, 4 + 2);  // attack 6 - range 1 = 5, halved
+  assert.equal(game.troopers[1].shock, 4 + 1);  // attack 6 - range 2 = 4, divided by 3
 });
 
-test('the recoverWhenHit tuning knob lets hit troopers recover too', () => {
-  const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9), shock: 4 }], {}, { recoverWhenHit: 1 });
+test('by default troopers recover every turn, hit or not', () => {
+  const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 9), shock: 4 }]);
   resolveTurn(game, orders(game, { 0: { target: 1, fire: 3 } }));
-  assert.equal(game.troopers[1].shock, 4 + 2 - 3);
+  assert.equal(game.troopers[1].shock, 4 + 1 - 3);
 });
 
 test('dug in gives +1 defence until the trooper leaves its zone, even if it comes back', () => {
   const game = board([{ side: 0, cell: C(2, 9) }, { side: 1, cell: C(6, 2), dugIn: true }]);
   const t = game.troopers[1];
-  assert.equal(preview(game, game.troopers[0], t, 4).defence, 2 + 1);
+  const dug = preview(game, game.troopers[0], t, 4).defence;
+  t.dugIn = false;
+  assert.equal(preview(game, game.troopers[0], t, 4).defence, dug - 1);
+  t.dugIn = true;
   resolveTurn(game, orders(game, { 1: { path: [C(6, 3), C(6, 2)] } }));
   assert.equal(t.cell, C(6, 2));
   assert.equal(t.dugIn, false);

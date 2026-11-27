@@ -38,7 +38,10 @@ export function start(opts = {}) {
     wss.handleUpgrade(req, socket, head, (ws) => {
       // A taken seat completes the handshake and is closed with 4409, because a
       // browser can't see the HTTP status of a refused handshake.
-      if (rooms.get(key)?.has(r.seat)) return ws.close(4409, 'seat taken');
+      if (rooms.get(key)?.has(r.seat)) {
+        ws.on('error', () => {}); // a bad frame before the close lands must not crash the server
+        return ws.close(4409, 'seat taken');
+      }
       // Created only once the handshake succeeded, so failed ones leave nothing behind.
       let room = rooms.get(key);
       if (!room) rooms.set(key, room = createRoom());

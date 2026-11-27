@@ -74,9 +74,9 @@ const rotated = () => !net && screenPortrait() !== gamePortrait;
  * @type {null | {
  *   role: 'host'|'guest', local: number, room: string,
  *   transport: import('./net.js').Transport,
- *   (status: 'lobby'|'playing'|'version'|'desync'|'left'|'full'|'unreachable'|'lost')
  *   ls: ReturnType<typeof createLockstep> | null,
- *   gameNo: number, waitingSince: number, status: string,
+ *   gameNo: number, waitingSince: number,
+ *   status: 'lobby'|'playing'|'version'|'desync'|'left'|'full'|'unreachable'|'lost',
  * }}
  */
 let net = null;
@@ -495,6 +495,7 @@ function onNetEvent(e) {
   }
   if (!status) return;
   net.status = status;
+  if (status === 'left') net.transport.close(); // free the seat: the game is over
   phase = 'over';
   overAt = performance.now();
   lobby.close();

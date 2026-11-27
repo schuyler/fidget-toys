@@ -63,6 +63,24 @@ test('R5: a disallowed or missing Origin is refused with 403', async () => {
   assert.equal((await connect('/room/game-a/ORIG?seat=0', null)).status, 403);
 });
 
+test('a client that sends a malformed frame on a taken seat does not crash the server', async () => {
+  // The 4409 socket completes the handshake, so ws parses its frames. An unmasked client frame is a
+  // protocol error; without an error listener on that socket it was an uncaught exception.
+  const occupant = await connect('/room/game-a/BADFRAME?seat=0');
+  await new Promise((done) => {
+    const c = net.connect(server.port, '127.0.0.1', () => {
+      c.write('GET /room/game-a/BADFRAME?seat=0 HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
+        + `Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: ${ORIGIN}\r\n\r\n`);
+      c.write(Buffer.from([0x81, 0x02, 0x68, 0x69])); // unmasked text frame
+      setTimeout(() => { c.destroy(); done(); }, 300);
+    });
+    c.on('error', () => {});
+  });
+  const other = await connect('/room/game-a/BADFRAME?seat=1');
+  assert.equal(other.status, 101);
+  occupant.ws.close(); other.ws.close();
+});
+
 test('a client that resets the connection after being refused does not crash the server', async () => {
   // Refused upgrades (bad Origin) followed by a TCP reset at varying moments.
   // Before the fix this was an uncaught ECONNRESET that killed the process.

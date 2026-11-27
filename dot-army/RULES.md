@@ -16,7 +16,7 @@ and destroying their last dot.
 - The layout is point-symmetric (rotated 180° about the centre), so
   neither side has an advantage. Blue starts at the bottom (left in
   landscape) and red at the top; online, the guest's board is turned
-  so red's home is at the bottom of their screen.
+  180° so red's home is nearest them.
 - **Obstacles:** none (the default), some, or many rocks. Rocks are
   impassable, and dots path around them. Every spawn point is always
   reachable.
@@ -169,8 +169,8 @@ never goes back to neutral, so at least one player always owns a spawn.
   limited speed rather than jumping it: about 9 cells per second on
   easy and 18 on hard, at average speed.
 - **Online:** another person plays from their own device. The host is blue
-  and their settings apply; the guest's board is turned so their home is
-  at the bottom. For now a game starts from a link (see `NETWORK.md`).
+  and their settings apply; the guest's board is turned 180° so their home
+  is nearest them. For now a game starts from a link (see `NETWORK.md`).
 - Every page load opens a start menu (New game, Settings, Rules). The ☰
   button in a corner of the HUD pauses and opens a menu with Resume,
   New game, Settings, Rules and Sound. Settings are remembered between

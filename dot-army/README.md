@@ -4,7 +4,7 @@ Two swarms of little arrowheads fight over spawn points, and all you control is 
 
 Drag your marker and your dots stream after it. A dot destroys any enemy it's facing, unless that enemy is facing it back, in which case they're stuck glaring at each other until someone circles round behind. Park your marker on a spawn point and your dots throw themselves at it until it's yours. Take all of your opponent's spawn points and mop up their last dots to win.
 
-You play the CPU, or another person on their own device online. Online play currently starts from a link (see [NETWORK.md](NETWORK.md)); a proper Play online menu is on the way. The [full rules](RULES.md) are short and worth a skim, because the facing rule is the whole game.
+You play the CPU, or another person on their own device online. For now, online play starts from a link (see [NETWORK.md](NETWORK.md)). The [full rules](RULES.md) are short and worth a skim, because the facing rule is the whole game.
 
 ## Running it
 

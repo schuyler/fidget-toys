@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, setTarget, placeDot, stateHash, BLUE, RED, NEUTRAL } from '../src/sim.js';
+import { createGame, step, setTarget, applyInput, placeDot, stateHash, productionRate, PROD_UNIT, BLUE, RED, NEUTRAL } from '../src/sim.js';
 import { createGrid, axialToIndex, cellCenter, pixelToCell, mirror, dirToward } from '../src/hex.js';
 import { createAI } from '../src/ai.js';
 
@@ -144,6 +144,32 @@ test('a spawn with every exit blocked emits nothing; guarding dots face outward'
   for (const e of s.exits) assert.equal(game.occ[e]?.facing, dirToward(game.grid, s.center, e));
 });
 
+test('production: extra spawns add a fraction, a bigger army slows it', () => {
+  const sp = (dq, owner) => ({ center: at(game0(), dq, 0), owner });
+  const one = board({ spawns: [sp(-7, BLUE), sp(7, RED)] }, { spawnInterval: 2, extraSpawnRate: 50, armyHalfRate: 100 });
+  assert.equal(productionRate(one, BLUE), PROD_UNIT / 2, 'one spawn: a dot every 2 ticks');
+  const three = board({ spawns: [sp(-7, BLUE), sp(0, BLUE), sp(7, BLUE)] }, { spawnInterval: 2, extraSpawnRate: 50, armyHalfRate: 100 });
+  assert.equal(productionRate(three, BLUE), PROD_UNIT, 'three spawns: 2× not 3×');
+  for (let i = 0; i < 100; i++) placeDot(one, BLUE, one.grid.N - 1 - i, E);
+  assert.equal(productionRate(one, BLUE), PROD_UNIT / 4, '100 dots halve it');
+  assert.equal(productionRate(one, RED), PROD_UNIT / 2, "red's rate ignores blue's army");
+});
+
+test('dots come out of owned spawns in turn, skipping blocked ones', () => {
+  const sp = (dq, owner) => ({ center: at(game0(), dq, 0), owner });
+  const game = board({ spawns: [sp(-7, BLUE), sp(0, RED), sp(7, BLUE)] }, { spawnInterval: 1, extraSpawnRate: 0, armyHalfRate: 0 });
+  const [a, , c] = game.spawns;
+  const newest = () => game.dots.filter((d) => d.player === BLUE).reduce((x, y) => (y.id > x.id ? y : x));
+  const from = () => { step(game); return a.exits.includes(newest().cell) ? 'a' : 'c'; };
+  setTarget(game, BLUE, at(game, 0, -5));
+  assert.deepEqual([from(), from(), from(), from()], ['a', 'c', 'a', 'c']);
+  for (const e of a.exits) if (!game.occ[e]) game.terrain[e] = 1; // wall spawn a in
+  const n = game.dotCount[BLUE];
+  step(game);
+  assert.equal(game.dotCount[BLUE], n + 1, 'production moves to the free spawn');
+  assert.ok(c.exits.includes(newest().cell));
+});
+
 test('attacking a neutral spawn drains its meter, then captures it with overflow', () => {
   const game = board({ spawns: [{ center: at(game0(), 0, 0), owner: NEUTRAL, meter: 3 }, { center: at(game0(), -7, 0), owner: BLUE }, { center: at(game0(), 7, 0), owner: RED }] }, { spawnInterval: 1000 });
   const s = game.spawns[0];
@@ -252,7 +278,7 @@ test('same seed and same inputs give the same game', () => {
     const game = createGame({ seed: 42, terrain: 'rocks' });
     const ais = [createAI(0, 5), createAI(1, 9)];
     for (let i = 0; i < 400 && game.winner < 0; i++) {
-      for (const ai of ais) { const t = ai.think(game); if (t !== null) setTarget(game, ai.player, t); }
+      for (const ai of ais) for (const inp of ai.think(game)) applyInput(game, ai.player, inp);
       step(game);
     }
     return stateHash(game);
@@ -271,17 +297,18 @@ test('generated layouts are point-symmetric', () => {
   }
 });
 
-test('the CPU drags its marker at a limited speed instead of jumping', () => {
+test('the CPU drags its markers at a limited speed instead of jumping', () => {
   const game = createGame({ seed: 11 });
   const ai = createAI(RED, 3, { dragSpeed: 0.5 });
-  let prev = game.targets[RED], moved = 0;
+  let moved = 0;
   for (let i = 0; i < 200; i++) {
-    const t = ai.think(game);
-    if (t !== null) {
-      assert.ok(game.grid.nbr.subarray(prev * 6, prev * 6 + 6).includes(t), 'one cell per move');
-      setTarget(game, RED, t);
-      prev = t;
-      moved++;
+    for (const inp of ai.think(game)) {
+      if (inp.op === 'move') {
+        const prev = game.targets[RED][inp.index]; // per target index: the CPU may hold up to 3
+        assert.ok(game.grid.nbr.subarray(prev * 6, prev * 6 + 6).includes(inp.cell), 'one cell per move');
+        moved++;
+      }
+      assert.equal(applyInput(game, RED, inp), true);
     }
     step(game);
   }
@@ -310,7 +337,7 @@ test('stats track kills, losses, spawning and spending', () => {
   const ais = [createAI(0, 1), createAI(1, 2)];
   let kills = 0, spawned = 0, consumed = 0;
   for (let i = 0; i < 600 && game.winner < 0; i++) {
-    for (const ai of ais) { const t = ai.think(game); if (t !== null) setTarget(game, ai.player, t); }
+    for (const ai of ais) for (const inp of ai.think(game)) applyInput(game, ai.player, inp);
     const ev = step(game);
     kills += ev.kills.length; spawned += ev.spawned; consumed += ev.consumed;
   }

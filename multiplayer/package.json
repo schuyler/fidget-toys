@@ -1,0 +1,13 @@
+{
+  "name": "fidget-multiplayer",
+  "private": true,
+  "type": "module",
+  "description": "Room relay for fidget-toys network games: Node server and Cloudflare Worker",
+  "scripts": {
+    "start": "node server.js",
+    "dev:worker": "npx --yes wrangler@4.158.0 dev"
+  },
+  "dependencies": {
+    "ws": "8.22.2"
+  }
+}

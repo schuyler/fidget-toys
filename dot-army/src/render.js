@@ -6,6 +6,7 @@ import { cellCenter, boardSize, fitSize, dirAngle } from './hex.js';
 
 /** @typedef {import('./sim.js').Game} Game */
 /** @typedef {import('./sim.js').Events} Events */
+/** A target marker to draw: board px, owner, and whether a finger is moving it. @typedef {{ x: number, y: number, player: number, dragging: boolean }} Marker */
 
 export const COLORS = {
   bg: '#0d1020',
@@ -23,6 +24,30 @@ export const COLORS = {
 const SQRT3 = Math.sqrt(3);
 
 /**
+ * Where the board may go on a cw × ch screen: it is scaled to fit w × h and
+ * centred on (cx, cy). Landscape keeps a HUD strip on top; portrait keeps
+ * one at the bottom, where the ☰ button also sits, and stays clear of the
+ * notch and home indicator.
+ * @param {number} cw @param {number} ch
+ * @param {{ top: number, bottom: number }} safe  safe-area insets in px
+ * @returns {{ w: number, h: number, cx: number, cy: number }}
+ */
+export function boardArea(cw, ch, safe) {
+  if (ch <= cw) return { w: cw - 20, h: ch - 56, cx: cw / 2, cy: 38 + (ch - 38) / 2 };
+  const top = 10 + safe.top, bottom = 34 + safe.bottom;
+  const h = ch - top - bottom;
+  return { w: cw - 20, h, cx: cw / 2, cy: top + h / 2 };
+}
+
+/** Safe-area insets, read from the #safe-probe element (JS can't read env()). */
+function safeInsets() {
+  const probe = document.getElementById('safe-probe');
+  if (!probe) return { top: 0, bottom: 0 };
+  const st = getComputedStyle(probe);
+  return { top: parseFloat(st.paddingTop) || 0, bottom: parseFloat(st.paddingBottom) || 0 };
+}
+
+/**
  * @typedef {Object} Particle
  * @property {number} x @property {number} y @property {number} vx @property {number} vy
  * @property {number} life @property {number} max @property {string} color @property {number} size
@@ -35,6 +60,9 @@ export function createRenderer(canvas) {
   let dpr = 1, cw = 0, ch = 0;
   let size = 8, ox = 0, oy = 0, bw = 0, bh = 0;
   let portrait = false;
+  // Whose screen this is: one player per screen. Online, the guest's board is
+  // turned 180° (flip) so their home is nearest them.
+  let view = { flip: false, local: 0 };
   /** @type {HTMLCanvasElement|null} */ let staticLayer = null;
   /** @type {Game|null} */ let game = null;
 
@@ -70,13 +98,12 @@ export function createRenderer(canvas) {
     canvas.style.height = ch + 'px';
     portrait = ch > cw;
     if (!game) return;
-    const hud = portrait ? 34 : 38;
-    const padX = 10, padY = portrait ? hud * 2 : hud + 10;
-    size = fitSize(game.grid, cw - padX * 2, ch - padY - (portrait ? 0 : 8));
+    const a = boardArea(cw, ch, safeInsets());
+    size = fitSize(game.grid, a.w, a.h);
     const b = boardSize(game.grid, size);
     bw = b.w; bh = b.h;
-    ox = (cw - bw) / 2;
-    oy = portrait ? (ch - bh) / 2 : hud + (ch - hud - bh) / 2;
+    ox = a.cx - bw / 2;
+    oy = a.cy - bh / 2;
     buildStatic();
   }
 
@@ -194,7 +221,7 @@ export function createRenderer(canvas) {
   /**
    * @param {number} alpha  0..1 progress through the current tick
    * @param {number} dt     seconds since last frame
-   * @param {{ targetsPx: ({x: number, y: number}|null)[], dragging: boolean[], overlay: {lines: string[], color?: string, sub?: string}|null, hints: boolean, human: boolean[] }} ui
+   * @param {{ markers: Marker[], overlay: {lines: string[], color?: string, sub?: string}|null, hints: boolean }} ui
    */
   function draw(alpha, dt, ui) {
     if (!game || !staticLayer) return;
@@ -208,6 +235,7 @@ export function createRenderer(canvas) {
     const sy = shake ? (Math.random() - 0.5) * shake * size * 0.8 : 0;
     ctx.save();
     ctx.translate(ox + sx, oy + sy);
+    if (view.flip) { ctx.translate(bw, bh); ctx.rotate(Math.PI); }
 
     ctx.drawImage(staticLayer, 0, 0, staticLayer.width / dpr, staticLayer.height / dpr);
 
@@ -387,14 +415,15 @@ export function createRenderer(canvas) {
     ctx.globalAlpha = 1;
   }
 
-  /** @param {{ targetsPx: ({x: number, y: number}|null)[], dragging: boolean[], hints: boolean, human: boolean[] }} ui */
+  /** @param {{ markers: Marker[], hints: boolean }} ui */
   function drawTargets(ui) {
+    if (!game) return;
     const now = performance.now() / 1000;
-    for (let p = 0; p < 2; p++) {
-      const t = ui.targetsPx[p];
-      if (!t) continue;
+    let hinted = false; // the hint is drawn once, under the local player's first marker
+    for (const t of ui.markers) {
+      const p = t.player;
       const color = COLORS.players[p];
-      const R = Math.max(12, size * 1.7) * (ui.dragging[p] ? 1.35 : 1) * (1 + 0.06 * Math.sin(now * 5 + p));
+      const R = Math.max(12, size * 1.7) * (t.dragging ? 1.35 : 1) * (1 + 0.06 * Math.sin(now * 5 + p));
       ctx.save();
       ctx.translate(t.x, t.y);
       // 1. Dark backing disc: dims the dots underneath so the marker reads
@@ -439,15 +468,16 @@ export function createRenderer(canvas) {
       ctx.strokeStyle = color;
       ctx.stroke();
       ctx.restore();
-      if (ui.hints && ui.human[p]) {
+      if (ui.hints && !hinted && p === view.local) {
+        hinted = true;
         ctx.save();
         ctx.translate(t.x, t.y);
-        if (portrait && p === 1) ctx.rotate(Math.PI);
+        if (view.flip) ctx.rotate(Math.PI);
         ctx.fillStyle = color;
         ctx.globalAlpha = 0.6 + 0.4 * Math.sin(now * 6);
         ctx.font = `600 ${Math.max(12, size * 1.6)}px system-ui, sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText('drag me', 0, R + Math.max(16, size * 2.4));
+        ctx.fillText(game.params.maxTargets > 1 ? 'tap to add · tap a marker to remove · drag to move' : 'drag me · tap to jump', 0, R + Math.max(16, size * 2.4));
         ctx.restore();
       }
     }
@@ -456,16 +486,11 @@ export function createRenderer(canvas) {
   /** Tug-of-war bar of spawn ownership, plus dot counts. */
   function drawHud() {
     if (!game) return;
-    if (portrait) {
-      hudBar(cw / 2, ch - 20, 0);
-      hudBar(cw / 2, 20, Math.PI);
-    } else {
-      hudBar(cw / 2, 22, 0);
-    }
+    hudBar(cw / 2, portrait ? ch - 20 : 22, view.local);
   }
 
-  /** @param {number} x @param {number} y @param {number} rot */
-  function hudBar(x, y, rot) {
+  /** @param {number} x @param {number} y @param {number} first  player shown on the left */
+  function hudBar(x, y, first) {
     if (!game) return;
     const n = game.spawns.length;
     const blue = game.spawns.filter((s) => s.owner === 0).length;
@@ -474,10 +499,9 @@ export function createRenderer(canvas) {
     const seg = (w - gap * (n - 1)) / n;
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(rot);
-    // In the rotated (red-facing) copy, red reads on the left.
-    const order = rot ? [1, 0] : [0, 1];
-    const counts = rot ? [red, blue] : [blue, red];
+    // The reader sees their own colour on the left.
+    const order = [first, 1 - first];
+    const counts = first ? [red, blue] : [blue, red];
     for (let i = 0; i < n; i++) {
       const owner = i < counts[0] ? order[0] : i >= n - counts[1] ? order[1] : -1;
       ctx.fillStyle = owner >= 0 ? COLORS.players[owner] : 'rgba(125,133,151,0.35)';
@@ -513,39 +537,31 @@ export function createRenderer(canvas) {
     ctx.fillRect(0, 0, cw, ch);
     // with a stats table underneath, pull the text toward the middle so it fits
     const k = o.stats ? 0.1 : 0;
-    const copies = portrait
-      ? [[cw / 2, ch * (0.68 - k), 0], [cw / 2, ch * (0.32 + k), Math.PI]]
-      : [[cw / 2, ch * (0.5 - k * 1.5), 0]];
-    for (const [x, y, rot] of copies) {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(rot);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = o.color ?? COLORS.text;
-      ctx.shadowColor = o.color ?? '#000';
-      ctx.shadowBlur = 20;
-      const big = Math.min(72, Math.max(36, Math.min(cw, ch) * 0.12));
-      o.lines.forEach((line, i) => {
-        ctx.font = `800 ${big}px system-ui, sans-serif`;
-        ctx.fillText(line, 0, (i - (o.lines.length - 1) / 2) * big * 1.1);
-      });
-      if (o.sub) {
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = COLORS.text;
-        ctx.globalAlpha = 0.75;
-        ctx.font = `500 ${Math.round(big * 0.3)}px system-ui, sans-serif`;
-        ctx.fillText(o.sub, 0, (o.lines.length / 2) * big * 1.1 + big * 0.3);
-        ctx.globalAlpha = 1;
-      }
-      if (o.stats) drawStats(o.stats, (o.lines.length / 2) * big * 1.1 + big * 0.85);
-      ctx.restore();
+    ctx.translate(cw / 2, ch * (0.5 - k * 1.5));
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = o.color ?? COLORS.text;
+    ctx.shadowColor = o.color ?? '#000';
+    ctx.shadowBlur = 20;
+    const big = Math.min(72, Math.max(36, Math.min(cw, ch) * 0.12));
+    o.lines.forEach((line, i) => {
+      ctx.font = `800 ${big}px system-ui, sans-serif`;
+      ctx.fillText(line, 0, (i - (o.lines.length - 1) / 2) * big * 1.1);
+    });
+    if (o.sub) {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = COLORS.text;
+      ctx.globalAlpha = 0.75;
+      ctx.font = `500 ${Math.round(big * 0.3)}px system-ui, sans-serif`;
+      ctx.fillText(o.sub, 0, (o.lines.length / 2) * big * 1.1 + big * 0.3);
+      ctx.globalAlpha = 1;
     }
+    if (o.stats) drawStats(o.stats, (o.lines.length / 2) * big * 1.1 + big * 0.85);
     ctx.restore();
   }
 
   /**
-   * Two-column stats table, drawn in the current (possibly rotated) frame.
+   * Two-column stats table, drawn in the overlay's frame.
    * @param {{names: string[], rows: [string, number, number][]}} st @param {number} top
    */
   function drawStats(st, top) {
@@ -581,10 +597,15 @@ export function createRenderer(canvas) {
     onTick,
     draw,
     /** Screen point → board pixel coords. */
-    toBoard(/** @type {number} */ x, /** @type {number} */ y) { return { x: x - ox, y: y - oy }; },
+    toBoard(/** @type {number} */ x, /** @type {number} */ y) {
+      return view.flip ? { x: bw - (x - ox), y: bh - (y - oy) } : { x: x - ox, y: y - oy };
+    },
+    /** @param {{ flip: boolean, local: number }} v */
+    setView(v) { view = { ...v }; },
     get size() { return size; },
-    get portrait() { return portrait; },
     get board() { return { x: ox, y: oy, w: bw, h: bh }; },
+    /** The space the board gets on the current screen; newGame shapes the board to it. */
+    area() { return boardArea(window.innerWidth, window.innerHeight, safeInsets()); },
   };
 }
 

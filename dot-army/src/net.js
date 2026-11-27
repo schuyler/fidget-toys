@@ -3,7 +3,7 @@
 // transport lives in multiplayer/relay.js.
 
 /** Bump when anything that affects the simulation or the protocol changes. */
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 
 /** @typedef {import('../../multiplayer/relay.js').Transport} Transport */
 

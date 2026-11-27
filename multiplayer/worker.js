@@ -30,10 +30,16 @@ export class Room extends DurableObject {
   async fetch(request) {
     const r = /** @type {{ seat: number }} */ (parseRequest(new URL(request.url)));
     const tag = String(r.seat);
-    // Either can hold the seat: a CLOSING socket stays in getWebSockets(), and a seat freed by
-    // getWebSockets() may still be in the room until its close event arrives.
-    if (this.ctx.getWebSockets(tag).length || this.room.has(r.seat)) return new Response(null, { status: 409 });
     const { 0: client, 1: server } = new WebSocketPair();
+    // Either can hold the seat: a CLOSING socket stays in getWebSockets(), and a seat freed by
+    // getWebSockets() may still be in the room until its close event arrives. A taken seat
+    // completes the handshake and is closed with 4409, because a browser can't see the HTTP
+    // status of a refused handshake.
+    if (this.ctx.getWebSockets(tag).length || this.room.has(r.seat)) {
+      server.accept();
+      server.close(4409, 'seat taken');
+      return new Response(null, { status: 101, webSocket: client });
+    }
     this.ctx.acceptWebSocket(server, [tag]);
     this.room.join(r.seat, server);
     return new Response(null, { status: 101, webSocket: client });

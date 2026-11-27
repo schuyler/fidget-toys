@@ -43,12 +43,19 @@ test('R3: rooms with the same code under different games are separate', async ()
   for (const c of [a0, a1, b0, b1]) c.ws.close();
 });
 
-test('R3: a second connection for a taken seat is refused with 409', async () => {
+test('R3: a second connection for a taken seat is accepted, then closed with 4409', async () => {
   const first = await connect('/room/game-a/TAKEN?seat=0');
   assert.equal(first.status, 101);
   const second = await connect('/room/game-a/TAKEN?seat=0');
-  assert.equal(second.status, 409);
-  first.ws.close();
+  assert.equal(second.status, 101); // the handshake completes so a browser can read the close code
+  const code = await new Promise((r) => second.ws.on('close', (c) => r(c)));
+  assert.equal(code, 4409);
+  // the first occupant is undisturbed
+  const got = collect(first.ws);
+  const other = await connect('/room/game-a/TAKEN?seat=1');
+  other.ws.send(JSON.stringify({ msg: 'still here' }));
+  assert.deepEqual(await got, [{ from: 1, msg: 'still here' }]);
+  first.ws.close(); other.ws.close();
 });
 
 test('R5: a disallowed or missing Origin is refused with 403', async () => {

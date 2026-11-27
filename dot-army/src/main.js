@@ -7,7 +7,9 @@ import { createAudio } from './audio.js';
 import { cellCenter, pixelToCell } from './hex.js';
 import { createLockstep } from './lockstep.js';
 import { broadcastTransport, PROTOCOL } from './net.js';
-import { relayTransport } from '../../multiplayer/relay.js';
+import { relayTransport, DEFAULT_RELAY, SEAT_TAKEN } from '../../multiplayer/relay.js';
+import { createLobby, roomCode, cleanCode } from '../../multiplayer/lobby.js';
+import { createNetPanel } from '../../multiplayer/netpanel.js';
 
 // The settings players see: five simple choices, each a preset. Everything
 // else (meters, regen, spawn interval, facing arc) stays at the sim defaults.
@@ -43,6 +45,9 @@ try {
   settings = sanitize(JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'));
 } catch { /* storage unavailable: use defaults */ }
 
+const query = new URLSearchParams(location.search);
+const debug = query.has('debug');
+
 const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById('game'));
 const renderer = createRenderer(canvas);
 const audio = createAudio();
@@ -69,6 +74,7 @@ const rotated = () => !net && screenPortrait() !== gamePortrait;
  * @type {null | {
  *   role: 'host'|'guest', local: number, room: string,
  *   transport: import('./net.js').Transport,
+ *   (status: 'lobby'|'playing'|'version'|'desync'|'left'|'full'|'unreachable'|'lost')
  *   ls: ReturnType<typeof createLockstep> | null,
  *   gameNo: number, waitingSince: number, status: string,
  * }}
@@ -153,6 +159,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (phase === 'over') {
     if (performance.now() - overAt < 900) return;
     if (!net) newGame();
+    else if (NET_ERRORS[net.status]) leaveToMenu();
     else if (net.role === 'host' && net.status === 'playing') hostStart(); // rematch
     return;
   }
@@ -276,6 +283,8 @@ function overlay() {
   if (net) {
     if (net.status === 'version') return { lines: ['UPDATE NEEDED'], sub: 'the two devices are running different versions · reload both' };
     if (net.status === 'desync') return { lines: ['OUT OF SYNC'], sub: `the two devices disagree at tick ${net.ls?.desyncAt} · please report this` };
+    const err = NET_ERRORS[net.status];
+    if (err) return { lines: err, sub: 'tap for the menu' };
     if (net.status === 'lobby') {
       return net.role === 'host'
         ? { lines: [net.room], sub: 'waiting for the other player to join…' }
@@ -414,6 +423,7 @@ $('btn-menu').addEventListener('click', () => {
   // In a network game the host's settings rule and rematches go through the host.
   $('pause-new').hidden = !!net;
   $('pause-settings').hidden = !!net;
+  $('pause-leave').hidden = !net;
   syncMute();
   pauseDialog.showModal();
 });
@@ -423,6 +433,7 @@ function resume() {
 }
 $('pause-resume').addEventListener('click', resume);
 pauseDialog.addEventListener('cancel', (e) => { e.preventDefault(); resume(); });
+$('pause-leave').addEventListener('click', () => leaveToMenu());
 $('pause-new').addEventListener('click', () => { pauseDialog.close(); newGame(); });
 $('pause-settings').addEventListener('click', () => detour(pauseDialog, openSettings));
 $('pause-rules').addEventListener('click', () => detour(pauseDialog, () => rulesDialog.showModal()));
@@ -432,24 +443,93 @@ muteBtn.addEventListener('click', () => { audio.setMuted(!audio.muted); syncMute
 // Network play: the host (blue) picks the board and settings and sends them
 // to the guest (red); after that only lockstep inputs and hashes flow.
 
+/** Statuses that end a network session, and what they say. */
+const NET_ERRORS = /** @type {Record<string, string[] | undefined>} */ ({
+  left: ['OPPONENT LEFT'],
+  full: ['ROOM FULL'],
+  unreachable: ["CAN'T REACH", 'THE SERVER'],
+  lost: ['CONNECTION LOST'],
+});
+
+// ?relay=bc: two tabs in one browser, no server. ?relay=wss://...: that relay. Neither: the default.
+const relayParam = query.get('relay');
+
+/** The link that brings the other player into this room as guest. */
+function linkFor(/** @type {string} */ code) {
+  const relay = relayParam ? `&relay=${encodeURIComponent(relayParam)}` : '';
+  return `${location.origin}${location.pathname}?room=${code}${relay}`;
+}
+
 /** @param {string} room @param {'host'|'guest'} role */
 function startNet(room, role) {
-  const relay = query.get('relay');
-  const transport = relay
-    ? relayTransport(relay, 'dot-army', room, role === 'host' ? 0 : 1)
-    : broadcastTransport(room, role);
-  net = { role, local: role === 'host' ? 0 : 1, room, transport, ls: null, gameNo: 0, waitingSince: 0, status: 'lobby' };
+  const seat = role === 'host' ? 0 : 1;
+  const transport = relayParam === 'bc'
+    ? broadcastTransport(room, role)
+    : relayTransport(relayParam || DEFAULT_RELAY, 'dot-army', room, seat, { ping: debug });
+  const session = { role, local: seat, room, transport, ls: null, gameNo: 0, waitingSince: 0, status: 'lobby' };
+  net = session;
   transport.onMessage(onNetMessage);
+  transport.onEvent(onNetEvent);
   newGame(false); // a board to look at while waiting; replaced when the game starts
   if (role === 'guest') {
     const hello = () => {
-      if (!net || net.status !== 'lobby') return;
-      net.transport.send({ k: 'hello', v: PROTOCOL });
+      if (net !== session || session.status !== 'lobby') return;
+      session.transport.send({ k: 'hello', v: PROTOCOL });
       setTimeout(hello, 500); // until the host answers
     };
     hello();
   }
 }
+
+/** @param {import('../../multiplayer/relay.js').RelayEvent} e */
+function onNetEvent(e) {
+  if (!net) return;
+  const s = net.status;
+  if (s === 'version' || s === 'desync' || NET_ERRORS[s]) return; // the first problem is the one shown
+  let status;
+  if (e.type === 'peer-left') {
+    // A guest leaving before the game starts just leaves the host waiting.
+    if (s === 'playing' || net.role === 'guest') status = 'left';
+  } else {
+    status = e.code === SEAT_TAKEN ? 'full' : !e.opened ? 'unreachable' : 'lost';
+  }
+  if (!status) return;
+  net.status = status;
+  phase = 'over';
+  overAt = performance.now();
+  lobby.close();
+}
+
+/** End any network session and go back to the start menu. */
+function leaveToMenu() {
+  if (net) net.transport.close();
+  net = null;
+  lobby.close();
+  if (pauseDialog.open) pauseDialog.close();
+  newGame(false);
+  if (!startDialog.open) startDialog.showModal();
+}
+
+const lobby = createLobby(/** @type {HTMLDialogElement} */ ($('lobby')), {
+  onJoin(code) {
+    lobby.close();
+    startNet(code, 'guest');
+  },
+  onBack: leaveToMenu,
+});
+
+$('start-online').addEventListener('click', () => {
+  audio.unlock();
+  startDialog.close();
+  const code = roomCode();
+  startNet(code, 'host');
+  lobby.openHosting(code, linkFor(code));
+});
+$('start-join').addEventListener('click', () => {
+  audio.unlock();
+  startDialog.close();
+  lobby.openJoin();
+});
 
 /** @param {any} msg */
 function onNetMessage(msg) {
@@ -474,6 +554,7 @@ function onNetMessage(msg) {
 /** Host: deal a fresh game (also used for rematches) and tell the guest. */
 function hostStart() {
   if (!net) return;
+  lobby.close();
   net.gameNo++;
   newGame(true); // the host's settings and screen pick the board
   const p = game.params;
@@ -492,18 +573,21 @@ function attachLockstep() {
   net.status = 'playing';
 }
 
-// ?room=ABCD&host joins a network game directly: through the room relay at
-// ?relay=wss://..., or between tabs in one browser without it.
-const query = new URLSearchParams(location.search);
+// ?room=ABCD joins a game as guest straight away (that's what shared links
+// are); &host makes this device the host instead.
 const room = query.get('room');
 if (room) {
-  startNet(room.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8), query.has('host') ? 'host' : 'guest');
+  startNet(cleanCode(room), query.has('host') ? 'host' : 'guest');
 } else {
   newGame(false);
   startDialog.showModal();
 }
-// ?debug exposes a state fingerprint (and both targets) for automated tests.
-if (query.has('debug')) {
-  /** @type {any} */ (window).dotArmyDebug = () => ({ tick: game.tick, hash: stateHash(game), status: net?.status, desync: net?.ls?.desyncAt ?? -1, winner: game.winner, targets: [...game.targets] });
+// ?debug shows the network panel and exposes a state fingerprint for automated tests.
+if (debug) {
+  createNetPanel(() => net?.transport.stats() ?? null);
+  /** @type {any} */ (window).dotArmyDebug = () => ({
+    tick: game.tick, hash: stateHash(game), status: net?.status, desync: net?.ls?.desyncAt ?? -1,
+    winner: game.winner, targets: [...game.targets], net: net?.transport.stats() ?? null,
+  });
 }
 requestAnimationFrame(frame);

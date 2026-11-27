@@ -647,3 +647,16 @@ test('R14: recording rolls changes nothing: a seeded CPU game ends in the same s
   }
   assert.equal(stateHash(g), 4010343239); // recorded before the change
 });
+
+test('the preview\'s cancelling dodge follows the combat setting: under the tables a shot needs +1 to hurt', () => {
+  // Compact (Aim 2) at a Compact in the open 4 cells away: original defence 1 + 1 = 2.
+  const dice = board([{ side: 0, cell: C(6, 12) }, { side: 1, cell: C(6, 8) }], {}, { combat: 'dice', defence: 'original' });
+  const [a, b] = dice.troopers;
+  assert.equal(preview(dice, a, b, 1).cancel, 0);   // 2 against 2: already no loss
+  assert.equal(preview(dice, a, b, 3).cancel, 2);   // 6 against 2: dodge 2 makes it 6 against 6
+  assert.equal(preview(dice, a, b, 2).cancel, 1);   // 4 against 2: dodge 1 is enough
+  // the formula needs attack below defence
+  const formula = board([{ side: 0, cell: C(6, 12) }, { side: 1, cell: C(6, 8) }], {}, { defence: 'original' });
+  assert.equal(preview(formula, formula.troopers[0], formula.troopers[1], 1).cancel, 1);
+  assert.equal(preview(formula, formula.troopers[0], formula.troopers[1], 2).cancel, 2);
+});

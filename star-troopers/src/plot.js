@@ -5,7 +5,7 @@
 // See RULES.md, Controls.
 
 import {
-  living, spendable, pathCost, enterCost, los, occupants, canShare, idle, defenceOf, meanFireShock,
+  living, spendable, pathCost, enterCost, los, occupants, canShare, idle, defenceOf, meanFireShock, cancelDodge,
   dodgeValue, blastCells, meanBlastShock, landChance, coverValue, BLAST, ROCK, OPEN, COVER, COVER_ORIGINAL,
 } from './sim.js';
 import { hexDist } from './hex.js';
@@ -212,8 +212,7 @@ export function shotPreview(game, u, targetId, points) {
   let shock = 0;
   for (const v of victims) shock += shots * meanFireShock(game.params, attack, defenceOf(game, v, shooter.cell, null));
   const defence = defenceOf(game, target, shooter.cell, null);
-  const cancel = attack < defence ? 0 : Math.floor((attack - defence) / target.aim) + 1;
-  return { attack, defence, shock, cancel, victims: victims.map((v) => v.id) };
+  return { attack, defence, shock, cancel: cancelDodge(game.params, attack, defence, target.aim), victims: victims.map((v) => v.id) };
 }
 
 /** Where each of a side's troopers will end the stage, by its draft (or where it stands). */

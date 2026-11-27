@@ -47,10 +47,13 @@ taps and drags (same server, no relay).
 ## Rules for star-troopers code
 
 - The same determinism rule: `src/sim.js` (and `hex.js`, `rng.js`) use
-  integers and the seeded RNG only. `src/ai.js` only produces orders.
+  integers and the seeded RNG only: no `Math.random`, no `Date`, no floats
+  that affect state. `src/ai.js` only produces orders.
 - The interface never changes the game except through `resolveTurn`.
   Drafting orders is `src/plot.js` and playback is `src/playback.js`: pure,
-  `// @ts-check`, no DOM, tested. `render.js` and `main.js` are presentation.
+  `// @ts-check`, no DOM, tested (`test/plot.test.js`, `playback.test.js`,
+  `settings.test.js`). `render.js`, `geom.js` (pixel geometry), `main.js`,
+  `index.html` and `style.css` are presentation.
 - `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `plot.js`,
   `playback.js`, `settings.js`.
 - A rule change means updating `sim.js`, a test, `RULES.md`, and the How

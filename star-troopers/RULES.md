@@ -80,7 +80,8 @@ mirror matches.
   seen and isn't dodging is in trouble.
 
 **Value** is pool + Aim + Recovery, and it's how forces are measured
-against each other. A standard squad is **4 troopers**.
+against each other. The tuning tools' default squad is **4 troopers**; the
+browser game's forces are under Settings.
 
 ## Orders
 
@@ -116,6 +117,13 @@ to last an entire Game-turn."
 
 ## Shooting
 
+This is the draft formula, the tuning tools' default. The browser game
+plays the 1977 rules instead (`combat=dice`, `defence=original`): the
+defence is the original's terrain value, +1 per 10 cells of range, +1 per
+point plotted to be spent moving, plus dodge, and a shot that beats it by
++1 or more rolls two dice on the original's results table (see Parameters
+and Notes).
+
 ```
 attack  = fire points × Aim
 defence = cover            (of the cell the target is in when shot)
@@ -150,7 +158,7 @@ dodging (+4), it would have taken `floor(6 / 3) = 2`.
   be seen over them.
 - Troopers never block line of sight. **(open)**
 
-### Command (setting, off by default)
+### Command (parameter, off by default; on in the browser game)
 
 After the original's Command Communication (rule 16.0). With it on:
 
@@ -265,7 +273,7 @@ A game-turn is two stages, and each stage runs the whole sequence below.
      that step and ended it in its line of sight, within 6 cells.
      Enemies standing still don't set it off. All overwatch in a
      step resolves together, at `overwatch points × Aim`, against the
-     usual defence. Each trooper's overwatch fires once per turn.
+     usual defence. Each trooper's overwatch fires once per stage.
    - **Pinned:** a trooper that takes shock from overwatch stops where
      it is.
    - A trooper that goes down stops and is removed at the end of the
@@ -340,25 +348,26 @@ Portrait first, built for a phone. You play the bottom squad, in blue.
 - **Shooting:** tap an enemy the trooper can see. A popover sets the
   points and shows the preview (see Preview).
 - **Everything else:** tap the selected trooper again for a popover with
-  dodge, overwatch, **Bomb…** (then tap the cell to aim at; it shows the
-  blast, the chance it lands, and a warning if one of yours will be in it),
-  and quick orders:
+  dodge, overwatch, **Bomb…** (then tap the cell to aim at; it puts in the
+  fewest points that land the bomb if nobody dodges near it and the rest
+  into dodge, and shows the blast, the chance it lands, and a warning if
+  one of yours will be in it), and quick orders:
   - **⟳ Last:** last stage's shot (if the target is still in sight),
-    dodge and overwatch, without the move.
+    dodge and overwatch, without the move. Points that went into a bomb,
+    or a shot at a target that's gone, go into dodge.
   - **Hold + watch:** stay put, a third of the points into dodge, the rest
     into overwatch.
   - **To cover:** the cover in reach nearest a victory hex you don't hold,
     the rest into dodge.
   - **Fall back:** somewhere in reach no enemy can see, the rest into
     dodge, so it can recover.
-
 - **Swarms** (with the setting on) are one counter with one plot, which
   every member carries out.
-- **Committing:** the bar shows the selected trooper's points as pips,
-  coloured by task, and what's left for stage 2. **Repeat all** gives
-  every trooper with no orders its last orders. **Commit** with troopers
-  still unplotted asks whether to repeat their last orders or leave them
-  idle.
+- **Committing:** the bar shows the selected trooper's points for this
+  stage as pips, coloured by task, and in the first stage how many it will
+  have in the second if it isn't hit. **Repeat all** gives every trooper
+  with no orders its ⟳ Last orders. **Commit** with troopers still
+  unplotted asks whether to do the same or leave them idle.
 - **Watching:** the stage plays back in order: fire (troopers in command
   first, as their own wave), bombs launching, movement step by step with
   overwatch shots as they happen, then bombs going off, recovery and
@@ -395,7 +404,7 @@ candidates under those rules (see Notes) and live in one table in
 
 | Name | Default | Meaning |
 |---|---|---|
-| `squad` | 4 | Troopers in a standard squad |
+| `squad` | 4 | Troopers in a squad (tuning default) |
 | `rangeStep` | 2 | Cells per +1 defence from range |
 | `motionStep` | 2 | Plotted cells moved per +1 defence |
 | `damageDivisor` | 3 | Shock = margin ÷ this, rounded down |
@@ -616,12 +625,13 @@ None of this is in the first version, but it's the plan.
     altitude, free-flight missiles, homing missiles, search and so on).
     The one launched weapon is the guided bomb, and its scatter and
     damage tables are stand-ins.
-  - Damage is a third of the margin by which attack beats defence,
-    with optional ±1 noise, instead of dice and a results table.
+  - By default, damage is a third of the margin by which attack beats
+    defence, with optional ±1 noise, instead of dice and a results
+    table. The browser game uses the original's tables.
   - Two stages per game-turn with 6 points per stage, as in the
-    original's Standard Game, but no Command Communication (in the
-    original, troopers in contact with a leader fire first in each
-    stage).
+    original's Standard Game. Command Communication (troopers in contact
+    with a leader fire first in each stage) is off by default, and on in
+    the browser game.
   - Shots happen before anyone moves, from where everyone starts.
     Overwatch is the only fire during movement, and a hit pins.
   - No heavy-weapons troopers, androids or support platforms.

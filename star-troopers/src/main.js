@@ -432,9 +432,15 @@ function pips(/** @type {Unit} */ u) {
   while (cells.length < b) cells.push('');
   const t = game.troopers[u.lead];
   const free = plot.free(game, u, d);
+  // Stage 2 gets what's left of the pool, up to the stage cap (less any shock taken meanwhile).
+  const spend = plot.used(game, u, d);
+  const next = Math.min(...u.ids.map((id) => {
+    const m = game.troopers[id];
+    return Math.max(0, Math.min(m.pool - m.shock - m.spent - spend, game.params.stageCap));
+  }));
   const after = game.params.stages === 2 && game.stage === 1
-    ? (free > 0 ? `${free} saved for stage 2` : '')
-    : (free > 0 ? `${free} unspent` : '');
+    ? `stage 2: up to ${next}`
+    : (free > 0 ? `${free} unspent (wasted)` : '');
   return `<span class="pips">${cells.map((c) => `<span class="pip ${c}"></span>`).join('')}</span>
     <span>${t.shock ? `shock ${t.shock}/${t.pool}` : ''} ${after}</span>`;
 }

@@ -587,8 +587,18 @@ export function preview(game, shooter, target, points) {
   const attack = points * shooter.aim;
   const still = defenceOf(game, target, shooter.cell, null);
   const shock = meanFireShock(game.params, attack, still);
-  const cancel = attack < still ? 0 : Math.floor((attack - still) / target.aim) + 1;
-  return { attack, defence: still, shock, cancel };
+  return { attack, defence: still, shock, cancel: cancelDodge(game.params, attack, still, target.aim) };
+}
+
+/**
+ * Dodge points (at the target's Aim) that would leave a shot unable to
+ * hurt: attack below defence for the formula, a differential under +1 on
+ * the tables.
+ * @param {Params} p @param {number} attack @param {number} defence @param {number} aim
+ */
+export function cancelDodge(p, attack, defence, aim) {
+  if (p.combat === 'dice' || p.combat === 'mean') return attack <= defence ? 0 : Math.ceil((attack - defence) / aim);
+  return attack < defence ? 0 : Math.floor((attack - defence) / aim) + 1;
 }
 
 /**
@@ -898,7 +908,7 @@ export function resolveTurn(game, orders) {
       ev.steps.push(moves);
 
       // Overwatch: shoot the nearest enemy that moved this step, in sight
-      // and in range. Each trooper's overwatch fires once per turn.
+      // and in range. Each trooper's overwatch fires once per stage.
       const pending = game.troopers.map(() => 0);
       for (const w of living(game)) {
         if (ord[w.id].overwatch <= 0 || watched[w.id]) continue;

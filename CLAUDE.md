@@ -9,13 +9,19 @@ touching its game logic, and Dot Army's `NETWORK.md` for online play.
 
 ```
 python3 -m http.server 8000      # then http://localhost:8000/dot-army/
-npm install                       # once: the relay's one dependency (ws)
+npm install                       # once per fresh checkout: the relay's one dependency (ws)
 npm test                          # node:test
 npm run typecheck                 # tsc --checkJs on files marked // @ts-check
 node dot-army/tools/headless.js 20 [key=value ...]   # CPU-vs-CPU balance runs
 node wooden-ships/tools/headless.js 40 [key=value ...]
 node coreward-bound/tools/headless.js 40 [key=value ...]
 ```
+
+`npm test` needs `ws` installed: without `npm install` first,
+`multiplayer/test/relay.test.js` and `server.test.js` fail with
+`Cannot find package 'ws'`. That's a missing install, not a broken test.
+Cloud sessions start from a fresh clone, so run `npm install` before the
+first `npm test`.
 
 Browser checks use the preinstalled Playwright (`require('playwright')`).
 Browser checks need the static server on port 8765:

@@ -2,7 +2,7 @@
 
 import {
   createGame, act, preview, buildOptions, researchCost, stackAt, enemyAt, besieged, band, level, safeRange,
-  TERRAIN_NAMES, TECH_NAMES, TECH_TYPES, TECH_EFFECTS, techType, isNucleus, DRAW, VOID,
+  TERRAIN_NAMES, TECH_NAMES, TECH_TYPES, TECH_EFFECTS, techType, isCore, DRAW, VOID,
 } from './sim.js';
 import { createAI } from './ai.js';
 import { createRenderer } from './render.js';
@@ -51,7 +51,16 @@ const view = {
   /** @type {import('./sim.js').Preview|null} */ preview: null,
   busy: false,
   send: 0,
+  /** Cells you've looked at this turn (they count as handled for Next). @type {Set<number>} */ visited: new Set(),
 };
+
+// Icons for the HUD, drawn once; colour comes from the text colour, size from CSS.
+const ICONS = {
+  coin: '<svg class="ico coin" viewBox="0 0 16 16" aria-label="RP" role="img"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+  flask: '<svg class="ico flask" viewBox="0 0 16 16" aria-label="Techs" role="img"><path d="M6 2h4M6.5 2v4.5L2.8 13a1 1 0 0 0 .9 1.5h8.6a1 1 0 0 0 .9-1.5L9.5 6.5V2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M4.6 10.5h6.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+};
+
+for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = ICONS[/** @type {'coin'|'flask'} */ (/** @type {HTMLElement} */ (el).dataset.icon)];
 
 // ------------------------------------------------------------------ game flow
 
@@ -64,6 +73,7 @@ function newGame(quiet = false) {
   cpuRunning = false;
   renderer.setGame(game);
   renderer.startAt(game.civs[YOU].home);
+  view.visited.clear();
   deselect();
   refresh();
   if (!quiet) toast('Your home is the blue ring. The relics wait at the core.', 'you');
@@ -129,15 +139,17 @@ async function cpuTurn() {
   }
   if (id !== gameId) return;
   cpuRunning = false;
+  view.visited.clear();
   refresh();
   if (game.winner >= 0) gameOver();
+  else if (game.current === YOU) renderer.fit([...mine().settlements, ...mine().stacks]);
 }
 
 function gameOver() {
   const w = game.winner;
   const by = game.winBy;
   $('over-title').textContent = w === YOU ? 'You win' : w === DRAW ? 'A draw' : 'The CPU wins';
-  const text = by === 'relics' ? (w === YOU ? 'Three relics brought home.' : 'The CPU brought three relics home.')
+  const text = by === 'relics' ? (w === YOU ? 'Three relics delivered.' : 'The CPU delivered three relics.')
     : by === 'elimination' ? (w === YOU ? 'The CPU has no settlements left.' : 'You have no settlements left.')
     : `Time ran out. Score: you ${scoreText(YOU)}, CPU ${scoreText(CPU)}.`;
   $('over-text').textContent = `${text} ${game.turn >> 1} rounds.`;
@@ -179,17 +191,34 @@ function select(cell, keep = false) {
       if (!('error' in pv)) view.preview = pv;
     }
   }
+  view.visited.add(cell);
   renderPanel();
+  updateBar();
   renderer.markDirty();
-  keepInView(cell);
+  if (!keep) renderer.reveal([cell, ...view.reach], panel.hidden ? innerHeight : panel.getBoundingClientRect().top - 12);
 }
 
-/** Scroll the map so a hex isn't hidden behind the panel. @param {number} cell */
-function keepInView(cell) {
-  if (panel.hidden) return;
-  const top = panel.getBoundingClientRect().top;
-  renderer.keepAbove(cell, top - 20);
+/** Your settlements and stacks, as cells. */
+function mine() {
+  return {
+    settlements: Array.from(game.owner, (o, c) => (o === YOU ? c : -1)).filter((c) => c >= 0),
+    stacks: game.stacks.filter((s) => s.owner === YOU).map((s) => s.cell),
+  };
 }
+
+/** Cells where you still have something to do, in cell order. */
+function openCells() {
+  const open = new Set();
+  for (const s of game.stacks) {
+    if (s.owner === YOU && (s.ready > 0 || !buildOptions(game, s.cell).found)) open.add(s.cell);
+  }
+  for (const c of mine().settlements) {
+    const o = buildOptions(game, c);
+    if (!o.build || !o.grow || o.research.some((x) => !x)) open.add(c);
+  }
+  return [...open].sort((a, b) => a - b);
+}
+const todo = () => openCells().filter((c) => !view.visited.has(c));
 
 /** @param {number} cell */
 function tap(cell) {
@@ -198,7 +227,12 @@ function tap(cell) {
   const from = view.selected;
   const s = from >= 0 ? stackAt(game, YOU, from) : null;
   if (s && s.ready > 0 && cell !== from) {
-    if (view.preview && view.preview.to === cell) { doJump(); return; }
+    if (view.preview && view.preview.to === cell) { // tapping the aimed hex cancels; only Jump jumps
+      view.preview = null;
+      renderPanel();
+      renderer.markDirty();
+      return;
+    }
     const pv = preview(game, from, cell, view.send);
     if (!('error' in pv)) {
       view.preview = pv;
@@ -232,13 +266,10 @@ function doJump() {
   if (landed >= 0) renderer.centerOn(landed, { ifOffscreen: true });
 }
 
-function nextStack() {
-  const mine = game.stacks.filter((s) => s.owner === YOU && s.ready > 0);
-  if (!mine.length) { toast('Every stack has moved. End your turn when ready.'); return; }
-  const k = mine.findIndex((s) => s.cell === view.selected);
-  const s = mine[(k + 1) % mine.length];
-  select(s.cell);
-  renderer.centerOn(s.cell, { ifOffscreen: true });
+function nextOpen() {
+  const left = todo();
+  if (!left.length) return;
+  select(left.find((c) => c > view.selected) ?? left[0]);
 }
 
 // ------------------------------------------------------------------ panel
@@ -255,7 +286,7 @@ function renderPanel() {
   const t = g.terrain[cell];
   const known = g.civs[YOU].known[cell];
   const parts = [];
-  const worth = isNucleus(g, cell) ? '' : known ? ` · worth ${g.potential[cell]}` : ' · worth ?';
+  const worth = isCore(g, cell) ? '' : known ? ` · worth ${g.potential[cell]}` : ' · worth ?';
   const extras = [g.beacon[cell] ? 'beacon' : '', g.dust[cell] ? 'dust lane' : '', g.relicAt[cell] ? `relic${g.relicAt[cell] > 1 ? `s ×${g.relicAt[cell]}` : ''}` : ''].filter(Boolean).join(' · ');
   parts.push(`<h3>${TERRAIN_NAMES[t]}<span class="sub">${worth}${extras ? ` · ${extras}` : ''}</span><button class="close" data-act="close" aria-label="Close">×</button></h3>`);
   const yourTurn = g.current === YOU && !cpuRunning && g.winner < 0;
@@ -266,11 +297,12 @@ function renderPanel() {
     const who = o === YOU ? (g.civs[YOU].home === cell ? 'Your home' : 'Your settlement') : (g.civs[CPU].home === cell ? 'CPU home' : 'CPU settlement');
     const potential = o === YOU || known ? ` of ${g.potential[cell]}` : '';
     parts.push(`<p><b>${who}</b>, value ${g.value[cell]}${potential}${besieged(g, cell) ? ' · <b>besieged</b>: makes nothing' : ''}.</p>`);
-  } else if (t === VOID && known && g.potential[cell] === 0) {
-    parts.push('<p>Empty space. A settlement here makes nothing, but it can anchor jumps.</p>');
-  } else if (isNucleus(g, cell)) {
-    parts.push(`<p>${t === 4 ? 'Hold this hex through the CPU\'s turn to pick up its relic.' : 'The nucleus. Nothing can be settled here, and a jump in or out that misses is fatal.'}</p>`);
+  } else if (t === VOID && known) {
+    parts.push('<p>Empty space. Nothing can be settled here, but stacks can jump to it.</p>');
+  } else if (isCore(g, cell)) {
+    parts.push('<p>The core. Nothing can be settled here; a jump in or out that misses is fatal, and every fleet that ends a turn here risks the glare (1 in 6).</p>');
   }
+  if (g.relicAt[cell]) parts.push('<p>A relic lies here. Hold the hex through the CPU\'s turn to pick it up.</p>');
 
   const foe = enemyAt(g, YOU, cell);
   if (foe) parts.push(`<p><b style="color:var(--cpu)">CPU stack</b>: ${band(foe.fleets)} fleets${foe.relics ? ', carrying a relic' : ''}.</p>`);
@@ -300,7 +332,7 @@ function renderPanel() {
         const target = enemyAt(g, YOU, pv.to) ? ' · <b>attack!</b>' : g.owner[pv.to] === CPU ? ' · try to take it' : '';
         parts.push(`<hr><div class="row"><span class="odds ${cls}">${pct}%</span><span class="why">on target · ${pv.dist} hex${pv.dist > 1 ? 'es' : ''} · roll ${pv.need}+${pv.bonus ? ` with ${pv.bonus > 0 ? '+' : ''}${pv.bonus}` : ''}${target}</span></div>`);
         if (notes.length) parts.push(`<p>${notes.join('; ')}.</p>`);
-        parts.push(`<div class="row"><button class="act go" data-act="jump">Jump ${pv.n} fleet${pv.n > 1 ? 's' : ''}</button><button class="act" data-act="unaim">Cancel</button><span class="why">or tap the hex again</span></div>`);
+        parts.push(`<div class="row"><button class="act go" data-act="jump">Jump ${pv.n} fleet${pv.n > 1 ? 's' : ''}</button><button class="act" data-act="unaim">Cancel</button><span class="why">or tap the hex again to cancel</span></div>`);
       } else {
         parts.push('<p class="why">Tap a highlighted hex to aim. Blue: safe range. Gold: over range.</p>');
       }
@@ -316,7 +348,9 @@ function renderPanel() {
     if (o < 0 && s) lines.push(btn('found', `Settle (${g.params.foundCost} fleets)`, opts.found) + (opts.found ? `<span class="why">${opts.found}</span>` : ''));
     if (o === YOU) {
       lines.push(btn('build', `Build fleet (${g.params.fleetCost} RP)`, opts.build) + btn('grow', 'Grow +1 (1 fleet)', opts.grow));
-      const why = [opts.build, opts.grow].filter((x) => x && !/^Not your/.test(x));
+      const fresh = g.founded[cell] === g.turn;
+      if (fresh) lines.push('<span class="why">Ready next turn: until then it can\'t build or grow, launch long jumps, let stacks chain on, or take delivery of a relic.</span>');
+      const why = [opts.build, opts.grow].filter((x) => x && !/^Not your/.test(x) && !(fresh && /^Founded this turn/.test(x)));
       if (why.length) lines.push(`<span class="why">${[...new Set(why)].join(' ')}</span>`);
     }
     if (lines.length) parts.push(`<hr>${lines.map((l) => `<div class="row">${l}</div>`).join('')}`);
@@ -355,21 +389,42 @@ panel.addEventListener('click', (e) => {
 
 function refresh() {
   if (!game) return;
-  const you = game.civs[YOU], cpu = game.civs[CPU];
-  const lv = (/** @type {number} */ c) => [0, 1, 2, 3].map((t) => level(game, c, t));
-  const techLine = (/** @type {number} */ c) => {
-    const l = lv(c);
-    return l.some((x) => x) ? ` · ${TECH_TYPES.map((k, i) => (l[i] ? `<span title="${k} ${l[i]}">${['R', 'F', 'I', '⚔'][i]}${l[i]}</span>` : '')).filter(Boolean).join(' ')}` : '';
+  const side = (/** @type {number} */ c) => {
+    const civ = game.civs[c];
+    return `${ICONS.coin} ${civ.rp} · ${ICONS.flask} ${civ.techs.length} · <b>◆ ${civ.relics}/3</b>`;
   };
-  $('hud-you').innerHTML = `${you.rp} RP · <b>◆ ${you.relics}/3</b>${techLine(YOU)}`;
-  $('hud-cpu').innerHTML = `CPU · <b>◆ ${cpu.relics}/3</b>${techLine(CPU)}`;
+  $('hud-you').innerHTML = side(YOU);
+  $('hud-cpu').innerHTML = side(CPU);
   $('hud-turn').textContent = game.winner >= 0 ? 'Game over' : cpuRunning || game.current === CPU ? 'CPU moving…' : `Round ${(game.turn >> 1) + 1}`;
   const endBtn = /** @type {HTMLButtonElement} */ ($('btn-end'));
   endBtn.disabled = cpuRunning || game.current !== YOU || game.winner >= 0;
-  const anyReady = game.stacks.some((s) => s.owner === YOU && s.ready > 0);
-  endBtn.classList.toggle('pulse', !endBtn.disabled && !anyReady);
-  /** @type {HTMLButtonElement} */ ($('btn-next')).disabled = endBtn.disabled || !anyReady;
   renderPanel();
+  updateBar();
+}
+
+/** Next greys out and End turn pulses once everything open has been handled or visited. */
+function updateBar() {
+  const endBtn = /** @type {HTMLButtonElement} */ ($('btn-end'));
+  const none = endBtn.disabled || todo().length === 0;
+  endBtn.classList.toggle('pulse', !endBtn.disabled && none);
+  /** @type {HTMLButtonElement} */ ($('btn-next')).disabled = none;
+}
+
+function openCompare() {
+  const [a, b] = [YOU, CPU].map((c) => game.civs[c]);
+  const row = (/** @type {string} */ name, /** @type {string} */ x, /** @type {string} */ y) => `<tr><th scope="row">${name}</th><td>${x}</td><td>${y}</td></tr>`;
+  const techs = (/** @type {import('./sim.js').Civ} */ c) => (c.techs.length ? c.techs.map((t) => TECH_NAMES[t]).join(', ') : 'none');
+  const lvl = (/** @type {number} */ c, /** @type {number} */ t) => {
+    const n = level(game, c, t);
+    return n ? `${n}: ${TECH_EFFECTS[t]}${n > 1 ? `, ×${n}` : ''}` : '0';
+  };
+  $('compare-body').innerHTML = `<table><thead><tr><th></th><th class="you">You</th><th class="cpu">CPU</th></tr></thead><tbody>`
+    + row('Banked RP', `${a.rp}`, `${b.rp}`)
+    + row('Techs researched', `${a.techs.length}: ${techs(a)}`, `${b.techs.length}: ${techs(b)}`)
+    + TECH_TYPES.map((k, t) => row(k, lvl(YOU, t), lvl(CPU, t))).join('')
+    + row('Relics', `${a.relics}/3`, `${b.relics}/3`)
+    + `</tbody></table><p class="hint">Levels count techs and delivered relics (each relic is +1 to all four).</p>`;
+  dlg('compare').showModal();
 }
 
 /** @param {string} text @param {string} [kind] */
@@ -388,7 +443,7 @@ function narrate(e) {
   const mine = 'civ' in e && e.civ === YOU;
   switch (e.type) {
     case 'jump':
-      if (e.lost) toast(mine ? `Lost in space: ${e.n} fleet${e.n > 1 ? 's' : ''}${e.relics ? ' and the relic, which returns to the core' : ''}.` : 'A CPU stack was lost in space.', mine ? 'bad' : 'cpu');
+      if (e.lost) toast(mine ? `Lost in space: ${e.n} fleet${e.n > 1 ? 's' : ''}${e.relics ? ' and the relic, which goes back to a hex at the centre' : ''}.` : 'A CPU stack was lost in space.', mine ? 'bad' : 'cpu');
       else if (e.scatter && mine) toast(`Missed: scattered ${e.scatter} hex${e.scatter > 1 ? 'es' : ''}${e.losses ? `, lost ${e.losses}` : ''}.`, 'bad');
       break;
     case 'combat': {
@@ -399,14 +454,17 @@ function narrate(e) {
       break;
     }
     case 'flip':
-      if (e.ok) toast(mine ? `Settlement taken!${e.tech >= 0 ? ` You learned ${TECH_NAMES[e.tech]}.` : ''}` : `The CPU took one of your settlements.${e.tech >= 0 ? ` It learned ${TECH_NAMES[e.tech]}.` : ''}`, mine ? 'you' : 'cpu');
+      if (e.ok) toast(mine ? `Settlement taken!${e.tech >= 0 ? ` You learned ${TECH_NAMES[e.tech]}.` : ''}` : `The CPU took one of your settlements.${e.tech >= 0 ? ` It copied ${TECH_NAMES[e.tech]} (${TECH_TYPES[techType(e.tech)]}).` : ''}`, mine ? 'you' : 'cpu');
       else if (mine) toast(`Couldn't take it (rolled ${e.roll}, needed ${e.need}). Stay to try again next turn.`);
       break;
     case 'pickup': toast(mine ? 'Relic picked up! Get it to one of your settlements.' : 'The CPU picked up a relic!', 'gold'); break;
     case 'deliver': toast(mine ? `Relic delivered: ${e.total}/3. +1 to everything.` : `The CPU delivered a relic: ${e.total}/3.`, 'gold'); break;
     case 'drop': toast('A relic was dropped.', 'gold'); break;
     case 'respawn': toast('A new relic glows at the core.', 'gold'); break;
-    case 'research': if (mine) toast(`Learned ${TECH_NAMES[e.tech]}: ${TECH_EFFECTS[techType(e.tech)]}.`, 'you'); break;
+    case 'research':
+      toast(mine ? `Learned ${TECH_NAMES[e.tech]}: ${TECH_EFFECTS[techType(e.tech)]}.` : `The CPU learned ${TECH_NAMES[e.tech]} (${TECH_TYPES[techType(e.tech)]}).`, mine ? 'you' : 'cpu');
+      break;
+    case 'hazard': toast(`The core's glare destroyed ${e.lost} ${mine ? '' : 'CPU '}fleet${e.lost > 1 ? 's' : ''}.`, mine ? 'bad' : 'cpu'); break;
     case 'income':
       if (e.civ === YOU && (e.upkeep || e.starved)) toast(`Income ${e.rp} RP, upkeep ${e.upkeep}${e.starved ? `: ${e.starved} unpaid fleet${e.starved > 1 ? 's' : ''} lost` : ''}.`, e.starved ? 'bad' : '');
       break;
@@ -462,11 +520,12 @@ window.addEventListener('keydown', (e) => {
   if (document.querySelector('dialog[open]')) return;
   if (e.key === 'Escape') deselect();
   else if (e.key === 'Enter' && view.preview) doJump();
-  else if (e.key === 'n') nextStack();
+  else if (e.key === 'n') nextOpen();
 });
 
 $('btn-end').addEventListener('click', playerEnd);
-$('btn-next').addEventListener('click', nextStack);
+$('btn-next').addEventListener('click', nextOpen);
+for (const id of ['civ-you', 'civ-cpu']) $(id).addEventListener('click', () => { if (game) openCompare(); });
 $('btn-home').addEventListener('click', () => {
   if (!game) return;
   renderer.centerOn(game.civs[YOU].home);
@@ -494,12 +553,24 @@ dlg('settings').addEventListener('close', () => {
 
 $('start-new').addEventListener('click', () => { dlg('start').close(); newGame(); });
 $('start-settings').addEventListener('click', openSettings);
-$('start-rules').addEventListener('click', () => dlg('rules').showModal());
+const pages = [...document.querySelectorAll('#rules .page')];
+let page = 0;
+function showPage(/** @type {number} */ n) {
+  page = Math.max(0, Math.min(pages.length - 1, n));
+  pages.forEach((el, i) => { /** @type {HTMLElement} */ (el).hidden = i !== page; });
+  $('page-num').textContent = `${page + 1} / ${pages.length}`;
+  /** @type {HTMLButtonElement} */ ($('page-prev')).disabled = page === 0;
+  /** @type {HTMLButtonElement} */ ($('page-next')).disabled = page === pages.length - 1;
+}
+$('page-prev').addEventListener('click', () => showPage(page - 1));
+$('page-next').addEventListener('click', () => showPage(page + 1));
+const openRules = () => { showPage(0); dlg('rules').showModal(); };
+$('start-rules').addEventListener('click', openRules);
 $('btn-menu').addEventListener('click', () => dlg('pause').showModal());
 $('pause-resume').addEventListener('click', () => dlg('pause').close());
 $('pause-new').addEventListener('click', () => { dlg('pause').close(); newGame(); });
 $('pause-settings').addEventListener('click', openSettings);
-$('pause-rules').addEventListener('click', () => dlg('rules').showModal());
+$('pause-rules').addEventListener('click', openRules);
 $('over-new').addEventListener('click', () => { dlg('over').close(); newGame(); });
 $('over-look').addEventListener('click', () => { dlg('over').close(); renderer.overview(); });
 dlg('start').addEventListener('cancel', (e) => e.preventDefault());

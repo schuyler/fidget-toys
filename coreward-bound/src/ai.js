@@ -7,8 +7,8 @@
 
 import { createRng } from './rng.js';
 import {
-  preview, stackAt, enemyAt, besieged, bandGuess, buildOptions, researchCost, safeRange, level, isNucleus,
-  techType, VOID, EDGE, ARM, REACH, FOCUS, INDUSTRY, FORCE,
+  preview, stackAt, enemyAt, besieged, bandGuess, buildOptions, researchCost, safeRange, level, isCore, working,
+  techType, PERIPHERY, ARM, REACH, FOCUS, INDUSTRY, FORCE,
 } from './sim.js';
 import { hexDist, ring, within } from './hex.js';
 
@@ -79,17 +79,17 @@ export function createAI(civ, seed, opts = {}) {
   function worth(game, cell) {
     if (game.civs[civ].known[cell]) return game.potential[cell];
     const t = game.terrain[cell];
-    return t === ARM ? 4 : t === EDGE ? 2 : t === VOID ? 0.5 : 0;
+    return t === ARM ? 4 : t === PERIPHERY ? 2 : 0; // the void is worth nothing: nothing can be settled there
   }
 
-  /** Is a hex worth a look? Arms are; the void mostly isn't. @param {Game} game @param {number} cell */
+  /** Is a hex worth a look? Arms are; the void isn't. @param {Game} game @param {number} cell */
   function exploreValue(game, cell) {
     if (game.civs[civ].known[cell]) return 0;
     const t = game.terrain[cell];
-    return t === ARM ? 3 : t === EDGE ? 1.5 : 0;
+    return t === ARM ? 3 : t === PERIPHERY ? 1.5 : 0;
   }
 
-  /** How close to the nucleus this civ's network reaches. @param {Game} game */
+  /** How close to the centre this civ's network reaches. @param {Game} game */
   function frontier(game) {
     let best = 99;
     for (let i = 0; i < game.grid.N; i++) if (game.owner[i] === civ) best = Math.min(best, ring(game.grid, i));
@@ -120,8 +120,9 @@ export function createAI(civ, seed, opts = {}) {
     let v = 0;
     const foe = enemyAt(game, civ, cell);
     const enemyTown = game.owner[cell] >= 0 && game.owner[cell] !== civ;
+    if (isCore(game, cell)) v -= n; // the glare: about n/6 fleets lost, at roughly 6 a fleet
     if (relics > 0) {
-      if (game.owner[cell] === civ && !foe) return 200 * relics + (game.civs[civ].relics + relics >= game.params.relicsToWin ? 1000 : 0);
+      if (working(game, civ, cell) && !foe) return 200 * relics + (game.civs[civ].relics + relics >= game.params.relicsToWin ? 1000 : 0);
       v -= 5; // anywhere else is just a waypoint
     }
     if (foe) {
@@ -135,10 +136,10 @@ export function createAI(civ, seed, opts = {}) {
       v += ev;
       if (p < 0.9) return v; // a fight first; the rest is a bonus we may not get
     }
-    if (game.relicAt[cell] && game.owner[cell] !== civ) {
-      // a relic: only worth grabbing with a way home from the nucleus
+    if (relics === 0 && game.relicAt[cell] && game.owner[cell] !== civ) {
+      // a relic: only worth grabbing with a way home from the core
       // and it has to be held through the rival's turn before it can be picked up
-      if (!isNucleus(game, cell) || wayHome(game, cell)) v += Math.max(10, (hard ? 90 : 45) + 40 * game.civs[civ].relics - 8 * threat(game, cell) + 6 * n);
+      if (!isCore(game, cell) || wayHome(game, cell)) v += Math.max(10, (hard ? 90 : 45) + 40 * game.civs[civ].relics - 8 * threat(game, cell) + 6 * n);
     }
     if (enemyTown) {
       const need = game.value[cell] + 4 - n - fa;
@@ -152,8 +153,8 @@ export function createAI(civ, seed, opts = {}) {
       const here = stackAt(game, civ, cell)?.fleets ?? 0;
       if (t > here) v += Math.min(n, t - here + 1) * 6 + (cell === game.civs[civ].home ? 10 : 0);
       // or pass through it, chaining onward
-      if (depth > 0 && !chained.has(cell)) v = Math.max(v, 0.85 * bestFrom(game, cell, n, relics, depth - 1));
-    } else if (!isNucleus(game, cell)) {
+      if (depth > 0 && !chained.has(cell) && working(game, civ, cell)) v = Math.max(v, 0.85 * bestFrom(game, cell, n, relics, depth - 1));
+    } else if (!isCore(game, cell)) {
       // somewhere to settle (or a stepping stone towards the core)
       const known = game.civs[civ].known[cell];
       const w = worth(game, cell);
@@ -208,8 +209,7 @@ export function createAI(civ, seed, opts = {}) {
       const k = st.relics ? 0 : keep(game, st.cell);
       const avail = Math.min(st.ready, st.fleets - k);
       if (avail <= 0) continue;
-      const fromOwn = game.owner[st.cell] === civ;
-      const reach = safeRange(game, civ) + (fromOwn && hard ? 2 : 0);
+      const reach = safeRange(game, civ) + (working(game, civ, st.cell) && hard ? 2 : 0);
       // send everyone available, or a pair to settle, or a single scout
       const sizes = [...new Set([avail, Math.min(avail, game.params.foundCost), 1])];
       for (const to of within(g, st.cell, reach)) {
@@ -236,7 +236,9 @@ export function createAI(civ, seed, opts = {}) {
     const here = a.from;
     let v = 2;
     if (game.owner[here] >= 0 && game.owner[here] !== civ) v += 25; // keep up the siege
-    if (game.relicAt[here]) v += 150; // dig in for the relic
+    const st = stackAt(game, civ, here);
+    if (st && isCore(game, here)) v -= st.fleets; // the glare, as in landValue
+    if (game.relicAt[here] && !st?.relics) v += 150; // dig in for the relic
     const opts = buildOptions(game, here);
     if (!opts.found && game.civs[civ].known[here] && game.potential[here] >= 2) v += 3 * game.potential[here];
     return v;
@@ -250,7 +252,7 @@ export function createAI(civ, seed, opts = {}) {
     const mine = game.stacks.filter((s) => s.owner === civ);
     const front = frontier(game);
     for (const s of mine) {
-      if (game.owner[s.cell] >= 0 || s.idle < game.params.foundCost) continue;
+      if (game.owner[s.cell] >= 0 || s.fleets < game.params.foundCost) continue;
       const opts = buildOptions(game, s.cell);
       if (opts.found) continue;
       const pot = game.potential[s.cell];

@@ -49,11 +49,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-size: 13px;
   pointer-events: none;
 }
-#hud .civ { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hud .civ { pointer-events: auto; cursor: pointer; background: none; border: 0; padding: 0; color: inherit; font: inherit; display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #hud .civ.cpu { justify-content: flex-end; text-align: right; }
 #hud .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 #hud .you .dot { background: var(--you); box-shadow: 0 0 8px var(--you); }
 #hud .cpu .dot { background: var(--cpu); box-shadow: 0 0 8px var(--cpu); }
+.ico { width: 14px; height: 14px; vertical-align: -2px; flex: none; }
+.ico.coin { color: #e9c46a; }
+.ico.flask { color: #9fe0d6; }
+#hud-you, #hud-cpu { display: inline-flex; align-items: center; gap: 4px; }
+@media (max-width: 520px) { #hud { font-size: 12px; gap: 4px; } #hud-you, #hud-cpu { gap: 3px; } }
 #hud-turn { color: var(--muted); white-space: nowrap; }
 #hud b { color: var(--gold); font-weight: 600; }
 #btn-menu {
@@ -222,6 +227,19 @@ dialog.menu h1 { margin: 0 0 18px; font-size: 28px; letter-spacing: 0.5px; }
 .pill.primary { background: var(--you); border-color: var(--you); color: #04111e; }
 .pill:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
-ul.rules { padding-left: 18px; margin: 0 0 8px; font-size: 14px; line-height: 1.45; }
-ul.rules li { margin: 8px 0; color: var(--muted); }
-ul.rules b { color: var(--text); }
+
+.page h3 { margin: 0 0 6px; font-size: 15px; }
+.page p { margin: 6px 0; font-size: 14px; line-height: 1.4; color: var(--muted); }
+.page b { color: var(--text); }
+.page[hidden] { display: none; }
+.icon-key { white-space: nowrap; }
+.icon-key.gold { color: var(--gold); }
+.pager { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 8px 0 4px; font-size: 14px; color: var(--muted); }
+.pager button { width: 40px; height: 32px; border-radius: 8px; border: 1px solid var(--edge); background: var(--bg); }
+.pager button:disabled { opacity: 0.4; cursor: default; }
+
+#compare table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.35; }
+#compare th, #compare td { text-align: left; vertical-align: top; padding: 5px 6px; border-bottom: 1px solid var(--edge); }
+#compare thead th.you { color: var(--you); }
+#compare thead th.cpu { color: var(--cpu); }
+#compare tbody th { color: var(--muted); font-weight: 600; width: 28%; }

@@ -3,7 +3,7 @@
 // nothing in this file changes the game.
 
 import { cellCenter, pixelToCell, hexDist } from './hex.js';
-import { VOID, EDGE, ARM, NUCLEUS, CORE, band, isNucleus } from './sim.js';
+import { VOID, PERIPHERY, ARM, CORE, band, isCore } from './sim.js';
 
 /** @typedef {import('./sim.js').Game} Game */
 /** @typedef {import('./sim.js').Preview} Preview */
@@ -73,7 +73,7 @@ export function createRenderer(canvas) {
     dirty = true;
   }
 
-  /** The soft glow of the arms and the nucleus, painted once per game in world space. */
+  /** The soft glow of the arms and the core, painted once per game in world space. */
   function buildNebula() {
     if (!game) return;
     const g = game.grid;
@@ -90,7 +90,7 @@ export function createRenderer(canvas) {
       const t = game.terrain[i];
       if (t === VOID) continue;
       const { x, y } = cellCenter(g, i, SIZE);
-      const [rad, col] = t === ARM ? [SIZE * 2.2, 'rgba(130, 95, 255, 0.13)'] : t === EDGE ? [SIZE * 1.6, 'rgba(80, 70, 200, 0.05)']
+      const [rad, col] = t === ARM ? [SIZE * 2.2, 'rgba(130, 95, 255, 0.13)'] : t === PERIPHERY ? [SIZE * 1.6, 'rgba(80, 70, 200, 0.05)']
         : [SIZE * 3, 'rgba(255, 190, 90, 0.16)'];
       const grad = n.createRadialGradient(x, y, 0, x, y, rad);
       grad.addColorStop(0, col);
@@ -101,11 +101,11 @@ export function createRenderer(canvas) {
     // a scatter of faint stars along the arms
     for (let i = 0; i < g.N; i++) {
       const t = game.terrain[i];
-      const count = t === ARM ? 7 : t === EDGE ? 4 : t === VOID ? 1 : 10;
+      const count = t === ARM ? 7 : t === PERIPHERY ? 4 : t === VOID ? 1 : 10;
       const { x, y } = cellCenter(g, i, SIZE);
       for (let k = 0; k < count; k++) {
         const a = Math.random() * 6.28, d = Math.random() * SIZE;
-        n.fillStyle = t === NUCLEUS || t === CORE ? `rgba(255, 220, 160, ${0.2 + Math.random() * 0.4})` : `rgba(210, 210, 255, ${0.15 + Math.random() * 0.45})`;
+        n.fillStyle = t === CORE ? `rgba(255, 220, 160, ${0.2 + Math.random() * 0.4})` : `rgba(210, 210, 255, ${0.15 + Math.random() * 0.45})`;
         n.fillRect(x + Math.cos(a) * d, y + Math.sin(a) * d, 1.4, 1.4);
       }
     }
@@ -169,15 +169,52 @@ export function createRenderer(canvas) {
     dirty = true;
   }
 
-  /** If a cell is below a screen line (or off the top), glide it up into view. @param {number} cell @param {number} bottom */
-  function keepAbove(cell, bottom) {
-    if (!game || cell < 0) return;
-    const { x, y } = cellCenter(game.grid, cell, SIZE);
-    const s = toScreen(x, y);
-    const margin = SIZE * cam.z * 1.6;
-    if (s.y + margin <= bottom && s.y > 60 && s.x > 20 && s.x < cw - 20) return;
-    const want = Math.max(80, (bottom - 40) * 0.5);
-    tween = { x, y: y + (ch / 2 - want) / cam.z, z: cam.z, t0: performance.now(), dur: 350, from: { ...cam } };
+  // Visible map area: below the HUD, above the bottom bar (or a panel).
+  const TOP = 44, BAR = 64;
+
+  /** Glide so a world point sits in the middle of the visible band. @param {number} wx @param {number} wy @param {number} z */
+  function glideTo(wx, wy, z) {
+    tween = { x: wx, y: wy - ((TOP + ch - BAR) / 2 - ch / 2) / z, z, t0: performance.now(), dur: 450, from: { ...cam } };
+    dirty = true;
+  }
+
+  /** Bounding box of cells in world pixels, with a hex of margin. @param {number[]} cells */
+  function worldBox(cells) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const c of cells) {
+      const p = cellCenter(game.grid, c, SIZE);
+      x0 = Math.min(x0, p.x - SIZE * 1.2); x1 = Math.max(x1, p.x + SIZE * 1.2);
+      y0 = Math.min(y0, p.y - SIZE * 1.2); y1 = Math.max(y1, p.y + SIZE * 1.2);
+    }
+    return { x0, y0, x1, y1 };
+  }
+
+  /** Glide (and zoom, within [minZoom, 1.2]) so all these cells are in view. @param {number[]} cells */
+  function fit(cells) {
+    if (!game || !cells.length) return;
+    const b = worldBox(cells);
+    const z = Math.max(minZoom(), Math.min(1.2, (cw - 24) / (b.x1 - b.x0), (ch - TOP - BAR) / (b.y1 - b.y0)));
+    glideTo((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, z);
+  }
+
+  /**
+   * Pan the least needed to bring these cells into the visible area (no zoom
+   * change); if they can't all fit, centre on the first.
+   * @param {number[]} cells @param {number} bottom screen y the area ends at
+   */
+  function reveal(cells, bottom) {
+    if (!game || !cells.length) return;
+    const b = worldBox(cells);
+    const l = (b.x0 - cam.x) * cam.z + cw / 2, r = (b.x1 - cam.x) * cam.z + cw / 2;
+    const t = (b.y0 - cam.y) * cam.z + ch / 2, d = (b.y1 - cam.y) * cam.z + ch / 2;
+    if (l >= 0 && r <= cw && t >= TOP && d <= bottom) return;
+    if (r - l > cw || d - t > bottom - TOP) {
+      const p = cellCenter(game.grid, cells[0], SIZE);
+      tween = { x: p.x, y: p.y - ((TOP + bottom) / 2 - ch / 2) / cam.z, z: cam.z, t0: performance.now(), dur: 350, from: { ...cam } };
+    } else {
+      const sx = l < 0 ? -l : r > cw ? cw - r : 0, sy = t < TOP ? TOP - t : d > bottom ? bottom - d : 0;
+      tween = { x: cam.x - sx / cam.z, y: cam.y - sy / cam.z, z: cam.z, t0: performance.now(), dur: 350, from: { ...cam } };
+    }
     dirty = true;
   }
 
@@ -214,6 +251,8 @@ export function createRenderer(canvas) {
     } else if (e.type === 'flip') {
       anims.push({ kind: 'burst', cell: e.cell, color: e.ok ? COLORS.civ[e.civ] : '#888', t0: now, dur: 800, big: e.ok });
       anims.push({ kind: 'text', cell: e.cell, text: e.ok ? 'Taken!' : 'Held', color: e.ok ? COLORS.civ[e.civ] : COLORS.text, t0: now, dur: 1400 });
+    } else if (e.type === 'hazard') {
+      anims.push({ kind: 'text', cell: e.cell, text: `Glare −${e.lost}`, color: COLORS.bad, t0: now, dur: 1600 });
     } else if (e.type === 'found' || e.type === 'grow' || e.type === 'build' || e.type === 'research') {
       anims.push({ kind: 'burst', cell: e.cell, color: COLORS.civ[e.civ], t0: now, dur: 500, big: false });
     } else if (e.type === 'pickup' || e.type === 'deliver' || e.type === 'respawn' || e.type === 'return' || e.type === 'drop') {
@@ -281,7 +320,7 @@ export function createRenderer(canvas) {
       hexPath(ctx, x, y, SIZE * 0.97);
       if (t === VOID) {
         ctx.strokeStyle = 'rgba(90, 100, 160, 0.06)';
-      } else if (t === EDGE) {
+      } else if (t === PERIPHERY) {
         ctx.fillStyle = 'rgba(70, 60, 160, 0.08)';
         ctx.fill();
         ctx.strokeStyle = 'rgba(120, 110, 220, 0.16)';
@@ -290,14 +329,15 @@ export function createRenderer(canvas) {
         ctx.fill();
         ctx.strokeStyle = 'rgba(170, 150, 255, 0.45)';
       } else {
-        ctx.fillStyle = t === CORE ? 'rgba(255, 200, 100, 0.22)' : 'rgba(255, 180, 90, 0.10)';
+        const spawn = game.spawns.includes(i); // where relics appear
+        ctx.fillStyle = spawn ? 'rgba(255, 200, 100, 0.22)' : 'rgba(255, 180, 90, 0.10)';
         ctx.fill();
-        ctx.strokeStyle = t === CORE ? 'rgba(255, 210, 120, 0.6)' : 'rgba(255, 190, 110, 0.25)';
+        ctx.strokeStyle = spawn ? 'rgba(255, 210, 120, 0.6)' : 'rgba(255, 190, 110, 0.25)';
       }
       ctx.lineWidth = 1;
       ctx.stroke();
       // what a hex is worth, once you've been there
-      if (detail && known[i] && game.owner[i] < 0 && !isNucleus(game, i)) {
+      if (detail && known[i] && game.owner[i] < 0 && !isCore(game, i)) {
         const p = game.potential[i];
         ctx.fillStyle = p === 0 ? 'rgba(160, 165, 200, 0.45)' : 'rgba(230, 235, 255, 0.85)';
         if (p === 0) {
@@ -660,7 +700,7 @@ export function createRenderer(canvas) {
   }
 
   return {
-    resize, setGame, draw, pan, zoomAt, centerOn, keepAbove, overview, startAt, cellAtScreen, animate, busy,
+    resize, setGame, draw, pan, zoomAt, centerOn, fit, reveal, overview, startAt, cellAtScreen, animate, busy,
     markDirty: () => { dirty = true; },
     get zoom() { return cam.z; },
   };

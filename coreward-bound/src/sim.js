@@ -16,8 +16,8 @@ import { createGrid, axialToIndex, DIRS, rotate, hexDist, ring, dirTo, stepFrom,
 export const DRAW = 2;
 
 /** Terrain. */
-export const VOID = 0, EDGE = 1, ARM = 2, NUCLEUS = 3, CORE = 4;
-export const TERRAIN_NAMES = ['Void', 'Arm edge', 'Arm core', 'Nucleus', 'Core'];
+export const VOID = 0, PERIPHERY = 1, ARM = 2, CORE = 3;
+export const TERRAIN_NAMES = ['Void', 'Periphery', 'Arm', 'Core'];
 
 /** Tech types. */
 export const REACH = 0, FOCUS = 1, INDUSTRY = 2, FORCE = 3;
@@ -41,7 +41,7 @@ export const GALAXIES = {
 
 export const DEFAULTS = {
   galaxy: /** @type {keyof typeof GALAXIES} */ ('medium'),
-  nucleus: 2,          // cells up to this far from the centre are nucleus
+  core: 2,             // cells up to this far from the centre are core
   beacons: 2,          // beacon pairs (one per arm each)
   dust: 4,             // dust lane pairs
   dustLength: 5,       // cells each dust lane runs along an arm's edge
@@ -58,7 +58,7 @@ export const DEFAULTS = {
   freeStack: 3,        // fleets in one hex that cost no upkeep
   researchBase: 2,
   relicsToWin: 3,
-  relicRespawn: 3,     // rounds before a new relic appears in an empty core hex
+  relicRespawn: 3,     // rounds after a pickup before a new relic appears on a free spawn hex
   turnLimit: 60,       // rounds; then the higher score wins
   seed: 1,
 };
@@ -71,7 +71,7 @@ export const DEFAULTS = {
  * @property {number} cell
  * @property {number} fleets
  * @property {number} ready   fleets that may still jump this turn
- * @property {number} idle    fleets that began this turn here and haven't left: only these can be spent on building
+ * @property {number} idle    fleets that began this turn here and haven't left: only these can be spent on growing, building and research
  * @property {number} relics  relics carried
  */
 
@@ -97,12 +97,12 @@ export const DEFAULTS = {
  * @property {Uint8Array} dust      bitmask of dust edges per cell, by direction
  * @property {Int8Array} owner      settlement owner, -1 = none
  * @property {Uint8Array} value     settlement value
- * @property {Int32Array} founded   turn a settlement was founded (or taken), -1
+ * @property {Int32Array} founded   turn a settlement was founded (or taken), -1: it isn't working until its owner's next turn
  * @property {Int32Array} grown     turn a settlement last grew, -1
  * @property {Uint8Array} built     fleets built at each settlement this turn
  * @property {Uint8Array} relicAt   relics lying in each hex
- * @property {number[]} cores       the core hexes
- * @property {number[]} respawn     rounds until each core's relic returns, 0 = not waiting
+ * @property {number[]} spawns      the hexes a relic can appear on: the centre and its six neighbours
+ * @property {number[]} respawn     pending new relics, each the rounds left (0 = waiting for a free spawn hex)
  * @property {Stack[]} stacks
  * @property {Civ[]} civs
  * @property {number} turn          half-turns played: civ turn+0 = first player
@@ -121,6 +121,7 @@ export const DEFAULTS = {
  * | {type: 'drop', cell: number, relics: number}
  * | {type: 'return', cell: number}
  * | {type: 'respawn', cell: number}
+ * | {type: 'hazard', civ: number, cell: number, lost: number, left: number}
  * | {type: 'deliver', civ: number, cell: number, relics: number, total: number}
  * | {type: 'combat', cell: number, attacker: number, defender: number, before: [number, number], after: [number, number], rounds: number}
  * | {type: 'flip', civ: number, from: number, cell: number, roll: number, need: number, ok: boolean, tech: number}
@@ -140,7 +141,7 @@ export const DEFAULTS = {
 
 /**
  * Lay out a two-armed spiral. The arm is a turtle walk out from the
- * nucleus, turning 30° after each segment (a 30° heading on a hex grid is
+ * centre, turning 30° after each segment (a 30° heading on a hex grid is
  * an alternating zig-zag of the two 60° directions either side). The second
  * arm is the first turned 180°. Integer-only, so every device builds the
  * same galaxy from the same seed.
@@ -177,23 +178,24 @@ function makeGalaxy(game) {
     const j = rotate(g, i);
     if (j < i) continue;
     let t = VOID;
-    if (ring(g, i) <= p.nucleus) t = NUCLEUS;
+    if (ring(g, i) <= p.core) t = CORE;
     else if (dist[i] === 0 || (dist[i] === 1 && rng.int(100) < 25)) t = ARM;
-    else if (dist[i] === 1 || (dist[i] === 2 && rng.int(100) < 25)) t = EDGE;
-    const pot = t === ARM ? 3 + rng.int(3) : t === EDGE ? 1 + rng.int(3) : t === VOID ? rng.int(2) : 0;
+    else if (dist[i] === 1 || (dist[i] === 2 && rng.int(100) < 25)) t = PERIPHERY;
+    const pot = t === ARM ? 3 + rng.int(3) : t === PERIPHERY ? 1 + rng.int(3) : 0;
     game.terrain[i] = game.terrain[j] = t;
     game.potential[i] = game.potential[j] = pot;
   }
   const c = g.centre;
-  game.cores = [c, g.nbr[c * 6 + 1], g.nbr[c * 6 + 4]];
-  for (const k of game.cores) { game.terrain[k] = CORE; game.relicAt[k] = 1; }
-  game.respawn = game.cores.map(() => 0);
+  game.spawns = [c, ...[0, 1, 2, 3, 4, 5].map((d) => g.nbr[c * 6 + d])];
+  // relics start on the centre and an opposite pair of its neighbours, so neither civ is nearer
+  const d0 = rng.int(3);
+  for (const k of [c, g.nbr[c * 6 + d0], g.nbr[c * 6 + d0 + 3]]) game.relicAt[k] = 1;
 
   const home = spine[spine.length - 1];
   game.civs[0].home = home;
   game.civs[1].home = rotate(g, home);
 
-  // beacons: bright arm-core stars partway along each arm
+  // beacons: bright arm stars partway along each arm
   const armCells = spine.filter((i) => ring(g, i) >= 4 && hexDist(g, i, home) >= 3);
   /** @type {number[]} */ const beacons = [];
   for (let b = 0; b < p.beacons && armCells.length; b++) {
@@ -208,7 +210,7 @@ function makeGalaxy(game) {
   }
 
   // dust lanes: walls along an arm's edge, between it and the void
-  const bordersVoid = (/** @type {number} */ i) => game.terrain[i] === EDGE && ring(g, i) >= 4
+  const bordersVoid = (/** @type {number} */ i) => game.terrain[i] === PERIPHERY && ring(g, i) >= 4
     && [0, 1, 2, 3, 4, 5].some((d) => { const n = g.nbr[i * 6 + d]; return n >= 0 && game.terrain[n] === VOID; });
   const starts = [];
   for (let i = 0; i < g.N; i++) if (bordersVoid(i) && hexDist(g, i, home) >= 3 && hexDist(g, i, rotate(g, home)) >= 3) starts.push(i);
@@ -262,7 +264,7 @@ export function createGame(opts = {}) {
     terrain: new Uint8Array(N), potential: new Uint8Array(N), beacon: new Uint8Array(N), dust: new Uint8Array(N),
     owner: new Int8Array(N).fill(-1), value: new Uint8Array(N),
     founded: new Int32Array(N).fill(-1), grown: new Int32Array(N).fill(-1), built: new Uint8Array(N),
-    relicAt: new Uint8Array(N), cores: [], respawn: [],
+    relicAt: new Uint8Array(N), spawns: [], respawn: [],
     stacks: [], civs: [civ(), civ()],
     turn: 0, current: 0, first: 0, winner: -1, winBy: '',
     epoch: 0, sightCache: [{ key: -1, map: new Uint8Array(N) }, { key: -1, map: new Uint8Array(N) }],
@@ -321,8 +323,12 @@ export function bandGuess(/** @type {number} */ n) {
   return n <= 1 ? 1 : n <= 3 ? 3 : n <= 6 ? 5 : 8;
 }
 
-const isNucleus = (/** @type {Game} */ game, /** @type {number} */ i) => game.terrain[i] === NUCLEUS || game.terrain[i] === CORE;
-export { isNucleus };
+export const isCore = (/** @type {Game} */ game, /** @type {number} */ i) => game.terrain[i] === CORE;
+
+/** A civ's settlement that counts for jumping and delivery: owned, and not founded or taken this turn. */
+export function working(/** @type {Game} */ game, /** @type {number} */ c, /** @type {number} */ cell) {
+  return game.owner[cell] === c && game.founded[cell] !== game.turn;
+}
 
 /**
  * Does a straight line from a to b cross a dust edge? A line counts as
@@ -345,14 +351,14 @@ export function crossesDust(game, a, b) {
 }
 
 /**
- * Clear line of sight: no dust in the way, and the nucleus's glare doesn't
+ * Clear line of sight: no dust in the way, and the core's glare doesn't
  * lie between (it blocks sight through it, not into or out of it).
  * @param {Game} game @param {number} a @param {number} b
  */
 export function lineOfSight(game, a, b) {
   if (crossesDust(game, a, b)) return false;
   const traces = lineTraces(game.grid, a, b);
-  const glare = traces.every((t) => t.slice(1, -1).some((i) => i >= 0 && isNucleus(game, i)));
+  const glare = traces.every((t) => t.slice(1, -1).some((i) => i >= 0 && isCore(game, i)));
   return !glare;
 }
 
@@ -422,11 +428,14 @@ export function preview(game, from, to, n) {
   const fromOwn = game.owner[from] === c;
   const toOwn = game.owner[to] === c;
   const over = dist > safeRange(game, c);
-  if (over && !fromOwn) return { error: 'Too far. Long jumps can only start from your own settlement.' };
+  if (over && !working(game, c, from)) {
+    return { error: fromOwn ? 'Too far. Long jumps from a settlement founded or taken this turn have to wait a turn.' : 'Too far. Long jumps can only start from your own settlement.' };
+  }
   if (dist > 1 && crossesDust(game, from, to) && !(fromOwn && toOwn)) {
     return { error: 'Dust in the way. Only a one-hex hop, or a jump between your own settlements, can cross it.' };
   }
   const bonus = level(game, c, FOCUS) + (toOwn ? 1 : 0) + (game.beacon[to] ? 1 : 0) - (over ? 2 : 0);
+  if (stack.relics && !working(game, c, to) && stackAt(game, c, to)?.relics) return { error: 'A stack can carry only one relic.' };
   const need = 2 + Math.floor(dist / 3);
   let hits = 0;
   /** @type {Outcome[]} */ const outcomes = [];
@@ -441,7 +450,7 @@ export function preview(game, from, to, n) {
     }
   }
   // relic carriers never chain: delivering (or carrying) a relic is the end of the move
-  return { from, to, n: count, dist, over, need, bonus, hits, chain: toOwn && !over && stack.relics === 0, outcomes, loseChance };
+  return { from, to, n: count, dist, over, need, bonus, hits, chain: working(game, c, to) && !over && stack.relics === 0, outcomes, loseChance };
 }
 
 /**
@@ -452,16 +461,16 @@ export function preview(game, from, to, n) {
  */
 function scatterOutcome(game, c, from, to, d, k, n, over) {
   const losses = Math.floor(k / 2) * (over ? 2 : 1);
-  const viaNucleus = isNucleus(game, from) || isNucleus(game, to);
-  if (viaNucleus) return { cell: -1, scatter: k, losses: n, lost: true, weight: 1 };
+  const viaCore = isCore(game, from) || isCore(game, to);
+  if (viaCore) return { cell: -1, scatter: k, losses: n, lost: true, weight: 1 };
   let cell = stepFrom(game.grid, to, d, k);
   if (game.owner[to] === c) {
-    // aimed at your own settlement: never lost, so fall short of the edge or the nucleus
+    // aimed at your own settlement: never lost, so fall short of the edge or the core
     let kk = k;
-    while (kk > 0 && (cell < 0 || isNucleus(game, cell))) cell = stepFrom(game.grid, to, d, --kk);
+    while (kk > 0 && (cell < 0 || isCore(game, cell))) cell = stepFrom(game.grid, to, d, --kk);
     return { cell, scatter: kk, losses: Math.min(losses, n), lost: losses >= n, weight: 1 };
   }
-  if (cell < 0 || isNucleus(game, cell) || losses >= n) return { cell, scatter: k, losses: Math.min(losses, n), lost: true, weight: 1 };
+  if (cell < 0 || isCore(game, cell) || losses >= n) return { cell, scatter: k, losses: Math.min(losses, n), lost: true, weight: 1 };
   if (!inSight(game, c, cell)) return { cell, scatter: k, losses, lost: true, weight: 1 };
   return { cell, scatter: k, losses, lost: false, weight: 1 };
 }
@@ -511,7 +520,7 @@ export function jump(game, from, to, n) {
     je.losses = o.losses;
     je.lost = o.lost;
     if (o.lost) {
-      if (relics) returnRelics(game, relics, ev);
+      if (relics) returnRelic(game, ev);
       return ev;
     }
     fleets -= o.losses;
@@ -535,7 +544,7 @@ function arrive(game, c, cell, fleets, relics, chain, ev) {
     const r = fight(game, c, fleets, foe, ev, cell);
     fleets = r;
     if (fleets <= 0) {
-      if (relics) { game.relicAt[cell] += relics; ev.push({ type: 'drop', cell, relics }); }
+      if (relics) dropRelics(game, cell, relics, ev);
       return;
     }
   }
@@ -548,6 +557,7 @@ function arrive(game, c, cell, fleets, relics, chain, ev) {
   if (chain) mine.ready += fleets;
   mine.relics += relics;
   deliver(game, mine, ev);
+  if (mine.relics > 1) { dropRelics(game, cell, mine.relics - 1, ev); mine.relics = 1; } // only by scatter
   if (game.owner[cell] >= 0 && game.owner[cell] !== c) tryFlip(game, mine, ev);
 }
 
@@ -571,7 +581,7 @@ function fight(game, c, fleets, foe, ev, cell) {
   foe.idle = Math.min(foe.idle, foe.fleets);
   ev.push({ type: 'combat', cell, attacker: c, defender: foe.owner, before, after: [fleets, foe.fleets], rounds });
   if (foe.fleets <= 0) {
-    if (foe.relics) { game.relicAt[cell] += foe.relics; ev.push({ type: 'drop', cell, relics: foe.relics }); }
+    if (foe.relics) dropRelics(game, cell, foe.relics, ev);
     removeStack(game, foe);
   }
   return fleets;
@@ -579,7 +589,7 @@ function fight(game, c, fleets, foe, ev, cell) {
 
 /** @param {Game} game @param {Stack} s @param {GameEvent[]} ev */
 function deliver(game, s, ev) {
-  if (!s.relics || game.owner[s.cell] !== s.owner || besieged(game, s.cell)) return;
+  if (!s.relics || !working(game, s.owner, s.cell) || besieged(game, s.cell)) return;
   const civ = game.civs[s.owner];
   civ.relics += s.relics;
   ev.push({ type: 'deliver', civ: s.owner, cell: s.cell, relics: s.relics, total: civ.relics });
@@ -614,7 +624,6 @@ function tryFlip(game, s, ev) {
   }
   ev.push({ type: 'flip', civ: s.owner, from, cell, roll, need: need - s.fleets - level(game, s.owner, FORCE), ok, tech });
   if (ok) {
-    deliver(game, s, ev);
     if (!game.owner.some((o) => o === from)) eliminate(game, from, ev);
   }
 }
@@ -623,7 +632,7 @@ function tryFlip(game, s, ev) {
 function eliminate(game, c, ev) {
   game.civs[c].alive = false;
   for (const s of game.stacks.filter((x) => x.owner === c)) {
-    if (s.relics) { game.relicAt[s.cell] += s.relics; ev.push({ type: 'drop', cell: s.cell, relics: s.relics }); }
+    if (s.relics) dropRelics(game, s.cell, s.relics, ev);
     removeStack(game, s);
   }
   ev.push({ type: 'eliminated', civ: c });
@@ -635,21 +644,31 @@ function removeStack(game, s) {
   if (k >= 0) game.stacks.splice(k, 1);
 }
 
-/** Relics lost in space go back to the core. @param {Game} game @param {number} n @param {GameEvent[]} ev */
-function returnRelics(game, n, ev) {
-  for (let k = 0; k < n; k++) {
-    let best = 0;
-    for (let i = 1; i < game.cores.length; i++) if (game.relicAt[game.cores[i]] < game.relicAt[game.cores[best]]) best = i;
-    game.relicAt[game.cores[best]]++;
-    game.respawn[best] = 0;
-    ev.push({ type: 'return', cell: game.cores[best] });
-  }
+/** Spawn hexes with no relic and no stack of either civ. @param {Game} game */
+function freeSpawns(game) {
+  return game.spawns.filter((c) => !game.relicAt[c] && !game.stacks.some((s) => s.cell === c));
 }
 
-/** @param {Game} game @param {number} cell */
-function startRespawn(game, cell) {
-  const k = game.cores.indexOf(cell);
-  if (k >= 0 && game.relicAt[cell] === 0) game.respawn[k] = game.params.relicRespawn;
+/** A relic back on the board cancels the pending respawn with the most rounds left. @param {Game} game */
+function cancelRespawn(game) {
+  if (game.respawn.length) game.respawn.splice(game.respawn.indexOf(Math.max(...game.respawn)), 1);
+}
+
+/** Relics dropped where a carrier fell. @param {Game} game @param {number} cell @param {number} n @param {GameEvent[]} ev */
+function dropRelics(game, cell, n, ev) {
+  game.relicAt[cell] += n;
+  for (let k = 0; k < n; k++) cancelRespawn(game);
+  ev.push({ type: 'drop', cell, relics: n });
+}
+
+/** A relic lost in space goes to a random free spawn hex, or waits for one. @param {Game} game @param {GameEvent[]} ev */
+function returnRelic(game, ev) {
+  cancelRespawn(game);
+  const free = freeSpawns(game);
+  if (!free.length) { game.respawn.push(0); return; }
+  const cell = free[game.rng.int(free.length)];
+  game.relicAt[cell]++;
+  ev.push({ type: 'return', cell });
 }
 
 /** @param {Game} game @param {number} c @param {number} tech */
@@ -686,10 +705,12 @@ function spend(game, s, n) {
   s.idle -= n;
   s.ready = Math.min(s.ready, s.fleets);
   if (s.fleets <= 0) {
-    if (s.relics) game.relicAt[s.cell] += s.relics; // can't happen at a settlement, where relics are delivered
+    if (s.relics) dropRelics(game, s.cell, s.relics, []); // can't happen at a settlement, where relics are delivered
     removeStack(game, s);
   }
 }
+
+const RELIC_STAYS = 'The relic needs a fleet left to wait here for delivery.';
 
 /**
  * What can be built in a hex right now? Each entry is null if allowed or a reason.
@@ -705,9 +726,11 @@ export function buildOptions(game, cell) {
   /** @type {{found: string|null, grow: string|null, build: string|null, research: (string|null)[]}} */
   const out = { found: null, grow: null, build: null, research: [] };
   if (game.owner[cell] >= 0) out.found = 'There is a settlement here already.';
-  else if (isNucleus(game, cell)) out.found = 'Nothing can be settled in the nucleus.';
+  else if (game.terrain[cell] === VOID) out.found = 'Nothing can be settled in the void.';
+  else if (isCore(game, cell)) out.found = 'Nothing can be settled in the core.';
   else if (!game.civs[c].known[cell]) out.found = 'Land here first, to see what it is worth.';
-  else if (fleets < p.foundCost) out.found = `Needs ${p.foundCost} fleets here${arrived}.`;
+  else if (!s || s.fleets < p.foundCost) out.found = `Needs ${p.foundCost} fleets here.`;
+  else if (s.relics && s.fleets <= p.foundCost) out.found = RELIC_STAYS;
   if (!mine) out.grow = out.build = 'Not your settlement.';
   else if (sieged) out.grow = out.build = 'Besieged: drive the enemy out first.';
   else {
@@ -716,13 +739,15 @@ export function buildOptions(game, cell) {
     else if (game.built[cell] > 0) out.grow = 'Built a fleet here this turn.';
     else if (fleets < 1) out.grow = `Needs a fleet here${arrived}.`;
     if (game.value[cell] < 1) out.build = 'Grow it to value 1 first.';
+    else if (game.founded[cell] === game.turn) out.build = 'Founded this turn: build here next turn.';
     else if (game.grown[cell] === game.turn) out.build = 'Grew this turn.';
     else if (game.built[cell] >= buildLimit(game, c)) out.build = 'Built as many as it can this turn.';
     else if (game.civs[c].rp < p.fleetCost) out.build = `Needs ${p.fleetCost} RP.`;
   }
   for (const t of game.civs[c].offer) {
     const cost = researchCost(game, c, t);
-    out.research.push(!mine ? 'Research at one of your settlements.' : sieged ? 'Besieged.' : fleets < cost ? `Needs ${cost} fleets here${arrived}.` : null);
+    out.research.push(!mine ? 'Research at one of your settlements.' : sieged ? 'Besieged.' : fleets < cost ? `Needs ${cost} fleets here${arrived}.`
+      : s && s.relics && s.fleets <= cost ? RELIC_STAYS : null);
   }
   return out;
 }
@@ -742,8 +767,12 @@ export function found(game, cell) {
   game.value[cell] = Math.min(game.params.foundValue, game.potential[cell]);
   game.founded[cell] = game.turn;
   ev.push({ type: 'found', civ: c, cell });
-  deliver(game, s, ev);
-  spend(game, s, game.params.foundCost);
+  // fleets that arrived this turn are spent first, so idle and ready never exceed fleets
+  const cost = game.params.foundCost;
+  s.idle -= cost - Math.min(cost, s.fleets - s.idle);
+  s.fleets -= cost;
+  s.ready = Math.min(s.ready, s.fleets);
+  if (s.fleets <= 0) removeStack(game, s);
   checkWin(game, ev);
   return ev;
 }
@@ -794,23 +823,47 @@ function reason(r) { return r ? { error: r } : null; }
 
 /**
  * End the current civ's turn and start the other's: income, upkeep,
- * relics reappearing, sieges pressing on.
+ * the core's glare, relics reappearing, sieges pressing on.
  * @param {Game} game @returns {GameEvent[]}
  */
 export function endTurn(game) {
   /** @type {GameEvent[]} */ const ev = [];
   if (game.winner >= 0) return ev;
+  // the core's glare: every fleet that ends its owner's turn there rolls a d6, and a 1 destroys it
+  for (const s of game.stacks.slice()) {
+    if (s.owner !== game.current || !isCore(game, s.cell)) continue;
+    let lost = 0;
+    for (let k = 0; k < s.fleets; k++) if (rollD6(game, s.owner) === 1) lost++;
+    if (!lost) continue;
+    s.fleets -= lost;
+    s.ready = Math.min(s.ready, s.fleets);
+    s.idle = Math.min(s.idle, s.fleets);
+    ev.push({ type: 'hazard', civ: s.owner, cell: s.cell, lost, left: s.fleets });
+    if (s.fleets <= 0) {
+      if (s.relics) dropRelics(game, s.cell, s.relics, ev);
+      removeStack(game, s);
+    }
+  }
   game.turn++;
   game.current = 1 - game.current;
   const c = game.current, p = game.params;
   if (game.current === game.first) {
-    for (let k = 0; k < game.cores.length; k++) {
-      if (game.respawn[k] > 0 && --game.respawn[k] === 0 && game.relicAt[game.cores[k]] === 0) {
-        game.relicAt[game.cores[k]] = 1;
-        ev.push({ type: 'respawn', cell: game.cores[k] });
-      }
+    /** @type {number[]} */ const waiting = [];
+    for (const t of game.respawn) {
+      const left = Math.max(0, t - 1);
+      const free = left === 0 ? freeSpawns(game) : [];
+      if (free.length) {
+        const cell = free[game.rng.int(free.length)];
+        game.relicAt[cell]++;
+        ev.push({ type: 'respawn', cell });
+      } else waiting.push(left);
     }
+    game.respawn = waiting;
   }
+  // a carrier that waited at a settlement founded or taken last turn delivers now
+  for (const s of game.stacks) if (s.owner === c) deliver(game, s, ev);
+  checkWin(game, ev);
+  if (game.winner >= 0) return ev;
   if (game.current === game.first && game.turn >= 2 * p.turnLimit) {
     scoreWin(game, ev);
     return ev;
@@ -834,13 +887,13 @@ export function endTurn(game) {
     civ.rp++;
   }
   ev.push({ type: 'income', civ: c, rp: income, upkeep, starved });
-  // relics: a stack that held a relic's hex through the rival's turn picks it up
+  // relics: a stack with no relic that held a relic's hex through the rival's turn picks one up, and a new one is due
   for (const s of game.stacks) {
-    if (s.owner !== c || !game.relicAt[s.cell]) continue;
-    s.relics += game.relicAt[s.cell];
-    ev.push({ type: 'pickup', civ: c, cell: s.cell, relics: game.relicAt[s.cell] });
-    game.relicAt[s.cell] = 0;
-    startRespawn(game, s.cell);
+    if (s.owner !== c || s.relics || !game.relicAt[s.cell]) continue;
+    s.relics = 1;
+    game.relicAt[s.cell]--;
+    game.respawn.push(p.relicRespawn);
+    ev.push({ type: 'pickup', civ: c, cell: s.cell, relics: 1 });
     deliver(game, s, ev);
   }
   // sieges: stacks sitting in enemy settlements try again to take them
@@ -890,6 +943,8 @@ export function stateHash(/** @type {Game} */ game) {
   for (let i = 0; i < game.grid.N; i++) { mix(game.owner[i] + 1); mix(game.value[i]); mix(game.relicAt[i]); }
   for (const s of game.stacks) { mix(s.owner); mix(s.cell); mix(s.fleets); mix(s.ready); mix(s.idle); mix(s.relics); }
   for (const civ of game.civs) { mix(civ.rp); mix(civ.relics); for (const t of civ.techs) mix(t); }
+  for (let i = 0; i < game.grid.N; i++) mix(game.founded[i] + 1);
+  for (const t of game.respawn) mix(t);
   return h;
 }
 

@@ -12,7 +12,7 @@ import { relayTransport } from '../../multiplayer/relay.js';
 // The settings players see: five simple choices, each a preset. Everything
 // else (meters, regen, spawn interval, facing arc) stays at the sim defaults.
 const CHOICES = {
-  mode: ['2p', 'cpu-easy', 'cpu'],
+  mode: ['cpu-easy', 'cpu'],
   /** cells across the screen's short side; the long side fills the screen */
   size: { small: 24, medium: 34, large: 46 },
   /** ticks per second */
@@ -27,7 +27,7 @@ const SQRT3 = Math.sqrt(3);
 // v2: only the five simple choices are stored, so values from the old
 // advanced fields can't linger invisibly.
 const SETTINGS_KEY = 'dot-army-settings-v2';
-const defaultSettings = { mode: '2p', size: 'medium', speed: 'average', spawns: 'some', obstacles: 'none' };
+const defaultSettings = { mode: 'cpu-easy', size: 'medium', speed: 'average', spawns: 'some', obstacles: 'none' };
 /** @param {any} raw */
 function sanitize(raw) {
   const out = { ...defaultSettings };
@@ -74,6 +74,8 @@ const rotated = () => !net && screenPortrait() !== gamePortrait;
  * }}
  */
 let net = null;
+/** The one player on this screen: blue locally, or this device's seat online. */
+const me = () => (net ? net.local : 0);
 /** In a network game, the cell the local player last aimed at (applied a few ticks later). */
 let localAim = -1;
 
@@ -116,8 +118,8 @@ function newGame(start = true, fixed) {
     seed: (Math.random() * 2 ** 31) >>> 0,
   });
   localAim = -1;
-  renderer.setView(net ? { single: true, flip: net.local === 1, local: net.local } : { single: false, flip: false, local: 0 });
-  ais = [null, net || settings.mode === '2p' ? null
+  renderer.setView({ flip: !!net && net.local === 1, local: me() });
+  ais = [null, net ? null
     : createAI(1, game.params.seed, settings.mode === 'cpu-easy'
       ? { thinkEvery: 16, caution: 8, noise: 14, dragSpeed: 1.1 }
       : { dragSpeed: 2.2 })];
@@ -138,17 +140,11 @@ function cellPx(/** @type {number} */ cell) {
 }
 
 // ---------------------------------------------------------------------------
-// Input: each finger grabs a marker; multitouch lets both players drag at once.
+// Input: the whole screen is yours. A press anywhere moves your marker there,
+// and dragging keeps it under your finger.
 
 function humanPlayers() {
-  if (net) return [net.local === 0, net.local === 1];
-  return [true, settings.mode === '2p'];
-}
-
-/** Which player "owns" this half of the screen (blue: bottom/left). */
-function sideOf(/** @type {number} */ x, /** @type {number} */ y) {
-  if (net) return net.local; // your own device: the whole screen is yours
-  return renderer.portrait ? (y > window.innerHeight / 2 ? 0 : 1) : (x < window.innerWidth / 2 ? 0 : 1);
+  return [me() === 0, me() === 1];
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -164,21 +160,9 @@ canvas.addEventListener('pointerdown', (e) => {
     if (!rotated()) paused = false; // can't resume until the phone is turned back
     return;
   }
+  const player = me();
+  if ([...drags.values()].includes(player)) return; // another finger already has it
   const b = renderer.toBoard(e.clientX, e.clientY);
-  const human = humanPlayers();
-  const grab = Math.max(40, renderer.size * 3.5);
-  let player = -1, bestD = Infinity;
-  const side = sideOf(e.clientX, e.clientY);
-  for (let p = 0; p < 2; p++) {
-    if (!human[p] || [...drags.values()].includes(p)) continue;
-    const t = targetsPx[p];
-    // prefer your own side's marker when both are in reach
-    const d = Math.hypot(t.x - b.x, t.y - b.y) - (p === side ? grab * 0.5 : 0);
-    if (d < grab && d < bestD) { bestD = d; player = p; }
-  }
-  // Not on a marker: a tap on your own half jumps your marker there.
-  if (player < 0 && human[side] && ![...drags.values()].includes(side)) player = side;
-  if (player < 0) return;
   drags.set(e.pointerId, player);
   try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic or stale pointer */ }
   moveTarget(player, b.x, b.y);
@@ -306,15 +290,14 @@ function overlay() {
   }
   if (phase === 'countdown' && !paused) {
     const c = Math.ceil(countdown);
-    const who = net ? (net.local ? 'you are red' : 'you are blue') : settings.mode === '2p' ? 'blue vs red' : 'you are blue';
+    const who = me() ? 'you are red' : 'you are blue';
     return { lines: [String(c)], sub: who };
   }
   if (paused) return { lines: ['PAUSED'], sub: 'tap to resume' };
   if (phase === 'over') {
-    const cpuWon = !net && settings.mode !== '2p' && game.winner === 1;
     const again = !net ? 'tap to play again' : net.role === 'host' ? 'tap for a rematch' : 'waiting for the host to start a rematch';
     return {
-      lines: [net ? (game.winner === net.local ? 'YOU WIN' : 'YOU LOSE') : cpuWon ? 'CPU WINS' : `${game.winner === 0 ? 'BLUE' : 'RED'} WINS`],
+      lines: [game.winner === me() ? 'YOU WIN' : net ? 'YOU LOSE' : 'CPU WINS'],
       color: COLORS.players[game.winner],
       sub: `${Math.round(game.tick / game.params.tickRate)}s · ${again}`,
       stats: statRows(),
@@ -326,8 +309,7 @@ function overlay() {
 /** End-of-game table: [label, blue, red]. */
 function statRows() {
   const st = game.stats;
-  const names = net ? (net.local === 0 ? ['You', 'Them'] : ['Them', 'You'])
-    : settings.mode === '2p' ? ['Blue', 'Red'] : ['You', 'CPU'];
+  const names = !net ? ['You', 'CPU'] : net.local === 0 ? ['You', 'Them'] : ['Them', 'You'];
   return {
     names,
     rows: /** @type {[string, number, number][]} */ ([
@@ -520,8 +502,8 @@ if (room) {
   newGame(false);
   startDialog.showModal();
 }
-// ?debug exposes a state fingerprint for automated two-tab tests.
+// ?debug exposes a state fingerprint (and both targets) for automated tests.
 if (query.has('debug')) {
-  /** @type {any} */ (window).dotArmyDebug = () => ({ tick: game.tick, hash: stateHash(game), status: net?.status, desync: net?.ls?.desyncAt ?? -1, winner: game.winner });
+  /** @type {any} */ (window).dotArmyDebug = () => ({ tick: game.tick, hash: stateHash(game), status: net?.status, desync: net?.ls?.desyncAt ?? -1, winner: game.winner, targets: [...game.targets] });
 }
 requestAnimationFrame(frame);

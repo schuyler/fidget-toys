@@ -171,9 +171,6 @@ then gets a custom domain in `wrangler.toml`
   lost 30% of the time, so not severe. Watch human games; the first lever to
   try is a home-spawn advantage (faster regen or higher meter at homes).
 - **The "drag me" hint overlaps each home spawn** at game start (cosmetic).
-- **Landscape two-player on one screen:** the countdown and win text are
-  drawn upright, so both players read them sideways. Portrait is the better
-  shared-screen mode.
 - **iOS Safari audio** may need the first `touchend` rather than
   `pointerdown` to unlock. Untested.
 - **Dense obstacles:** before the elimination rule, 1 in 12 CPU games on

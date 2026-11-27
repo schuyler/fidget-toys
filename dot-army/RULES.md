@@ -14,8 +14,9 @@ and destroying their last dot.
 - Each cell holds at most one thing: a dot, part of a spawn point, or a
   rock. Dots never overlap.
 - The layout is point-symmetric (rotated 180° about the centre), so
-  neither side has an advantage. In portrait, blue is at the bottom and
-  red at the top, so two people can face each other across a phone.
+  neither side has an advantage. Blue starts at the bottom (left in
+  landscape) and red at the top; online, the guest's board is turned
+  so red's home is at the bottom of their screen.
 - **Obstacles:** none (the default), some, or many rocks. Rocks are
   impassable, and dots path around them. Every spawn point is always
   reachable.
@@ -161,14 +162,15 @@ never goes back to neutral, so at least one player always owns a spawn.
 
 ## Controls
 
-- **Two players, one screen** (the default): each player drags their own
-  colour's marker, and multitouch lets both drag at once. Tapping empty
-  space in your own half of the screen jumps your marker there. Halves
-  are bottom and top in portrait, left and right in landscape.
-- **vs CPU** (easy or hard): you're blue, and the CPU moves red's
+- **One player per screen.** Drag your marker, or tap anywhere to jump it
+  there.
+- **vs CPU** (easy, the default, or hard): you're blue, and the CPU moves red's
   marker under the same rules a human does. It drags the marker at a
   limited speed rather than jumping it: about 9 cells per second on
   easy and 18 on hard, at average speed.
+- **Online:** another person plays from their own device. The host is blue
+  and their settings apply; the guest's board is turned so their home is
+  at the bottom. For now a game starts from a link (see `NETWORK.md`).
 - Every page load opens a start menu (New game, Settings, Rules). The ☰
   button in a corner of the HUD pauses and opens a menu with Resume,
   New game, Settings, Rules and Sound. Settings are remembered between
@@ -187,7 +189,7 @@ table below is fixed at its default.
 
 | Setting | Choices |
 |---|---|
-| Opponent | Human, Easy CPU, Hard CPU |
+| CPU | Easy, Hard |
 | Board | Small, Medium, Large (24 / 34 / 46 cells across the short side) |
 | Speed | Slow, Average, Fast (5 / 8 / 12 ticks per second) |
 | Spawns | Few, Some, Many (4 / 6 / 10 neutral spawns) |

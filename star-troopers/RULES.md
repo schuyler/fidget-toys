@@ -425,6 +425,20 @@ None of this is in the first version, but it's the plan.
     rules, so matching forces by measured strength, rather than equal
     headcounts, is the obvious next lever. It leaves the factions
     untouched.
+  - **Measured force matching** (`tools/forces.js`, every combination of
+    2–8 troopers a side, then the best candidates at 300 games a
+    pairing): one Orrin is worth about 1.5–1.6 Compact, and one Compact
+    about 1.3 Vell. The three ratios agree with each other, which is a
+    sign they're measuring something real. The most even whole-number
+    table is **4 Orrin = 6 Compact = 8 Vell**: Orrin 52% against
+    Compact, Vell 44% against Compact, Orrin 41% against Vell, games
+    about 6–7 turns, mostly ending by fighting. The worth of a trooper
+    isn't quite constant with squad size (the Vell fall off in bigger
+    fights), so the table only holds near these sizes. Measured with
+    the CPU and the stand-in bomb tables, so it needs human play to
+    confirm. In List's points, those forces are 84, 84 and 84 if an
+    Orrin is worth 21 and a Vell 10.5, against his 15 and 14. **(open:
+    adopt as the Meeting forces)**
   - Most games still run to the turn limit and are settled by hexes
     held.
   - History, briefly: one-stage turns with a 6-point shot cap left the

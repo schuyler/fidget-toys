@@ -22,6 +22,13 @@ directory stays `rbmk/`. Names considered and passed over: **AZ-5** (the
 scram button, which is also how the game ends) and **Xenon Pit** (the
 poisoned low-power state the game is built around).
 
+- "Prompt" now makes most people think of AI prompts, so wherever the
+  name appears in a list (the site index), give it a subtitle that shows
+  what the game is, such as "run a Soviet reactor through the night
+  shift".
+- The phrase also belongs on the game-over screen: "PROMPT CRITICAL" is
+  what you see when you lose.
+
 ## What the player controls
 
 | Control | Range | Notes |

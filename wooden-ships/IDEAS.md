@@ -71,8 +71,9 @@ pulled in from the corners on wide screens.
 
 ## Crew
 
-- **Quieter crew meters.** Take the text out of the crew pills ("You: 24
-  crew"), or leave just the number.
+- **Quieter crew meters** (done). The pills used to read "You: 24 crew";
+  now each shows just the number over its meter, and colour and side
+  (yours on the left) say whose it is.
 - **Later:** vertical pills, or a row of small crew figures that drop out
   as they're lost, in the spirit of Star Control's crew display. The
   sheet has `crew (1)` to `crew (6)` sprites that might do.

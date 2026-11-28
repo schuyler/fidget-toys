@@ -641,12 +641,12 @@ export function createRenderer(canvas, assets) {
     ctx.restore();
   }
 
-  /** Crew left: the hit points. @param {number} you */
+  /** Crew left: the hit points. Yours on the left, in your colour; just the number over each meter. @param {number} you */
   function drawCrew(you) {
     if (!game) return;
     const g = game;
     const y = 12 + safe.top;
-    const pill = (/** @type {import('./sim.js').Ship} */ s, /** @type {number} */ x, /** @type {string} */ name) => {
+    const pill = (/** @type {import('./sim.js').Ship} */ s, /** @type {number} */ x) => {
       const w = 92, h = 22;
       ctx.fillStyle = 'rgba(13,16,32,0.55)';
       roundRect(x - w / 2, y, w, h, 11);
@@ -656,15 +656,15 @@ export function createRenderer(canvas, assets) {
       roundRect(x - w / 2 + 3, y + 3, (w - 6) * frac, h - 6, 8);
       ctx.fill();
       ctx.fillStyle = '#fff';
-      ctx.font = '700 12px system-ui, sans-serif';
+      ctx.font = '700 13px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(s.struck ? `${name}: struck` : `${name}: ${s.crew} crew`, x, y + h / 2 + 0.5);
+      ctx.fillText(String(Math.max(0, s.crew)), x, y + h / 2 + 0.5);
     };
     ctx.save();
     const meShip = g.ships[you], them = g.ships.find((s) => s.side !== meShip.side);
-    pill(meShip, cw / 2 - 50, 'You');
-    if (them) pill(them, cw / 2 + 50, 'CPU');
+    pill(meShip, cw / 2 - 50);
+    if (them) pill(them, cw / 2 + 50);
     ctx.restore();
   }
 

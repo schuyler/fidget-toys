@@ -349,7 +349,8 @@ fast enough to feel like a fidget toy)**
 - Both devices run the same game from the same seed, and only rudder
   and fire inputs cross the network, through the repo's shared relay and
   lockstep (as in Dot Army). An input takes effect 4 ticks (133 ms)
-  after you give it, on both devices at once.
+  after you give it, on both devices at once. The host's device sets
+  that delay and sends it to the guest's with the settings.
 - ☰ pauses your device, and the other one waits for you with WAITING.
   Online, the pause menu has **Leave game** instead of New game and
   Settings. When the fight's over, the host taps for a rematch.

@@ -6,7 +6,7 @@ import { createLockstep as createShared } from '../../multiplayer/lockstep.js';
 import { applyInput, step, stateHash } from './sim.js';
 
 /** Bump when anything that affects the simulation or the protocol changes. */
-export const PROTOCOL = 1;
+export const PROTOCOL = 2; // 2: the host's input delay travels in `start`
 
 /**
  * Input delay in ticks: 4 at 30 ticks a second is 133 ms, which covers the

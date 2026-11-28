@@ -33,14 +33,14 @@ Plain ES modules, no build step, same layout as Dot Army.
 - The camera zoom (450 m across the screen's short side) is a first guess. Gun range is 300 m, two thirds of that, so the CPU can fire at you from just past the short edges of the screen. Its arrow shows the distance: under 300 m, it's in range.
 - Upwind is slow (about 2 knots made good against 14 downwind), which makes the weather gauge matter a lot. Whether that's fun is still to be found out.
 - The CPU doesn't play the weather gauge. Easy is a lot weaker than hard in CPU-vs-CPU games (hard wins 93% on the big sea), but how it fares against people is untested.
-- Online play has only been tried between two tabs and through a relay on the same machine, not between two phones over the internet. The 133 ms input delay is a guess at what the deployed relay needs; `?delay=N` (in ticks) tries others.
+- Online play has only been tried between two tabs and through a relay on the same machine, not between two phones over the internet. The 133 ms input delay is a guess at what the deployed relay needs; `?delay=N` (in ticks) on the host's page tries others, and the guest plays whatever the host sends.
 - Drag steering flips when your ship heads down the screen (drag the way the bow should swing), and you hold the button through a turn. The wheel is the alternative, but hasn't been playtested yet, and neither has a phone. [IDEAS.md](IDEAS.md) has the ideas waiting their turn.
 
 ## First two-phone test
 
 Online play hasn't been tried between two phones over the deployed relay yet. When it is, here's what to look at:
 
-- **Setup.** Both phones open `?debug` (add `&delay=N` to try another input delay). The shared link carries only the room code, so the guest picks **Join with code** on a page opened with the same parameters rather than tapping the link. Both phones need the *same* `delay`: with different ones the game hangs at the start, because each waits for inputs the other never sends. Try one phone on Wi-Fi and one on mobile data at least once.
+- **Setup.** The host opens `?debug` (add `&delay=N` to try another input delay; the guest's phone gets it from the host's). The shared link carries only the room code, so for the guest's corner panel too, the guest opens `?debug` and picks **Join with code** rather than tapping the link. Try one phone on Wi-Fi and one on mobile data at least once.
 - **Round trip.** The `?debug` corner panel shows the relay's `rtt`. An input takes effect 4 ticks (133 ms) after it's given, so going by the lockstep's design, inputs should arrive in time while the one-way trip (about half the `rtt`) plus its jitter stays under 133 ms. Note the `rtt` you see; that's the number for choosing a default.
 - **Stutter.** The game only steps a tick once the other phone's input for it has arrived, so a late packet shows up as a hitch: ships pause, then catch up. Watch for hitches while sailing in a straight line, not just in a fight. A stall over 600 ms shows WAITING. Count hitches over a minute or two at the default delay, then try `delay=6` (200 ms) and `delay=8` (267 ms).
 - **Feel.** Does 133 ms of rudder and gun lag feel sluggish? Is a longer delay that cures the hitches still tolerable? Is the wheel worse than drag steering?

@@ -36,6 +36,17 @@ Plain ES modules, no build step, same layout as Dot Army.
 - Online play has only been tried between two tabs and through a relay on the same machine, not between two phones over the internet. The 133 ms input delay is a guess at what the deployed relay needs; `?delay=N` (in ticks) tries others.
 - Drag steering flips when your ship heads down the screen (drag the way the bow should swing), and you hold the button through a turn. The wheel is the alternative, but hasn't been playtested yet, and neither has a phone. [IDEAS.md](IDEAS.md) has the ideas waiting their turn.
 
+## First two-phone test
+
+Online play hasn't been tried between two phones over the deployed relay yet. When it is, here's what to look at:
+
+- **Setup.** Both phones open `?debug` (add `&delay=N` to try another input delay). The shared link carries only the room code, so the guest picks **Join with code** on a page opened with the same parameters rather than tapping the link. Both phones need the *same* `delay`: with different ones the game hangs at the start, because each waits for inputs the other never sends. Try one phone on Wi-Fi and one on mobile data at least once.
+- **Round trip.** The `?debug` corner panel shows the relay's `rtt`. An input takes effect 4 ticks (133 ms) after it's given, so going by the lockstep's design, inputs should arrive in time while the one-way trip (about half the `rtt`) plus its jitter stays under 133 ms. Note the `rtt` you see; that's the number for choosing a default.
+- **Stutter.** The game only steps a tick once the other phone's input for it has arrived, so a late packet shows up as a hitch: ships pause, then catch up. Watch for hitches while sailing in a straight line, not just in a fight. A stall over 600 ms shows WAITING. Count hitches over a minute or two at the default delay, then try `delay=6` (200 ms) and `delay=8` (267 ms).
+- **Feel.** Does 133 ms of rudder and gun lag feel sluggish? Is a longer delay that cures the hitches still tolerable? Is the wheel worse than drag steering?
+- **The turned view.** The guest's screen is turned round. Check both players start at the bottom, the fire buttons fire the side they're on, and drag steering swings the bow the way you drag.
+- **Leaving and drops.** Switching apps or locking a phone pauses it, and the other shows WAITING. Check that coming back resumes the game, or, if the phone's OS dropped the connection meanwhile, that both say CONNECTION LOST or OPPONENT LEFT and don't hang. Airplane mode mid-game should do the same. Neither phone should ever say OUT OF SYNC; if one does, note the settings and what happened just before.
+
 ## Art
 
 The ship sprites and terrain tiles come from the 2022 prototype ([schuyler/wooden-ships](https://github.com/schuyler/wooden-ships)). Their names match Kenney's [Pirate Pack](https://kenney.nl/assets/pirate-pack), which is CC0, but the files haven't been checked against the pack itself yet.

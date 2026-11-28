@@ -1,9 +1,9 @@
 // Runs whole shifts with CPU operators, no browser, to tune the defaults.
 // Usage: node rbmk/tools/headless.js [shifts] [key=value ...]
-//   op=cautious|greedy|idle|all (default all), hours=N (cap, default 48 game hours),
+//   op=cautious|greedy|idle|all (default all), hours=N (cap, default 96 game hours),
 //   seed=N (first seed, default 1), trace=SEED (an hourly timeline of that seed),
 //   any DEFAULTS (sim.js) or ORDER_DEFAULTS (orders.js) key; arrays comma-separated
-//   (e.g. lowMWe=200,450).
+//   (e.g. lowMWe=200,450), and operator habits as op.key=N (e.g. greedy.gmax=0.05; see OPS).
 //
 // Operators see only what a player sees: readouts(), the order in force, the
 // rating and the teletype. They act only through tick()'s input (setControls
@@ -20,15 +20,18 @@ const LN2 = Math.LN2;
 const OPS = {
   // gmax: the fastest growth it will ask for (1/s; doubling time is ln 2 / gmax).
   // kp: wanted growth per unit of relative error. kr: share of the rod estimate it moves each look.
-  cautious: { floor: 16, gmax: 0.03, kp: 0.15, kr: 0.3, scramDoubling: 10 },
-  greedy: { gmax: 0.1, kp: 0.3, kr: 0.3, panicDoubling: 3 },
+  // The protection trips AZ-5 at a 10 s doubling time; both operators know it and stay slower.
+  // In a pit, cautious aims high in the band (burns xenon faster) and lowers pressure for steam.
+  // look: ticks between glances at the panel (15 = half a second, a person's reaction time).
+  cautious: { look: 15, floor: 16, gmax: 0.03, kp: 0.15, kr: 0.3, scramDoubling: 12, aimHigh: 0.6, pLow: 58 },
+  greedy: { look: 15, gmax: 0.06, kp: 0.3, kr: 0.3 },
 };
 
 const args = process.argv.slice(2);
 const count = Number(args[0] ?? 40);
 /** @type {Record<string, any>} */
 const overrides = {};
-let ops = ['cautious', 'greedy', 'idle'], hours = 48, firstSeed = 1, trace = -1;
+let ops = ['cautious', 'greedy', 'idle'], hours = 96, firstSeed = 1, trace = -1;
 for (const kv of args.slice(1)) {
   const [k, v] = kv.split('=');
   if (k === 'op') ops = v === 'all' ? ops : v.split(',');
@@ -61,35 +64,44 @@ const PER_ROD = 0.016;
  * How far to move the rods (positive is in) to steer output toward the order.
  * @param {Panel} r @param {Order} o @param {Record<string, number>} c
  */
-function rodMove(r, o, c) {
-  const err = (o.target - r.electricMW) / Math.max(o.target, 1);
+function rodMove(r, o, c, aim = o.target) {
+  const err = (aim - r.electricMW) / Math.max(o.target, 1);
   const want = Math.max(-c.gmax, Math.min(c.gmax, c.kp * err));
   return c.kr * (r.growthRate - want) / PER_ROD;
 }
 
-/** Keeps 16 rods in, holds 70 bar, never lets the period get short, scrams on any alarm. */
+/**
+ * Keeps 16 rods in, never lets the period get short, scrams on any alarm. With
+ * the bank at its floor it plays the pit as well as the rule allows: it aims
+ * high in the band and trades pressure for steam.
+ */
 function cautious() {
   const c = OPS.cautious, floor = c.floor;
+  let p = 70;
   return {
     /** @param {View} v @returns {Input} */
     think({ panel: r, order: o }) {
       if (r.dryout || r.damageLamp || r.growthRate > LN2 / c.scramDoubling) return { scram: true };
-      let target = r.rodsTarget + rodMove(r, o, c);
+      const atFloor = r.rodsTarget <= floor + 1;
+      const aim = atFloor ? o.target + c.aimHigh * o.tol : o.target;
+      let target = r.rodsTarget + rodMove(r, o, c, aim);
       // The printout is late: stop withdrawing if even it says the margin is near the rule.
       if (r.printout.value < floor + 1) target = Math.max(target, Math.min(r.rodsTarget, r.rods));
-      return { rodsTarget: Math.max(floor, target), pTarget: 70 };
+      if (atFloor && r.electricMW < aim) p = Math.max(c.pLow, p - 0.25);
+      else if (!atFloor || r.electricMW > o.target + o.tol / 2) p = Math.min(70, p + 0.25);
+      return { rodsTarget: Math.max(floor, target), pTarget: p };
     },
   };
 }
 
-/** Meets every order at any cost: no rod floor, drops pressure when out of rods, panics into AZ-5. */
+/** Meets every order at any cost: no rod floor, drops pressure when out of rods, panics into AZ-5 on fuel damage. */
 function greedy() {
   const c = OPS.greedy;
   let p = 70;
   return {
     /** @param {View} v @returns {Input} */
     think({ panel: r, order: o }) {
-      if (r.damageLamp || r.growthRate > LN2 / c.panicDoubling) return { scram: true };
+      if (r.damageLamp) return { scram: true };
       const target = Math.max(0, r.rodsTarget + rodMove(r, o, c));
       const short = o.target - r.electricMW > o.tol / 2, over = r.electricMW - o.target > o.tol / 2;
       if (target <= 0.5 && short) p = Math.max(55, p - 0.25);       // out of rods: more steam
@@ -120,18 +132,19 @@ function runShift(name, seed) {
   let input = {};
   const rec = {
     name, seed, outcome: 'survived', cause: '', hours: 0, reprimands: 0, minMargin: Infinity, maxX: 0,
-    lastPit: -Infinity, scramRods: NaN, scramX: NaN, rPeak: -Infinity, lastOrder: sh.order, kinds: { low: 0, urgent: 0 },
+    lastPit: -Infinity, scramRods: NaN, scramX: NaN, scramN: NaN, rPeak: -Infinity, lastOrder: sh.order, kinds: { low: 0, urgent: 0 },
     /** @type {string[]} */ lines: [],
   };
   let nextTrace = 0;
   while (!isOver(g) && s.clock < cap) {
-    if (g.ticks % LOOK === 0 && s.status === 'running') {
+    if (g.ticks % (OPS[name]?.look ?? LOOK) === 0 && s.status === 'running') {
       input = op.think({ panel: readouts(s), order: sh.order, rating: sh.rating, teletype });
       teletype = [];
-      if (input.scram) { rec.scramRods = margin(s); rec.scramX = s.X; }
+      if (input.scram) { rec.scramRods = margin(s); rec.scramX = s.X; rec.scramN = s.n; }
     } else input = {};
     const ev = tick(g, input);
     teletype.push(...ev.sim, ...ev.shift);
+    if (ev.sim.some((e) => e.type === 'trip')) { rec.scramRods = margin(s); rec.scramX = s.X; rec.scramN = s.n; }
     for (const e of ev.shift) {
       if (e.type === 'inspection' && e.report.reprimand) rec.reprimands++;
       if (e.type === 'order') { rec.lastOrder = e.order; if (e.order.kind !== 'follow') rec.kinds[e.order.kind]++; }
@@ -151,7 +164,8 @@ function runShift(name, seed) {
   rec.hours = s.clock / HOUR;
   if (s.status === 'meltdown') { rec.outcome = 'meltdown'; rec.cause = s.cause ?? ''; }
   else if (sh.status === 'sacked') rec.outcome = 'sacked';
-  else if (s.status === 'shutdown') rec.outcome = 'scram';
+  else if (s.status === 'shutdown') rec.outcome = s.tripped ? 'tripped' : 'scram';
+  rec.tripped = s.tripped;
   rec.met = sh.met; rec.missed = sh.missed; rec.rating = sh.rating;
   rec.afterPit = s.clock - rec.lastPit <= 3 * HOUR;
   return rec;
@@ -174,9 +188,9 @@ for (const name of ops) {
     all[name].push(r);
     const what = r.outcome === 'meltdown' ? `MELT ${r.cause.padEnd(6)}` : r.outcome.padEnd(11);
     let extra = '';
-    if (r.outcome === 'meltdown') extra = `${r.afterPit ? ' after pit' : ''}${isNaN(r.scramRods) ? '' : ` scram at ${f1(r.scramRods)} rods Xe ${r.scramX.toFixed(2)}`}`;
+    if (r.outcome === 'meltdown') extra = `${r.afterPit ? ' after pit' : ''}${isNaN(r.scramRods) ? '' : ` ${r.tripped ? 'trip' : 'scram'} at ${f1(r.scramRods)} rods Xe ${r.scramX.toFixed(2)} ${Math.round(100 * r.scramN)}% power`}`;
     else if (r.outcome === 'sacked') extra = ` last ${r.lastOrder.kind} ${r.lastOrder.target}±${r.lastOrder.tol}`;
-    else if (r.outcome === 'scram') extra = ` at ${f1(r.scramRods)} rods`;
+    else if (r.outcome === 'scram' || r.outcome === 'tripped') extra = ` at ${f1(r.scramRods)} rods Xe ${r.scramX.toFixed(2)} ${Math.round(100 * r.scramN)}% power`;
     console.log(`${name.padEnd(8)} seed ${String(r.seed).padStart(3)}: ${what} ${f1(r.hours).padStart(5)} h  orders ${r.met}/${r.missed}`
       + `  low ${r.kinds.low} urgent ${r.kinds.urgent}  reprimands ${r.reprimands}  min margin ${f1(r.minMargin)}  max Xe ${r.maxX.toFixed(2)}${extra}`);
     for (const line of r.lines) console.log(line);
@@ -186,21 +200,27 @@ for (const name of ops) {
 console.log(`\n${count} shifts each, cap ${hours} game h, ${JSON.stringify(overrides)}`);
 /** @type {[string, boolean][]} */
 const checks = [];
+/** @type {Record<string, number>} */
+const scores = {};
 for (const name of ops) {
   const rows = all[name], n = rows.length;
   const by = (/** @type {string} */ o) => rows.filter((r) => r.outcome === o);
   const melts = by('meltdown'), sacked = by('sacked');
   const hrs = rows.map((r) => r.hours);
+  // Score: hours on shift, 0 for a meltdown (DESIGN.md, "Losing and ending").
+  const score = rows.reduce((a, r) => a + (r.outcome === 'meltdown' ? 0 : r.hours), 0) / n;
   const met = rows.reduce((a, r) => a + r.met, 0), orders = rows.reduce((a, r) => a + r.met + r.missed, 0);
   console.log(`${name}: sacked ${sacked.length}, meltdown ${melts.length} (prompt ${melts.filter((r) => r.cause === 'prompt').length},`
     + ` fuel ${melts.filter((r) => r.cause === 'fuel').length}, after a pit ${melts.filter((r) => r.afterPit).length}),`
-    + ` scrammed ${by('scram').length}, survived ${by('survived').length};`
-    + ` hours median ${f1(median(hrs))} (${f1(Math.min(...hrs))}–${f1(Math.max(...hrs))}); orders met ${Math.round(100 * met / Math.max(1, orders))}%`);
+    + ` scrammed ${by('scram').length}, tripped ${by('tripped').length}, survived ${by('survived').length};`
+    + ` hours median ${f1(median(hrs))} (${f1(Math.min(...hrs))}–${f1(Math.max(...hrs))}); orders met ${Math.round(100 * met / Math.max(1, orders))}%; mean score ${f1(score)} h`);
+  scores[name] = score;
   if (name === 'cautious') {
     checks.push(['cautious: no meltdowns', melts.length === 0]);
-    checks.push(['cautious: ≥ 80% sacked before the cap', sacked.length >= 0.8 * n]);
-    checks.push(['cautious: median shift 12–36 h', median(hrs) >= 12 && median(hrs) <= 36]);
-    checks.push(['cautious: safety scrams ≤ 10%', by('scram').length <= 0.1 * n]);
+    checks.push(['cautious: ≥ 90% sacked before the cap', sacked.length >= 0.9 * n]);
+    checks.push(['cautious: median shift 12–48 h', median(hrs) >= 12 && median(hrs) <= 48]);
+    checks.push(['cautious: ≤ 15% sacked within 10 h', rows.filter((r) => r.hours < 10).length <= 0.15 * n]);
+    checks.push(['cautious: scrams and trips ≤ 10%', by('scram').length + by('tripped').length <= 0.1 * n]);
   } else if (name === 'greedy') {
     checks.push(['greedy: meltdown in 15–60%', melts.length >= 0.15 * n && melts.length <= 0.6 * n]);
     checks.push(['greedy: ≥ ⅔ of meltdowns after a pit', melts.length > 0 && melts.filter((r) => r.afterPit).length >= (2 / 3) * melts.length]);
@@ -208,6 +228,9 @@ for (const name of ops) {
     checks.push(['idle: all sacked', sacked.length === n]);
     checks.push(['idle: median ≤ 4 h, max ≤ 8 h', median(hrs) <= 4 && Math.max(...hrs) <= 8]);
   }
+}
+if ('cautious' in scores && 'greedy' in scores) {
+  checks.push(['obeying the rule pays on average (cautious mean score > greedy)', scores.cautious > scores.greedy]);
 }
 console.log('');
 for (const [what, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}  ${what}`);

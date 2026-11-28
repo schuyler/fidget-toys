@@ -63,7 +63,12 @@ export const ORDER_DEFAULTS = {
   // Order kinds: target range (MWe, multiples of 10) and hold (minutes)
   followMWe: [500, 990],
   followHold: [60, 180],
-  lowMWe: [250, 500],     // down to ~25% thermal: into the unstable region on purpose
+  lowMWe: [100, 400],     // down to ~10% thermal: well into the unstable region, on purpose
+  // ...but not at once: the floor of a low hold starts here and deepens through the
+  // shift, so the first pits are shallow enough to learn on.
+  lowStartMWe: 200,
+  lowDeepen: 50,          // MWe lower...
+  lowEvery: HOUR,         // ...every this long (the floor reaches lowMWe[0] after 2 h)
   lowHold: [240, 480],    // long enough to dig most of a xenon pit (peak ~10 h)
   urgentMWe: [800, 990],
   urgentHold: [60, 120],
@@ -104,6 +109,16 @@ export function tolerance(p, t) {
   return Math.max(p.tolMin, p.tolStart - p.tolStep * steps);
 }
 
+/**
+ * Target range of a low hold given at `t` (whole seconds): its floor deepens
+ * through the shift, down to lowMWe[0].
+ * @param {OrderParams} p @param {number} t @returns {number[]}
+ */
+export function lowRange(p, t) {
+  const steps = (t - t % p.lowEvery) / p.lowEvery;
+  return [Math.max(p.lowMWe[0], Math.min(p.lowMWe[1], p.lowStartMWe - p.lowDeepen * steps)), p.lowMWe[1]];
+}
+
 /** @param {Rng} rng @param {number[]} mwe */
 const pickTarget = (rng, [lo, hi]) => lo + 10 * int(rng, (hi - lo) / 10 + 1);
 
@@ -120,7 +135,7 @@ export function nextOrder(p, rng, prev) {
   // ranges doesn't shift every later order.
   const roll = int(rng, 1000);
   const draws = {
-    follow: pickTarget(rng, p.followMWe), low: pickTarget(rng, p.lowMWe), urgent: pickTarget(rng, p.urgentMWe),
+    follow: pickTarget(rng, p.followMWe), low: pickTarget(rng, lowRange(p, start)), urgent: pickTarget(rng, p.urgentMWe),
   };
   const holds = {
     follow: range(rng, p.followHold[0], p.followHold[1]),

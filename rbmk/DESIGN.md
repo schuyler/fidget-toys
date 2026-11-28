@@ -337,6 +337,37 @@ Maybe three: **Pace** (relaxed / standard / brisk: the time scales),
 **Dispatcher** (calm / demanding: order frequency and tolerances), and
 **Instruments** (full / 1986: whether the margin printout exists at all).
 
+## Two-player co-op (later)
+
+A possible later mode, in the style of Spaceteam: two players on separate
+devices, each with half the controls and half the instruments. Nothing is
+built for it yet, but steps 2 and 4 should keep it cheap.
+
+- **Networking is the repo's existing lockstep** (`multiplayer/lockstep.js`,
+  as Dot Army and Wooden Ships use it). Each device runs the whole
+  simulation, including the dispatcher, and only inputs are exchanged. Any
+  deterministic dispatcher works, seed-only or state-aware.
+- **Splitting the panel is presentation.** The adapter's `applyInput`
+  accepts rod inputs only from one seat and pressure inputs only from the
+  other. Each client draws only its own gauges.
+- **Needs a fixed tick.** `step(s, dt)` takes any dt today. Lockstep needs
+  both devices to step the same amount per tick (Wooden Ships uses 30 a
+  second), so `main.js` should drive the sim in fixed increments from the
+  start.
+- **Slow motion has to live in `sim.js`.** If `main.js` worked out the
+  slow-motion multiplier from the doubling time and passed a smaller dt,
+  two devices could disagree. Computed inside the sim from `r`, it's
+  deterministic.
+- **Floats are already safe.** The + − × ÷ / min / max rule gives the same
+  results on every engine, as in Wooden Ships.
+- **The game design is the open part (open).** Spaceteam works because
+  what you're told concerns your partner's controls. Here, for example,
+  the rod operator could have the dispatcher teletype and the margin
+  printout, and the pressure operator the period meter and the steam
+  gauge. Rods and pressure are coupled, so the two players have to talk.
+  The 1986 control room was also split between operators who each saw
+  only part of the picture.
+
 ## Order of work
 
 1. `sim.js` with tests: xenon pit timing, prompt-jump power, steam and
@@ -352,7 +383,7 @@ Maybe three: **Pace** (relaxed / standard / brisk: the time scales),
 8. `RULES.md`, the How to play card, links from the site index and
    `CLAUDE.md`, an e2e script.
 
-Later: the turbine-test order (pump coastdown), and plant efficiency if
+Later: the turbine-test order (pump coastdown), two-player co-op (above), and plant efficiency if
 pressure needs a reason not to sit at maximum.
 
 ## Open questions

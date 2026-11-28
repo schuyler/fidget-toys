@@ -313,7 +313,7 @@ function overlay() {
   if (paused) return { lines: ['PAUSED'], sub: 'tap to resume' };
   if (phase === 'over') {
     const w = game.winner;
-    const lines = w === DRAW ? ['BOTH', 'STRUCK'] : w === game.ships[YOU].side ? ['SHE', 'STRIKES!'] : ['YOU', 'STRUCK'];
+    const lines = w === DRAW ? ['BOTH', 'STRUCK'] : w === game.ships[YOU].side ? ['VICTORY!'] : ['DEFEAT!'];
     return {
       lines,
       color: w === DRAW ? COLORS.text : COLORS.players[w],

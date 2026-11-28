@@ -7,7 +7,8 @@
 // on anything the operator does: the same seed gives every player the same
 // shift, and the plan could be announced ahead. Order times are whole game
 // seconds, drawn as whole minutes. The rating is float state and follows the
-// same rule as sim.js: only + − × ÷, min, max and abs touch it.
+// same rule as sim.js: only + − × ÷, min, max and abs touch it, plus
+// Math.round and % on whole numbers (both exact).
 
 import { createRng, int, range } from './rng.js';
 import { margin } from './sim.js';

@@ -201,9 +201,18 @@ Getting upwind of your rival lets you steal their wind. **(open)**
 ## Winning
 
 - Each ship has **24 crew** (see Gunnery). A ship with none left **strikes her
-  colours** (surrenders), and the other side wins. Her flag comes down,
-  her sails are let fly (no drive), and she drifts on windage.
-- If both strike in the same tick, it's a draw.
+  colours** (surrenders). Her flag comes down, her rudder is lost and her
+  sails are let fly (no drive), so she drifts on windage with her bow
+  wherever it was.
+- **The game isn't over the moment a ship strikes.** Once one side has no
+  ship left afloat, the fight is decided, but the sea plays on: balls
+  already in the air still fly, and the end screen waits until nothing has
+  been in the air or firing for `endDelay` (3) seconds. Until then the
+  loser drifts and the winner can still steer, but nobody can fire.
+- The winner is whoever still has a ship afloat when the end screen
+  comes. A ball already in the air when a ship strikes can finish off the
+  other one too, so both ships strike and it's a draw. That, or both
+  striking on the same tick, is the only way to draw.
 - No time limit. **(open: one, if headless games show long standoffs
   with both ships running downwind)**
 
@@ -289,6 +298,7 @@ You're blue, and you have the whole screen.
 | `reload` | 5 s | Per side, in real seconds |
 | `traverse` | 20° | How far each gun can swing forward or aft of square |
 | `crewPerGun` | 3 | Crew = this × total guns; at 0 she strikes |
+| `endDelay` | 3 s | Real seconds with no ball in the air or gun firing, after the fight is decided, before the end screen |
 | `shallowsDrag` | 3 | Hull drags are multiplied by this in shallows |
 | `shadowRange`, `shadowCone`, `shadowFactor` | 160 m, 30°, 0.5 | Wind shadow: how far downwind, how wide, how much wind is left |
 | `startGap`, `startOffset`, `startSpeed` | 700 m, 60 m, 3 m/s | Where and how the ships start |
@@ -448,6 +458,9 @@ Each is a sketch, not a rule yet.
   | Square sea (45 × 45) | 100% | 87 s | 60% / 40% |
 
   - Games finish: no long standoffs, so no time limit yet.
+  - Lengths are to the moment the fight is decided, not the end screen,
+    which comes 3 s or more later. With balls allowed to land after a ship
+    strikes, a run of 40 hard-vs-hard games at the defaults had 5% draws.
   - The CPUs land about two thirds of their balls, because they fight
     at close range. People will do worse.
   - The side upwind at the first shift won only 30–43% of games, so the

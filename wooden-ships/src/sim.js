@@ -150,6 +150,8 @@ export const DEFAULTS = {
   traverse: 20,
   /** real seconds between guns in a ripple */
   ripple: 0.1,
+  /** real seconds the sea stays quiet (no ball in the air, no gun firing) before a finished fight is over */
+  endDelay: 3,
   /** metres between the two ships at the start */
   startGap: 700,
   /** metres each ship starts to one side of the centre line, so they pass rather than collide */
@@ -163,7 +165,7 @@ export const DEFAULTS = {
 
 export const DEEP = 0, SHALLOW = 1, LAND = 2;
 export const BLUE = 0, RED = 1;
-/** game.winner when both ships strike on the same tick */
+/** game.winner when every ship has struck */
 export const DRAW = 2;
 export const PORT = 0, STARBOARD = 1;
 
@@ -188,6 +190,7 @@ export const PORT = 0, STARBOARD = 1;
  *   W: number, H: number, seaW: number, seaH: number,
  *   corners: Uint8Array, wind: Wind,
  *   ships: Ship[], balls: Ball[], winner: number,
+ *   ending: number, quiet: number,
  *   stats: { fired: number[], hits: number[] },
  * }} Game
  * @typedef {{
@@ -218,7 +221,7 @@ export function createGame(overrides = {}) {
     params, rng, tick: 0, W, H, seaW, seaH,
     corners: new Uint8Array((W + 1) * (H + 1)),
     wind: { dir: 0, speed: 0, fromDir: 0, fromSpeed: 0, toDir: 0, toSpeed: 0, ease: 0, next: 0 },
-    ships: [], balls: [], winner: -1,
+    ships: [], balls: [], winner: -1, ending: -1, quiet: 0,
     stats: { fired: [0, 0], hits: [0, 0] },
   };
 
@@ -386,6 +389,7 @@ function smoothDiagonals(game, level) {
 export function applyInput(game, shipId, input) {
   const ship = game.ships[shipId];
   if (!ship || ship.struck || game.winner >= 0) return;
+  if (input.type === 'fire' && game.ending >= 0) return; // the fight is decided: no new shots
   if (input.type === 'rudder') {
     const v = Math.round(input.value);
     ship.rudder = Math.max(-100, Math.min(100, v || 0));
@@ -520,14 +524,26 @@ export function step(game) {
         ev.struck.push(ship.id);
       }
     }
-    if (ev.struck.length) {
-      const alive = new Set(game.ships.filter((s) => !s.struck).map((s) => s.side));
-      if (alive.size === 0) game.winner = DRAW;
-      else if (alive.size === 1) game.winner = [...alive][0];
+  }
+  if (ev.struck.length && game.ending < 0 && liveSides(game).size <= 1) game.ending = game.tick;
+  if (game.ending >= 0) {
+    // The fight is decided, but the sea plays on: balls already in the air can
+    // still land (and strike the other side too, which makes a draw), and the
+    // game is over only once nothing has been fired or in flight for endDelay.
+    const quiet = !game.balls.length && game.ships.every((s) => s.batteries.every((b) => b.firing <= 0));
+    game.quiet = quiet ? game.quiet + 1 : 0;
+    if (game.quiet >= Math.round(game.params.endDelay * game.params.tickRate)) {
+      const alive = liveSides(game);
+      game.winner = alive.size === 0 ? DRAW : [...alive][0];
     }
   }
   game.tick++;
   return ev;
+}
+
+/** Sides that still have a ship afloat (not struck). @param {Game} game */
+function liveSides(game) {
+  return new Set(game.ships.filter((s) => !s.struck).map((s) => s.side));
 }
 
 /** @param {Game} game @param {Events} ev */
@@ -797,7 +813,7 @@ export function stateHash(game) {
   let h = 0x811c9dc5;
   const mixInt = (/** @type {number} */ v) => { h = Math.imul(h ^ (v >>> 0), 16777619); };
   const mix = (/** @type {number} */ v) => { f[0] = v; mixInt(u[0]); mixInt(u[1]); };
-  mixInt(game.tick);
+  mixInt(game.tick); mixInt(game.ending); mixInt(game.quiet);
   mixInt(game.rng.state());
   mix(game.wind.dir); mix(game.wind.speed);
   for (const s of game.ships) {

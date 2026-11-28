@@ -65,7 +65,7 @@ let paused = false;
 let acc = 0;
 let overAt = 0;
 let gameSerial = 0;
-/** Your starboard side faces screen left (your ship is heading down the screen). */
+/** Your starboard side faces screen left (your ship is heading down the screen, which for an online guest, whose view is turned round, is north). */
 let leftIsStarboard = false;
 
 /**
@@ -110,6 +110,7 @@ function newGame(start = true, fixed) {
   if (net) net.ls = null; // the old game's lockstep is done; attachLockstep() makes the next
   ai = net ? null : createAI(RED, (d.seed * 7 + 3) >>> 0, { level: settings.mode === 'cpu' ? 'hard' : 'easy' });
   renderer.setSteering(/** @type {'drag'|'wheel'} */ (settings.steer));
+  renderer.setView({ flip: !!net && net.local === RED, local: you() });
   renderer.setGame(game);
   gameSerial++;
   acc = 0;
@@ -151,7 +152,7 @@ let lastRudder = 0;
 
 /** @param {boolean} [force] */
 function updateFacing(force = false) {
-  const s = isin(game.ships[you()].heading);
+  const s = isin(game.ships[you()].heading) * (renderer.view().flip ? -1 : 1); // > 0: heading down the screen
   if (force) leftIsStarboard = s > 0;
   else if (s > SWAP) leftIsStarboard = true;
   else if (s < -SWAP) leftIsStarboard = false;
@@ -183,6 +184,7 @@ function fire(button) {
  * The rudder the fingers (or keys) ask for, −1 … 1, positive to starboard.
  * Starboard rudder turns the ship clockwise on screen whatever her heading,
  * so the wheel and the keys need no flip: clockwise (or →) is starboard.
+ * The guest's turned view is a rotation, not a mirror, so that holds there too.
  * Drag mode is screen-relative instead: drag the way you want the bow to swing.
  */
 function wantedRudder() {
@@ -670,6 +672,7 @@ if (debug) {
     wind: { ...game.wind },
     ships: game.ships.map((s) => ({ x: s.x, y: s.y, heading: s.heading, rudder: s.rudder, crew: s.crew, struck: s.struck, reload: s.batteries.map((b) => b.reloadLeft) })),
     fired: [...game.stats.fired], sea: [game.seaW, game.seaH], view: renderer.view(),
+    screen: game.ships.map((s) => renderer.toScreen(s.x, s.y)), size: [innerWidth, innerHeight],
   });
   /** For browser tests: set a ship's fields, e.g. { x, y } to move her (she's left stopped unless vx/vy are given). */
   /** @type {any} */ (window).woodenShipsDebugSet = (/** @type {number} */ id, /** @type {Record<string, number>} */ fields) => {

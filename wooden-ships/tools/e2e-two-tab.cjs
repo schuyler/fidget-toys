@@ -42,13 +42,64 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
   check(/you are blue/.test(hc.overlay?.sub ?? ''), `host's countdown says blue (${hc.overlay?.sub})`);
   check(/you are red/.test(gc.overlay?.sub ?? ''), `guest's countdown says red (${gc.overlay?.sub})`);
   check(hc.status === 'playing' && gc.status === 'playing', `both sessions playing (${hc.status}/${gc.status})`);
+  let a, b;
   await Promise.all([host, guest].map((p) => p.waitForFunction(() => woodenShipsDebug().phase === 'play', null, { timeout: 8000 })));
+
+  // The guest's view is turned round: each player's ship starts in the
+  // lower half of their own screen.
+  [a, b] = await Promise.all([dbg(host), dbg(guest)]);
+  check(!a.view.flip && b.view.flip, `only the guest's view is turned round (${a.view.flip}/${b.view.flip})`);
+  check(a.screen[0].y > a.size[1] / 2, `host's ship starts in the lower half of the host's screen (y ${Math.round(a.screen[0].y)} of ${a.size[1]})`);
+  check(b.screen[1].y > b.size[1] / 2, `guest's ship starts in the lower half of the guest's screen (y ${Math.round(b.screen[1].y)} of ${b.size[1]})`);
+  check(b.screen[0].y < b.size[1] / 2, `host's ship is in the upper half of the guest's screen (y ${Math.round(b.screen[0].y)})`);
+  const out = (f) => path.join(process.env.SHOTS ?? os.tmpdir(), f);
+  await host.screenshot({ path: out('wooden-ships-net-host-start.png') });
+  await guest.screenshot({ path: out('wooden-ships-net-guest-start.png') });
+
+  // Each of the guest's fire buttons fires the battery that points to its
+  // side of the guest's (turned) screen. Red starts heading south, so an
+  // unturned button mapping would get this backwards.
+  const rad = (h) => (h * Math.PI * 2) / 65536;
+  /** The screen x of a battery's direction (port 0, starboard 1) on this screen. */
+  const screenDirX = (d, ship, battery) => {
+    const x = -Math.sin(rad(d.ships[ship].heading)) * (battery === 1 ? 1 : -1);
+    return d.view.flip ? -x : x;
+  };
+  for (const [btn, sideName] of [[0, 'left'], [1, 'right']]) {
+    const before = await dbg(guest);
+    const spot = before.buttons[btn];
+    await guest.mouse.click(spot.x, spot.y);
+    let fired = -1, d;
+    for (let i = 0; i < 30 && fired < 0; i++) {
+      await guest.waitForTimeout(100);
+      d = await dbg(guest);
+      fired = d.ships[1].reload.findIndex((r, k) => r > 0 && before.ships[1].reload[k] === 0);
+    }
+    const dx = fired >= 0 ? screenDirX(d, 1, fired) : NaN;
+    check(fired >= 0 && (btn === 0 ? dx < -0.5 : dx > 0.5),
+      `guest's ${sideName} button fires the battery facing screen ${sideName} (battery ${fired}, screen x ${dx.toFixed?.(2)})`);
+  }
+
+  // Drag right on the guest's screen: the bow swings toward screen right.
+  {
+    const d0 = await dbg(guest);
+    const bowX = (d) => Math.cos(rad(d.ships[1].heading)) * (d.view.flip ? -1 : 1);
+    const [w, h] = d0.size;
+    await guest.mouse.move(w / 2, h * 0.45);
+    await guest.mouse.down();
+    await guest.mouse.move(w / 2 + 60, h * 0.45, { steps: 4 });
+    await guest.waitForTimeout(1500);
+    const d1 = await dbg(guest);
+    await guest.mouse.up();
+    check(d1.ships[1].rudder > 0 && bowX(d1) > bowX(d0) + 0.05,
+      `guest's drag right swings the bow toward screen right (rudder ${d1.ships[1].rudder}, bow screen x ${bowX(d0).toFixed(2)} → ${bowX(d1).toFixed(2)})`);
+    for (let i = 0; i < 20 && (await dbg(guest)).ships[1].rudder !== 0; i++) await guest.waitForTimeout(100);
+  }
 
   // Each steers its own ship: host hard to starboard, guest hard to port.
   // Both tabs must see both rudders, and neither tab's key may move the other ship.
   await host.keyboard.down('ArrowRight');
   await guest.keyboard.down('ArrowLeft');
-  let a, b;
   for (let i = 0; i < 40; i++) {
     await host.waitForTimeout(100);
     [a, b] = await Promise.all([dbg(host), dbg(guest)]);
@@ -60,21 +111,25 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
   await guest.keyboard.up('ArrowLeft');
 
   // Each fires a broadside (Z): both tabs count a shot for each side.
+  const f0 = (await dbg(host)).fired;
   await host.keyboard.press('z');
   await host.waitForTimeout(300);
   for (let i = 0; i < 40; i++) {
     await host.waitForTimeout(100);
     [a, b] = await Promise.all([dbg(host), dbg(guest)]);
-    if (a.fired[0] > 0 && b.fired[0] > 0) break;
+    if (a.fired[0] > f0[0] && b.fired[0] > f0[0]) break;
   }
-  check(a.fired[0] > 0 && b.fired[0] > 0 && a.fired[1] === 0 && b.fired[1] === 0, `host's Z fires blue's guns only, on both tabs (fired ${a.fired}/${b.fired})`);
+  check(a.fired[0] > f0[0] && b.fired[0] > f0[0] && a.fired[1] === f0[1] && b.fired[1] === f0[1], `host's Z fires blue's guns only, on both tabs (fired ${f0} → ${a.fired}/${b.fired})`);
+  // The guest's buttons fired both sides above: wait out the reload.
+  await guest.waitForFunction(() => woodenShipsDebug().ships[1].reload.every((r) => r === 0), null, { timeout: 8000 });
+  const f1 = (await dbg(guest)).fired;
   await guest.keyboard.press('z');
   for (let i = 0; i < 40; i++) {
     await host.waitForTimeout(100);
     [a, b] = await Promise.all([dbg(host), dbg(guest)]);
-    if (a.fired[1] > 0 && b.fired[1] > 0) break;
+    if (a.fired[1] > f1[1] && b.fired[1] > f1[1]) break;
   }
-  check(a.fired[1] > 0 && b.fired[1] > 0, `guest's Z fires red's guns, on both tabs (fired ${a.fired}/${b.fired})`);
+  check(a.fired[1] > f1[1] && b.fired[1] > f1[1], `guest's Z fires red's guns, on both tabs (fired ${f1} → ${a.fired}/${b.fired})`);
 
   // A pause on the host stops the guest too, with WAITING; resuming carries on.
   await host.click('#btn-menu');
@@ -102,10 +157,9 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
       `ticks ${a.tick}/${b.tick}: ${shared.length} shared ticks, ${differ.length} differ${differ.length ? ` (first ${differ[0]})` : ''}, desync ${a.desync}/${b.desync}`);
   }
 
-  const out = (f) => path.join(os.tmpdir(), f);
   await host.screenshot({ path: out('wooden-ships-net-host.png') });
   await guest.screenshot({ path: out('wooden-ships-net-guest.png') });
-  console.log(`screenshots in ${os.tmpdir()}`);
+  console.log(`screenshots in ${process.env.SHOTS ?? os.tmpdir()}`);
 
   // Through a relay: leaving tells the other side (BroadcastChannel has no such event).
   if (RELAY !== 'bc') {

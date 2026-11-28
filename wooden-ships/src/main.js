@@ -5,7 +5,7 @@ import { createAI } from './ai.js';
 import { createRenderer, loadAssets, COLORS } from './render.js';
 import { createAudio } from './audio.js';
 
-// The settings players see: five simple choices, each a preset. The tuning
+// The settings players see: six simple choices, each a preset. The tuning
 // parameters stay at the sim's DEFAULTS.
 const CHOICES = {
   mode: ['cpu-easy', 'cpu'],
@@ -13,15 +13,16 @@ const CHOICES = {
   wind: { steady: 'steady', shifty: 'shifty', gusty: 'gusty' },
   shadow: { off: false, on: true },
   crew: { '2': 2, '3': 3, '5': 5 },
+  steer: { drag: 'drag', wheel: 'wheel' },
 };
 const SETTINGS_KEY = 'wooden-ships-settings-v1';
-const defaultSettings = { mode: 'cpu-easy', islands: 'some', wind: 'shifty', shadow: 'on', crew: '3' };
+const defaultSettings = { mode: 'cpu-easy', islands: 'some', wind: 'shifty', shadow: 'on', crew: '3', steer: 'drag' };
 /** @param {any} raw */
 function sanitize(raw) {
   const out = { ...defaultSettings };
   if (!raw || typeof raw !== 'object') return out;
   if (CHOICES.mode.includes(raw.mode)) out.mode = raw.mode;
-  for (const k of /** @type {const} */ (['islands', 'wind', 'shadow', 'crew'])) {
+  for (const k of /** @type {const} */ (['islands', 'wind', 'shadow', 'crew', 'steer'])) {
     if (typeof raw[k] === 'string' && raw[k] in CHOICES[k]) out[k] = raw[k];
   }
   return out;
@@ -36,6 +37,8 @@ const debug = query.has('debug');
 const YOU = 0;
 /** Pixels of sideways drag for full rudder: about a thumb's width. */
 const FULL_LOCK_PX = 48;
+/** Wheel mode: how far the wheel turns, either way, for full rudder (a quarter turn). */
+const WHEEL_LOCK = Math.PI / 2;
 /** The fire buttons and steering swap sides only once the bow is this far past straight across the screen. */
 const SWAP = isin(deg(15));
 
@@ -69,10 +72,12 @@ function newGame(start = true) {
     crewPerGun: CHOICES.crew[/** @type {'2'|'3'|'5'} */ (settings.crew)],
   });
   ai = createAI(RED, (seed * 7 + 3) >>> 0, { level: settings.mode === 'cpu' ? 'hard' : 'easy' });
+  renderer.setSteering(/** @type {'drag'|'wheel'} */ (settings.steer));
   renderer.setGame(game);
   gameSerial++;
   acc = 0;
   steering.clear();
+  wheelGrip = null;
   keys.clear();
   pressed.clear();
   updateFacing(true);
@@ -87,15 +92,23 @@ function newGame(start = true) {
 }
 
 // ---------------------------------------------------------------------------
-// Input: drag sideways anywhere to steer; two fire buttons in the corners.
+// Input. Drag mode: drag sideways anywhere to steer. Wheel mode: drag round
+// the wheel at the bottom. Either way the rudder centres when you let go, and
+// two fire buttons sit along the bottom of the screen.
 
 /** @type {Map<number, {x0: number, cur: number, flip: boolean}>} pointers steering, with where each started and how far it has dragged */
 const steering = new Map();
 /** @type {Map<number, number>} pointers holding a fire button → button index */
 const pressed = new Map();
+/**
+ * Wheel mode: the pointer turning the wheel, the angle it was last seen at
+ * round the wheel's hub, and how far it has turned the wheel (radians,
+ * clockwise on screen positive, clamped to ±WHEEL_LOCK).
+ * @type {{id: number, last: number, turn: number}|null}
+ */
+let wheelGrip = null;
 /** @type {Set<string>} */
 const keys = new Set();
-let keyFlip = false;
 let lastRudder = 0;
 
 /** @param {boolean} [force] */
@@ -115,14 +128,33 @@ function fire(button) {
   applyInput(game, YOU, { type: 'fire', battery: batteryFor(button) });
 }
 
-/** The rudder the fingers (or keys) ask for, −1 … 1. Drag the way you want the bow to swing. */
+/**
+ * The rudder the fingers (or keys) ask for, −1 … 1, positive to starboard.
+ * Starboard rudder turns the ship clockwise on screen whatever her heading,
+ * so the wheel and the keys need no flip: clockwise (or →) is starboard.
+ * Drag mode is screen-relative instead: drag the way you want the bow to swing.
+ */
 function wantedRudder() {
+  if (wheelGrip) return wheelGrip.turn / WHEEL_LOCK;
   for (const [, s] of steering) {
     const d = s.cur / FULL_LOCK_PX;
     return Math.max(-1, Math.min(1, s.flip ? -d : d));
   }
-  const k = (keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0);
-  return keyFlip ? -k : k;
+  return (keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0);
+}
+
+/** Wheel mode: the pointer's angle round the wheel's hub, or null too near the hub to tell. @param {PointerEvent} e */
+function wheelAngle(e) {
+  const w = renderer.wheelSpot();
+  if (!w) return null;
+  const dx = e.clientX - w.x, dy = e.clientY - w.y;
+  return Math.hypot(dx, dy) < w.r * 0.2 ? null : Math.atan2(dy, dx);
+}
+
+/** Is this press on the wheel (spokes and handles included)? @param {PointerEvent} e */
+function onWheel(e) {
+  const w = renderer.wheelSpot();
+  return !!w && Math.hypot(e.clientX - w.x, e.clientY - w.y) < w.r * 1.25;
 }
 
 function syncRudder() {
@@ -157,6 +189,14 @@ canvas.addEventListener('pointerdown', (e) => {
     fire(b);
     return;
   }
+  if (settings.steer === 'wheel') {
+    if (!wheelGrip && onWheel(e)) {
+      canvas.setPointerCapture?.(e.pointerId);
+      // Grabbing the hub itself gives no angle yet; the first move away from it sets one.
+      wheelGrip = { id: e.pointerId, last: wheelAngle(e) ?? NaN, turn: 0 };
+    }
+    return;
+  }
   if (steering.size === 0) {
     canvas.setPointerCapture?.(e.pointerId);
     steering.set(e.pointerId, { x0: e.clientX, cur: 0, flip: leftIsStarboard });
@@ -165,8 +205,23 @@ canvas.addEventListener('pointerdown', (e) => {
 canvas.addEventListener('pointermove', (e) => {
   const s = steering.get(e.pointerId);
   if (s) s.cur = e.clientX - s.x0;
+  if (wheelGrip && wheelGrip.id === e.pointerId) {
+    const a = wheelAngle(e);
+    if (a === null) return;
+    if (!Number.isNaN(wheelGrip.last)) {
+      let d = a - wheelGrip.last; // the short way round, so crossing ±π doesn't jump a whole turn
+      if (d > Math.PI) d -= 2 * Math.PI;
+      else if (d < -Math.PI) d += 2 * Math.PI;
+      wheelGrip.turn = Math.max(-WHEEL_LOCK, Math.min(WHEEL_LOCK, wheelGrip.turn + d));
+    }
+    wheelGrip.last = a;
+  }
 });
-const lift = (/** @type {PointerEvent} */ e) => { steering.delete(e.pointerId); pressed.delete(e.pointerId); };
+const lift = (/** @type {PointerEvent} */ e) => {
+  steering.delete(e.pointerId);
+  pressed.delete(e.pointerId);
+  if (wheelGrip && wheelGrip.id === e.pointerId) wheelGrip = null; // let go and the wheel spins back to centre
+};
 canvas.addEventListener('pointerup', lift);
 canvas.addEventListener('pointercancel', lift);
 
@@ -177,7 +232,6 @@ window.addEventListener('keydown', (e) => {
   if (document.querySelector('dialog[open]')) return;
   const k = KEYMAP[e.key];
   if (k) {
-    if (!keys.has('left') && !keys.has('right')) keyFlip = leftIsStarboard;
     keys.add(k);
     e.preventDefault();
   } else if (!e.repeat && (e.key === 'z' || e.key === 'Z' || e.key === 'q' || e.key === 'Q')) fire(0);
@@ -220,10 +274,12 @@ function frame(/** @type {number} */ now) {
     return { ...s, battery: batteryFor(i), reload: 1 - bat.reloadLeft / reload, firing: bat.firing > 0, pressed: held.has(i), label: i === 0 ? 'left' : 'right' };
   });
   const r = wantedRudder();
-  renderer.draw(phase === 'play' && !paused ? acc / tickMs : 1, paused ? 0 : dt, {
+  const live = phase === 'play' && !paused;
+  renderer.draw(live ? acc / tickMs : 1, paused ? 0 : dt, {
     you: YOU,
     buttons: phase === 'menu' ? [] : buttons,
-    rudder: steering.size && phase === 'play' ? r : null,
+    rudder: steering.size && live ? r : null,
+    wheel: phase === 'menu' ? null : { turn: live ? r * WHEEL_LOCK : 0, held: !!wheelGrip },
     overlay: overlay(),
     timeScale: game.params.timeScale,
   });
@@ -251,7 +307,8 @@ function tick() {
 
 function overlay() {
   if (phase === 'countdown' && !paused) {
-    return { lines: [String(Math.ceil(countdown))], sub: 'you are blue · drag to steer, corners to fire' };
+    const how = settings.steer === 'wheel' ? 'turn the wheel to steer, cannons to fire' : 'drag to steer, buttons to fire';
+    return { lines: [String(Math.ceil(countdown))], sub: `you are blue · ${how}` };
   }
   if (paused) return { lines: ['PAUSED'], sub: 'tap to resume' };
   if (phase === 'over') {
@@ -366,6 +423,7 @@ muteBtn.addEventListener('click', () => { audio.setMuted(!audio.muted); syncMute
 if (debug) {
   /** @type {any} */ (window).woodenShipsDebug = () => ({
     phase, tick: game.tick, winner: game.winner, paused, leftIsStarboard,
+    buttons: renderer.buttonSpots(), wheel: renderer.wheelSpot(),
     wind: { ...game.wind },
     ships: game.ships.map((s) => ({ x: s.x, y: s.y, heading: s.heading, rudder: s.rudder, crew: s.crew, struck: s.struck, reload: s.batteries.map((b) => b.reloadLeft) })),
     fired: [...game.stats.fired], sea: [game.seaW, game.seaH], view: renderer.view(),

@@ -92,6 +92,15 @@ export function createRenderer(canvas, assets) {
   /** @type {{x: number, y: number, len: number, life: number}[]} */ let streaks = [];
   let shake = 0;
   let time = 0;
+  /** @type {'drag'|'wheel'} */ let steer = 'drag';
+  /** the wheel's drawn turn (radians), easing back to centre after it's let go */
+  let wheelShown = 0;
+
+  /** Drag steering, or a wheel at the bottom of the screen. @param {'drag'|'wheel'} mode */
+  function setSteering(mode) {
+    steer = mode;
+    wheelShown = 0;
+  }
 
   /** @param {Game} g */
   function setGame(g) {
@@ -243,7 +252,9 @@ export function createRenderer(canvas, assets) {
     tx += Math.max(-vw * 0.2, Math.min(vw * 0.2, ship.vx * ts * 1.5));
     ty += Math.max(-vh * 0.2, Math.min(vh * 0.2, ship.vy * ts * 1.5));
     tx = Math.max(me.x - vw * 0.3, Math.min(me.x + vw * 0.3, tx));
-    ty = Math.max(me.y - vh * 0.3, Math.min(me.y + vh * 0.3, ty));
+    // Your ship may sit high on the screen but not low, where the controls are.
+    const below = Math.max(0.1, Math.min(0.3, (controlsTop() - 50) / ch - 0.5));
+    ty = Math.max(me.y - vh * below, Math.min(me.y + vh * 0.3, ty));
     if (!camReady) { camX = tx; camY = ty; camReady = true; }
     const k = 1 - Math.exp(-dt * 2.5);
     camX += (tx - camX) * k;
@@ -303,7 +314,7 @@ export function createRenderer(canvas, assets) {
   /**
    * @param {number} alpha 0–1 between the previous tick and this one
    * @param {number} dt real seconds since the last frame
-   * @param {{ you: number, buttons: FireButton[], rudder: number|null, overlay: Overlay|null, timeScale: number }} ui
+   * @param {{ you: number, buttons: FireButton[], rudder: number|null, wheel: {turn: number, held: boolean}|null, overlay: Overlay|null, timeScale: number }} ui
    */
   function draw(alpha, dt, ui) {
     if (!game) return;
@@ -337,8 +348,9 @@ export function createRenderer(canvas, assets) {
     drawEnemyArrow(poses, ui.you);
     drawCompass();
     drawCrew(ui.you);
+    if (steer === 'wheel' && ui.wheel) drawWheel(ui.wheel, dt);
     for (const b of ui.buttons) drawButton(b, me);
-    if (ui.rudder !== null) drawRudder(ui.rudder);
+    if (ui.rudder !== null && steer === 'drag') drawRudder(ui.rudder);
     if (ui.overlay) drawOverlay(ui.overlay);
   }
 
@@ -561,9 +573,8 @@ export function createRenderer(canvas, assets) {
     const ex = sx(f.x), ey = sy(f.y);
     const pad = (foe.type.length / 2) * scale;
     if (ex > -pad && ey > -pad && ex < cw + pad && ey < ch + pad) return;
-    const r = buttonSpots()[0].r;
     const left = 24 + safe.left, right = cw - 24 - safe.right;
-    const top = 104 + safe.top, bottom = ch - 40 - 2 * r - safe.bottom;
+    const top = 104 + safe.top, bottom = controlsTop() - 18;
     const cx = cw / 2, cy = (top + bottom) / 2;
     const dx = ex - cx, dy = ey - cy;
     let t = Infinity;
@@ -679,7 +690,19 @@ export function createRenderer(canvas, assets) {
     ctx.beginPath();
     ctx.arc(b.x, b.y, b.r - 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, b.reload));
     ctx.stroke();
-    if (ship) {
+    if (ship && steer === 'wheel') {
+      // A cannon, muzzle the way that side's guns point. It runs in when it
+      // fires and out again as it reloads.
+      const d = batteryDir(ship, b.battery);
+      const a = Math.atan2(d.y, d.x);
+      const cr = assets.atlas.get('cannon');
+      const w = b.r * 1.25, h = cr ? (w * cr.h) / cr.w : w * 0.55;
+      const back = (1 - Math.min(1, b.reload)) * b.r * 0.3;
+      ctx.translate(b.x, b.y);
+      ctx.rotate(a);
+      ctx.globalAlpha = ready ? 1 : 0.7;
+      sprite('cannon', -w * 0.45 - back, -h / 2, w, h); // the sprite's muzzle points right
+    } else if (ship) {
       const d = batteryDir(ship, b.battery);
       const a = Math.atan2(d.y, d.x);
       ctx.translate(b.x, b.y);
@@ -789,15 +812,112 @@ export function createRenderer(canvas, assets) {
     });
   }
 
-  /** Where the two fire buttons go: the bottom corners, clear of the home indicator. */
+  /** The wheel's hub and radius (to the rim; the handles stick out past it), or null in drag mode. */
+  function wheelSpot() {
+    if (steer !== 'wheel') return null;
+    const r = Math.max(44, Math.min(68, Math.min(cw, ch) * 0.12));
+    return { x: cw / 2, y: ch - 16 - r * 1.2 - safe.bottom, r };
+  }
+
+  /**
+   * Where the two fire buttons go. Drag mode: along the bottom, in the
+   * corners on a narrow screen but no more than 200 px either side of the
+   * middle on a wide one. Wheel mode: either side of the wheel.
+   */
   function buttonSpots() {
     const r = Math.max(30, Math.min(44, Math.min(cw, ch) * 0.1));
+    const w = wheelSpot();
+    if (w) {
+      const off = w.r * 1.2 + 14 + r;
+      return [{ x: w.x - off, y: w.y, r }, { x: w.x + off, y: w.y, r }];
+    }
     const y = ch - 22 - r - safe.bottom;
-    return [{ x: 16 + safe.left + r, y, r }, { x: cw - 16 - safe.right - r, y, r }];
+    const lx = Math.max(16 + safe.left + r, cw / 2 - 200), rx = Math.min(cw - 16 - safe.right - r, cw / 2 + 200);
+    return [{ x: lx, y, r }, { x: rx, y, r }];
+  }
+
+  /** The top of the controls along the bottom of the screen, in screen pixels. */
+  function controlsTop() {
+    const w = wheelSpot();
+    const b = buttonSpots()[0];
+    return Math.min(b.y - b.r - 14, w ? w.y - w.r * 1.2 : Infinity);
+  }
+
+  /**
+   * The ship's wheel: eight spokes through a rim, with the king spoke (the
+   * one that's straight up when the rudder is centred) wrapped in pale
+   * line. While it's held it turns with the finger; let go and it spins
+   * back to centre.
+   * @param {{turn: number, held: boolean}} wh @param {number} dt
+   */
+  function drawWheel(wh, dt) {
+    const spot = wheelSpot();
+    if (!spot) return;
+    if (wh.held) wheelShown = wh.turn;
+    else wheelShown += (wh.turn - wheelShown) * (1 - Math.exp(-dt * 14));
+    const { x, y, r } = spot;
+    const wood = '#9a6533', dark = '#4a2c14';
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.globalAlpha = wh.held ? 1 : 0.85;
+    // a faint plate behind it, so it reads over sand as well as sea
+    ctx.fillStyle = 'rgba(13,16,32,0.35)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.rotate(wheelShown);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 8; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 4;
+      const c = Math.cos(a), s = Math.sin(a);
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = r * 0.13 + 2;
+      ctx.beginPath();
+      ctx.moveTo(c * r * 0.15, s * r * 0.15);
+      ctx.lineTo(c * r * 1.08, s * r * 1.08);
+      ctx.stroke();
+      ctx.strokeStyle = wood;
+      ctx.lineWidth = r * 0.13;
+      ctx.stroke();
+      // handle
+      ctx.fillStyle = dark;
+      ctx.beginPath();
+      ctx.arc(c * r * 1.08, s * r * 1.08, r * 0.1 + 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = i === 0 ? '#f1e6c8' : wood; // the king spoke's handle is wrapped
+      ctx.beginPath();
+      ctx.arc(c * r * 1.08, s * r * 1.08, r * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // rim
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = r * 0.16 + 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.78, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = wood;
+    ctx.lineWidth = r * 0.16;
+    ctx.stroke();
+    // the king spoke's turk's head, on the rim
+    ctx.strokeStyle = '#f1e6c8';
+    ctx.lineWidth = r * 0.16;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.78, -Math.PI / 2 - 0.09, -Math.PI / 2 + 0.09);
+    ctx.stroke();
+    // hub
+    ctx.fillStyle = dark;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#c9a24a';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   return {
-    setGame, layout, onTick, draw, buttonSpots,
+    setGame, setSteering, layout, onTick, draw, buttonSpots, wheelSpot,
     /** The sea on screen, in metres, and the enemy arrow if one is showing (for tests). */
     view() {
       return { x: -ox / scale, y: -oy / scale, w: cw / scale, h: ch / scale, arrow };

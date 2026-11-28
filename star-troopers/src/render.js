@@ -40,9 +40,24 @@ const BASE_MARK = '#8a91b8';
 /** The figure's longest side, in hex radii; the disc is 1.12 across. */
 const ICON_FILL = 0.78;
 const ICON = { compact: 'trooper', orrin: 'trooper', vell: 'vell' };
+/**
+ * Terrain tiles: three drawings per type, each filling a hex (200 units across
+ * is two hex radii). A cell picks one, and whether to mirror it, from its index,
+ * so a patch of forest isn't stamped. They are side-view pictures, so they are
+ * mirrored but never rotated. Open ground and anything not listed keep the
+ * plain fill (and the old marks, if a tile hasn't loaded).
+ */
+const TILE = {
+  [BRUSH]: { files: ['brush1', 'brush2', 'brush3'], tint: '#4a8a64' },
+  [HIGH]: { files: ['high1', 'high2', 'high3'], tint: '#6676b0' },
+  [ROCK]: { files: ['rock1', 'rock2', 'rock3'], tint: '#5b6491' },
+  [RUINS]: { files: ['ruins1', 'ruins2', 'ruins3'], tint: '#8e7d5f' },
+};
 /** @type {Record<string, string>} */ const artText = {};
 /** @type {Record<string, HTMLImageElement>} */ const artImg = {};
-for (const k of Object.keys(ART)) fetch(`art/${k}.svg`).then((r) => r.text()).then((t) => { artText[k] = t; }).catch(() => {});
+const load = (/** @type {string} */ key, /** @type {string} */ path) => fetch(path).then((r) => r.text()).then((t) => { artText[key] = t; }).catch(() => {});
+for (const k of Object.keys(ART)) load(k, `art/${k}.svg`);
+for (const t of Object.values(TILE)) for (const f of t.files) load(f, `art/terrain/${f}.svg`);
 /** The tinted image, or null while it is still loading. */
 function tinted(/** @type {string} */ key, /** @type {string} */ col) {
   const id = key + col;
@@ -50,7 +65,7 @@ function tinted(/** @type {string} */ key, /** @type {string} */ col) {
   if (!im) {
     const t = artText[key];
     if (!t) return null;
-    const svg = t.replace('color="#111"', `color="${col}"`).replace('width="180" height="180"', 'width="720" height="720"');
+    const svg = t.replace('color="#111"', `color="${col}"`).replace(/width="\d+" height="\d+"/, 'width="720" height="720"');
     im = new Image();
     im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     artImg[id] = im;
@@ -194,6 +209,21 @@ export function createRenderer(canvas) {
     return true;
   }
 
+  /** Draw cell `i`'s terrain tile on its hex; false if the type has none or it is still loading. */
+  function drawTile(/** @type {number} */ t, /** @type {number} */ i, /** @type {number} */ x, /** @type {number} */ y) {
+    const d = /** @type {Record<number, { files: string[], tint: string }>} */ (TILE)[t];
+    if (!d) return false;
+    const h = Math.imul(i + 1, 2654435761) >>> 0;
+    const im = tinted(d.files[(h >>> 8) % d.files.length], d.tint);
+    if (!im) return false;
+    ctx.save();
+    ctx.translate(x, y);
+    if ((h >>> 5) & 1) ctx.scale(-1, 1);
+    ctx.drawImage(im, -size, -size, 2 * size, 2 * size);
+    ctx.restore();
+    return true;
+  }
+
   function drawBoard(/** @type {Scene} */ scene) {
     if (!game) return;
     const g = game;
@@ -205,8 +235,9 @@ export function createRenderer(canvas) {
       hexPath(x, y, size * (t === ROCK ? 1.0 : 0.94));
       ctx.fillStyle = TERRAIN[t];
       ctx.fill();
-      // A victory hex's terrain art is the base, drawn like the other terrain marks.
-      if (!(vic.has(i) && drawArt('base', BASE_MARK, x, y, size * 1.1))) drawTerrainMark(t, x, y);
+      // Terrain art: a victory hex is the base, anything else its tile. Until the art
+      // has loaded (or if it fails to), the plain marks below are drawn instead.
+      if (!(vic.has(i) && drawArt('base', BASE_MARK, x, y, size * 1.1)) && !drawTile(t, i, x, y)) drawTerrainMark(t, x, y);
       if (scene.sight && !scene.sight[i] && t !== ROCK) {
         hexPath(x, y, size * 0.94);
         ctx.fillStyle = 'rgba(5,7,16,0.45)';

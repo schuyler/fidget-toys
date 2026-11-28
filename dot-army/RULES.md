@@ -242,7 +242,7 @@ never goes back to neutral, so at least one player always owns a spawn.
   the other player would be left waiting).
 - A spawn you own that's being drained by the enemy throbs: its meter
   ring swells and glows until the attack stops.
-- The win screen shows each side's totals: dots made, kills, losses,
+- The win screen shows each side's totals: dots made, kills,
   dots thrown at spawns, spawns captured and biggest army.
 
 ## Settings

@@ -677,10 +677,7 @@ export function createRenderer(canvas, assets) {
     ctx.save();
     const ready = b.reload >= 1 && !b.firing && ship && !ship.struck;
     ctx.globalAlpha = ready ? 0.9 : 0.6;
-    ctx.fillStyle = b.pressed ? 'rgba(255,255,255,0.35)' : 'rgba(13,16,32,0.55)';
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-    ctx.fill();
+    pool(b.x, b.y, b.r * 1.3, b.pressed ? '255,255,255' : '13,16,32', b.pressed ? 0.4 : 0.26);
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(255,255,255,0.18)';
     ctx.beginPath();
@@ -740,6 +737,23 @@ export function createRenderer(canvas, assets) {
     ctx.arc(cw / 2 + rudder * (w / 2), y, 6, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+  }
+
+  /**
+   * A soft disc of colour behind a control: even in the middle, fading to
+   * nothing at its edge, so it has no hard rim.
+   * @param {number} x @param {number} y @param {number} r outer radius
+   * @param {string} rgb "r,g,b" @param {number} a alpha in the middle
+   */
+  function pool(x, y, r, rgb, a) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${rgb},${a})`);
+    g.addColorStop(0.6, `rgba(${rgb},${a * 0.85})`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   /** @param {number} x @param {number} y @param {number} w @param {number} h @param {number} r */
@@ -821,18 +835,19 @@ export function createRenderer(canvas, assets) {
 
   /**
    * Where the two fire buttons go. Drag mode: along the bottom, in the
-   * corners on a narrow screen but no more than 200 px either side of the
-   * middle on a wide one. Wheel mode: either side of the wheel.
+   * corners on a narrow screen but no more than 240 px either side of the
+   * middle on a wide one. Wheel mode: either side of the wheel, a little
+   * way out from it, but never off the screen.
    */
   function buttonSpots() {
     const r = Math.max(30, Math.min(44, Math.min(cw, ch) * 0.1));
     const w = wheelSpot();
     if (w) {
-      const off = w.r * 1.2 + 14 + r;
+      const off = Math.min(w.r * 1.2 + 36 + r, cw / 2 - 16 - Math.max(safe.left, safe.right) - r);
       return [{ x: w.x - off, y: w.y, r }, { x: w.x + off, y: w.y, r }];
     }
     const y = ch - 22 - r - safe.bottom;
-    const lx = Math.max(16 + safe.left + r, cw / 2 - 200), rx = Math.min(cw - 16 - safe.right - r, cw / 2 + 200);
+    const lx = Math.max(16 + safe.left + r, cw / 2 - 240), rx = Math.min(cw - 16 - safe.right - r, cw / 2 + 240);
     return [{ x: lx, y, r }, { x: rx, y, r }];
   }
 
@@ -860,11 +875,8 @@ export function createRenderer(canvas, assets) {
     ctx.save();
     ctx.translate(x, y);
     ctx.globalAlpha = wh.held ? 1 : 0.85;
-    // a faint plate behind it, so it reads over sand as well as sea
-    ctx.fillStyle = 'rgba(13,16,32,0.35)';
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 1.22, 0, Math.PI * 2);
-    ctx.fill();
+    // a faint pool of shade behind it, so it reads over sand as well as sea
+    pool(0, 0, r * 1.4, '13,16,32', 0.24);
     ctx.rotate(wheelShown);
     ctx.lineCap = 'round';
     for (let i = 0; i < 8; i++) {

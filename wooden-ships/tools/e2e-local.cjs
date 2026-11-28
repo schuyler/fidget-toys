@@ -76,9 +76,9 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     await p.waitForTimeout(150);
     check(keyed.ships[0].rudder === 100 && (await dbg(p)).ships[0].rudder === 0, `${vp.width}x${vp.height}: → is starboard rudder (got ${keyed.ships[0].rudder}), and centres on release`);
 
-    // The buttons sit no more than 200 px either side of the middle.
+    // The buttons sit no more than 240 px either side of the middle.
     const spots = before.buttons;
-    check(spots[1].x - spots[0].x <= 400.5, `${vp.width}x${vp.height}: fire buttons ${Math.round(spots[1].x - spots[0].x)} px apart`);
+    check(spots[1].x - spots[0].x <= 480.5, `${vp.width}x${vp.height}: fire buttons ${Math.round(spots[1].x - spots[0].x)} px apart`);
 
     // Left fire button fires the battery facing screen left.
     const pre = await dbg(p);

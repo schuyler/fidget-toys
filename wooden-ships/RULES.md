@@ -246,7 +246,7 @@ You're blue, and you have the whole screen.
 - **Fire:** two buttons along the bottom, **left** and **right**
   as *you* see the screen, not port and starboard. On a narrow screen
   they're in the corners; on a wide one they come in to no more than
-  200 px either side of the middle, so they're never a long reach apart. The left button
+  240 px either side of the middle, so they're never a long reach apart. The left button
   fires whichever broadside is facing your left right now. Each button
   shows a small arrow pointing the way its guns point.
   - So you never have to work out port and starboard when your ship is

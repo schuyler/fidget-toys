@@ -137,12 +137,15 @@ dC/dt = λ · (n − C)          λ ≈ 0.08 /s
 
 ```
 T_sat(P)  ≈ 270 + 1.0 · (P − 55) °C        steam tables: 55 bar ≈ 270, 70 ≈ 286, 80 ≈ 295
-alpha_eq  = alphaMax · n / (n + n0) − kP · (P − 70)    clamped to [0, alphaMax]
+alpha_eq  = alphaMax · (n / flow) / (n / flow + n0) − kP · (P − 70)    clamped to [0, alphaMax]
 alpha     → alpha_eq   with τ ≈ 2 s
 Tf_eq     = T_sat(P) + 600 · n / h(alpha)
 Tf        → Tf_eq      with τ ≈ 5 s
 ```
 
+- **`flow`** is main-pump flow, fixed at 1.0 in the first version. It's
+  there so a later turbine-test order (pumps coasting down → less flow →
+  more steam at the same power) needs no change to the physics.
 - **Why `n / (n + n0)`:** steam rises steeply with power at low power and
   flattens near full power. Paired with Doppler (linear in power), it
   makes the **power coefficient positive below roughly 25–35% power** and
@@ -159,11 +162,10 @@ Tf        → Tf_eq      with τ ≈ 5 s
     `h(alpha)` collapses, fuel temperature spikes, and damage builds. That
     sets a floor on pressure at high power.
   - Above ~78 bar the relief valves lift: a rating penalty and a hard cap.
-- **Plant efficiency rises with steam pressure.** MWe = MWt × η(P), with
-  η ≈ 0.31 at 70 bar, a little higher at 80 and lower at 55. This is
-  where "hotter is more efficient" is actually true: the turbine, not the
-  reactor. Exaggerate it slightly so a high order is cheaper at high
-  pressure. **(open: whether it's worth the extra concept)**
+- **Plant efficiency is fixed** at ~31%: MWe = MWt × 0.31. (Real plant
+  efficiency does rise with steam pressure. That coupling is left out for
+  now because pressure already does three jobs. If playtesting shows
+  everyone parks at maximum pressure, it's the first thing to add.)
 
 ## Xenon
 
@@ -198,9 +200,8 @@ dX/dt = yX · n + λI · I − λX · X − σ · n · X
   30 rods it's dull and safe. Scrammed from 5 rods in a xenon pit at low
   pressure, the tip effect plus steam can push r past $1.
 
-**Score** = hours on shift. **(open)** Should that be total time, or only
-time spent within tolerance? Total is simpler, and the rating already
-punishes ignoring orders.
+**Score** = total hours on shift. The rating already punishes time out of
+tolerance, so the score doesn't count it a second time.
 
 ## Orders and rating
 
@@ -217,9 +218,12 @@ punishes ignoring orders.
 - **Rating** starts at 100. It loses points per second while you're
   outside the band past the ramp allowance, gains a few for each order
   met (capped at 100), and loses points for relief-valve lifts.
-- Optional: **inspections**. Now and then an inspector reads the margin
-  printout. Below 15 rods costs a big rating hit. The rule exists, but
-  it's only enforced sometimes, which is also faithful. **(open)**
+- **Inspections**: rarely, an inspector checks the true margin. Below 15
+  rods costs a big rating hit. They're announced only after the fact on
+  the teletype ("Inspector visited 03:40. Margin 11 rods. Reprimand."),
+  so their timing can't be gamed. The rule exists but is enforced only
+  sometimes, which is also faithful, and it gives the player a reason to
+  read the margin printout.
 - Orders come from a seeded RNG, so a shift can be replayed exactly.
 
 ## Time scales (arcade pacing)
@@ -250,6 +254,39 @@ is really r in dollars). It marks:
   safely. It's found by re-simulating a scram from snapshots taken
   through the shift. This is the history lesson, so it's worth building.
 - when the margin went below 15 rods, and where each order was missed.
+
+## Look
+
+A 1980s control room, with the schematic drawn as a cutaway in the style
+of an 80s educational comic (bold ink outlines, flat spot colours,
+halftone shading, labelled callouts). Everything is canvas or SVG drawn
+in code; no image assets to start with.
+
+- **Mimic board** (top): the schematic. Real plants had wall diagrams of
+  the coolant loop with lamps, so it belongs in the room. Shows:
+  - the core in cutaway, with graphite stack, the rod bank moving to its
+    actual depth, and channels shaded from blue (water) to white (steam)
+    by steam fraction, glowing hotter with fuel temperature;
+  - drum separators, main circulation pumps (flow pulses along the
+    pipes), turbine-generators spinning at a speed matching output,
+    condenser and feedwater return;
+  - a grid line out to the dispatcher.
+  It's for effect only: it shows sim state and takes no input.
+- **Round core map**: the RBMK's circular board of lamps, one per channel
+  or rod. Here it doubles as the rod-bank readout and flickers with
+  local power.
+- **Gauges** (below): analogue dials for power (MWt and MWe), core
+  temperature, pressure and steam fraction, plus the period meter
+  (doubling time), whose needle swings into the red. Lamps for dryout,
+  relief valves and fuel damage.
+- **Controls**: a rod-bank lever, a pressure knob, and AZ-5 behind a
+  flip-up cover.
+- **Side**: a teletype for dispatcher orders and inspector notes, and a
+  dot-matrix printer for the margin printout. The paper scrolls.
+- **Rating** as a "shift supervisor's mood" dial, or a plain bar.
+- **Phone**: everything stacks; the mimic board shrinks to a strip.
+- **Slow motion**: the panel's hum drops in pitch, lamps flash.
+- **Meltdown**: the cutaway shows the lid going up. Then the end screen.
 
 ## Code layout (following the repo's other toys)
 
@@ -286,13 +323,25 @@ Maybe three: **Pace** (relaxed / standard / brisk: the time scales),
 **Dispatcher** (calm / demanding: order frequency and tolerances), and
 **Instruments** (full / 1986: whether the margin printout exists at all).
 
+## Order of work
+
+1. `sim.js` with tests: xenon pit timing, prompt-jump power, steam and
+   temperature, the tip effect, scram outcomes, prompt-critical cutoff.
+2. `orders.js` and the rating, with tests.
+3. `tools/headless.js` with the cautious, greedy and idle operators.
+   Tune `DEFAULTS` until they behave as described above.
+4. A plain playable UI: numbers and sliders, real-time loop, time
+   scaling, slow motion. Check the feel in a browser.
+5. The control-panel look: gauges, core map, teletype, printer.
+6. The cutaway mimic board.
+7. End screen: replay chart and point of no return.
+8. `RULES.md`, the How to play card, links from the site index and
+   `CLAUDE.md`, an e2e script.
+
+Later: the turbine-test order (pump coastdown), and plant efficiency if
+pressure needs a reason not to sit at maximum.
+
 ## Open questions
 
-1. Score: total shift time, or time within tolerance?
-2. The plant-efficiency coupling: keep or cut?
-3. Inspections: keep or cut?
-4. Should pump trips or a "turbine test" order appear as events? That's
-   the real trigger: flow coastdown → steam → power. It's a nice late-
-   game event, but more surface.
-5. Visual style: a 1980s control-room panel (dials, lamps, the mimic
-   board) or something abstract?
+- Visual details of the comic style, once there's something to look at.
+- Settings presets (see above).

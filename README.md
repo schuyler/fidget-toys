@@ -1,6 +1,6 @@
 # fidget-toys
 
-Experiments in one-shot gaming. Small browser games, one per directory, with no build step.
+Experiments in smol browser strategy gaming. JavaScript games, one per directory, no fancy build pipeline.
 
 - [Dot Army](dot-army/) — two swarms of dots fight over spawn points. You vs the CPU, or another person online.
 - [Wooden Ships](wooden-ships/) — a two-ship sailing duel. You steer, the wind sets your speed. You vs the CPU.

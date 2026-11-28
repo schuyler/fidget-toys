@@ -427,28 +427,58 @@ Each is a sketch, not a rule yet.
   would give a small ship somewhere to run)**
 
 - **Charged shots (elevation).** Holding a fire button raises the guns.
-  The longer you hold, the higher the arc and the longer the range, up
-  to a maximum. Let go to fire.
-  - Each ball flies a real arc (a parabola, which keeps the sim to plain
-    arithmetic) and can only hit a ship where it's low enough to strike
-    the hull. That means along most of a short, flat shot, but only
-    near the end of a long, lofted one. So a broadside can overshoot
-    (sail clean over the target) or undershoot (splash short), and
-    judging the range becomes the gunner's skill. Traverse still
-    handles direction automatically, so the player decides only *when*
-    and *how far*.
-  - A tap fires the flattest arc, which is the MVP's flat shot. Charging
-    is something you choose to do, not a step every shot needs.
+  The longer you hold, the farther the broadside lands, up to
+  `gunRange`. Let go to fire.
+  - A tap fires the flat, short shot: shorter than today's, somewhere
+    around 180–200 m. Charging covers the rest of the way out to 300 m.
+    The maximum stays at 300 m so that every shot you can make lands on
+    screen, where you can see it. **(open: the tap range)**
+  - The arc is faked. The sim keeps no height: a ball can only hit a
+    ship within a short window after it leaves the gun and a short
+    window before it lands, and charging only changes how long it
+    flies. A tap's two windows overlap, so it can hit anywhere along
+    its path, like the MVP's shot. A long shot can sail clean over a
+    ship in the middle of its flight, or splash short of her. **(open:
+    the window length)**
+  - Traverse still aims for you, at where the enemy is when you let go,
+    with no lead. So the player decides *when* and *how far*, and the
+    ball still takes up to 2 seconds to arrive.
   - Holding the button costs time. A ship you're about to rake may get
     out of your arc while you charge.
+  - Online, pressing and letting go are two separate inputs, and the
+    sim counts the ticks between them. That keeps it deterministic, and
+    the other player sees your guns rise, which is their cue to turn
+    away.
+  - The CPU knows the exact range, so it would charge perfectly. It
+    needs an error in its hold time, wider on easy than on hard.
   - Lofted shots could clear low islands, and later could be how chain
     shot reaches rigging.
-  - The ball's height shows as its shadow on the water pulling away
-    from it. While charging, a gauge shows how far you've charged.
-  - **Targeting lines** (later): showing where the shots will land
-    while you charge. Deferred until the MVP has shown whether the game
-    is playable and fun. A landing line makes range easy to judge, and
-    may take the skill out.
+- **Showing the arc.** Seen from above, a ball passing over a hull looks
+  just like one passing through it, and a ball that touches a hull
+  today always hits. So the height has to show, or an overshoot looks
+  like a bug.
+  - Each ball is drawn above its shadow, raised by peak × 4f(1−f),
+    where f is how much of its flight it's done. The shadow runs
+    straight along the water. The ball is raised toward the top of the
+    screen, not along a world direction, so it reads the same in the
+    guest's turned view.
+  - While you charge, a splashdown marker sits on the water where the
+    broadside would land if you let go now: a faint ring, or a scatter
+    of small splash marks as wide as the ±3° spread, so you can see
+    long shots are looser. It slides out from your side as you charge,
+    and sits at tap range when you aren't charging. It replaces a
+    charge gauge.
+  - A dashed, transparent grey arc runs from your guns to the marker,
+    drawn the same way as the balls, so it shows the shape they'll fly.
+    This breaks the nautical look IDEAS.md asks for, on purpose: the
+    arc is what teaches you how to read a ball's height against its
+    shadow. **(open: whether it stays once the shadows read well on
+    their own)**
+  - The marker takes the guesswork out of range, but not the skill. It
+    shows where the broadside lands on the enemy as she is now, and she
+    keeps sailing for the up to 2 seconds the balls take to arrive. So
+    a miss always means she moved, never that you misjudged the range.
+    That's the leading skill the slow balls are there for (see Scale).
 - **Magazine explosions** (optional): a hit that kills the last of a
   ship's crew has a small chance of blowing her up instead of making her
   strike. That brings back a dramatic sinking without a second damage

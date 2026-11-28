@@ -2,7 +2,8 @@
 
 Small browser games, one per directory. No build step: plain ES modules,
 served as static files. The toys are `dot-army/`, `wooden-ships/`,
-`coreward-bound/` and `star-troopers/`; read a toy's `RULES.md` before
+`coreward-bound/` and `star-troopers/`, with `rbmk/` in progress (design
+in `rbmk/DESIGN.md`); read a toy's `RULES.md` before
 touching its game logic, and Dot Army's `NETWORK.md` for online play (Dot
 Army and Wooden Ships play online; the shared parts are in `multiplayer/`).
 
@@ -93,6 +94,15 @@ the headless tool. Settings the player sees are the six presets in
 - The player sees six settings (`src/settings.js`); the playtest rules
   (dice, original defence, command, Meeting) are fixed there, and so are
   the squad sizes (`FORCES`).
+
+## Rules for rbmk code
+
+- `src/sim.js` is pure and deterministic, the same way as Wooden Ships:
+  float state, touched only by `+ − × ÷`, `min`, `max` and `abs` (no
+  `Math.exp`, `log` or `**`), so a shift can be replayed exactly. The
+  interface changes the reactor only through `setControls` and `scram`.
+- `// @ts-check` files: `sim.js`. Tuning numbers are `DEFAULTS` in
+  `sim.js`. Tests: `rbmk/test/sim.test.js`.
 
 ## Deploying
 

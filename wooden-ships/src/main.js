@@ -4,7 +4,7 @@ import { createGame, applyInput, step, stateHash, isin, deg, PORT, STARBOARD, BL
 import { createAI } from './ai.js';
 import { createRenderer, loadAssets, COLORS } from './render.js';
 import { createAudio } from './audio.js';
-import { createLockstep, PROTOCOL } from './net.js';
+import { createLockstep, PROTOCOL, DELAY } from './net.js';
 import { broadcastTransport } from '../../multiplayer/broadcast.js';
 import { relayTransport, DEFAULT_RELAY, SEAT_TAKEN } from '../../multiplayer/relay.js';
 import { createLobby, roomCode, cleanCode } from '../../multiplayer/lobby.js';
@@ -623,6 +623,15 @@ function dealFrom(m) {
   return ok ? { seed: m.seed, islands: m.islands, wind: m.wind, shadow: m.shadow, crewPerGun: m.crewPerGun } : null;
 }
 
+/** Input delays a start message may ask for, in ticks (1 is 33 ms, 30 is a second). @param {any} n */
+const goodDelay = (n) => Number.isInteger(n) && n >= 1 && n <= 30;
+/**
+ * The host's input delay: ?delay=N on the host's own page tries another, for
+ * testing. The guest never reads it: it plays the delay the host sends in
+ * `start`, because both devices must use the same one.
+ */
+const hostDelay = goodDelay(Number(query.get('delay'))) ? Number(query.get('delay')) : DELAY;
+
 /** @param {any} msg */
 function onNetMessage(msg) {
   if (!net || !msg || typeof msg !== 'object') return;
@@ -633,11 +642,11 @@ function onNetMessage(msg) {
     net.status = 'version';
   } else if (msg.k === 'start' && net.role === 'guest') {
     const d = dealFrom(msg);
-    if (msg.v !== PROTOCOL || !d) { net.status = 'version'; return; }
+    if (msg.v !== PROTOCOL || !d || !goodDelay(msg.delay)) { net.status = 'version'; return; }
     if (msg.g <= net.gameNo) return; // already playing that one
     net.gameNo = msg.g;
     newGame(true, d);
-    attachLockstep();
+    attachLockstep(msg.delay);
   } else if ((msg.k === 'in' || msg.k === 'h') && msg.g === net.gameNo && net.ls) {
     net.ls.receive(msg);
   }
@@ -650,15 +659,15 @@ function hostStart() {
   net.gameNo++;
   const d = deal();
   newGame(true, d);
-  net.transport.send({ k: 'start', g: net.gameNo, v: PROTOCOL, ...d });
-  attachLockstep();
+  net.transport.send({ k: 'start', g: net.gameNo, v: PROTOCOL, delay: hostDelay, ...d });
+  attachLockstep(hostDelay);
 }
 
-function attachLockstep() {
+/** @param {number} delay input delay in ticks, the same on both devices */
+function attachLockstep(delay) {
   if (!net) return;
   const g = net.gameNo;
   const transport = net.transport;
-  const delay = Number(query.get('delay')) || undefined; // ?delay=N to try other input delays
   net.ls = createLockstep(game, net.local, (m) => transport.send({ ...m, g }), { delay });
   net.status = 'playing';
 }
@@ -666,7 +675,7 @@ function attachLockstep() {
 if (debug) {
   /** @type {any} */ (window).woodenShipsDebug = () => ({
     phase, tick: game.tick, winner: game.winner, paused, leftIsStarboard,
-    hash: stateHash(game), hashes: Object.fromEntries(hashAt), status: net?.status, desync: net?.ls?.desyncAt ?? -1, net: net?.transport.stats() ?? null,
+    hash: stateHash(game), delay: net?.ls?.delay ?? null, hashes: Object.fromEntries(hashAt), status: net?.status, desync: net?.ls?.desyncAt ?? -1, net: net?.transport.stats() ?? null,
     overlay: (() => { const o = overlay(); return o ? { lines: o.lines, sub: o.sub } : null; })(),
     buttons: renderer.buttonSpots(), wheel: renderer.wheelSpot(),
     wind: { ...game.wind },

@@ -8,6 +8,8 @@
 //   Two tabs talk over a BroadcastChannel (?relay=bc). With RELAY=ws://127.0.0.1:8788
 //   (node multiplayer/server.js running) they go through that relay instead, in
 //   separate browser contexts, and the test also checks that leaving tells the other side.
+//   The host's page asks for a 5-tick input delay (?delay=5) and the guest's doesn't:
+//   the guest must play the host's delay, sent in the start message.
 const { chromium } = require('playwright');
 const os = require('os');
 const path = require('path');
@@ -31,7 +33,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
   }
   const room = 'W' + Math.floor(Math.random() * 1000);
   const q = `&debug&relay=${encodeURIComponent(RELAY)}`;
-  await host.goto(`${BASE}?room=${room}&host${q}`);
+  await host.goto(`${BASE}?room=${room}&host${q}&delay=5`);
   await host.waitForFunction(() => typeof woodenShipsDebug === 'function');
   await guest.goto(`${BASE}?room=${room}${q}`);
   const dbg = (p) => p.evaluate(() => woodenShipsDebug());
@@ -42,6 +44,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
   check(/you are blue/.test(hc.overlay?.sub ?? ''), `host's countdown says blue (${hc.overlay?.sub})`);
   check(/you are red/.test(gc.overlay?.sub ?? ''), `guest's countdown says red (${gc.overlay?.sub})`);
   check(hc.status === 'playing' && gc.status === 'playing', `both sessions playing (${hc.status}/${gc.status})`);
+  check(hc.delay === 5 && gc.delay === 5, `the guest plays the host's ?delay=5 (${hc.delay}/${gc.delay})`);
   let a, b;
   await Promise.all([host, guest].map((p) => p.waitForFunction(() => woodenShipsDebug().phase === 'play', null, { timeout: 8000 })));
 

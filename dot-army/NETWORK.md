@@ -24,7 +24,7 @@ device runs the whole game itself, and the only thing sent is each player's
 target inputs (add, remove or move a target), stamped with the tick they take
 effect on.
 
-`src/lockstep.js`:
+`src/lockstep.js` (Dot Army's adapter for the shared `multiplayer/lockstep.js`):
 
 - **Inputs.** The same `Input` objects the sim takes (`applyInput` in
   `sim.js`), which the CPU also produces:
@@ -64,8 +64,8 @@ so messages from a finished game are ignored after a rematch.
 | `{k:'hello', v}` | guest | Join request; `v` is `PROTOCOL` from `net.js`. Repeated every 500 ms until answered |
 | `{k:'start', g, v, seed, width, height, tickRate, neutralSpawns, extraSpawnRate, maxTargets, terrain}` | host | Deal game `g`. Also used for rematches. The guest plays with exactly these parameters, including the host's Spawns coefficient and Targets cap |
 | `{k:'bye', why:'version'}` | host | Protocol mismatch: reload both devices |
-| `{k:'in', g, t, i}` | both | My inputs for tick `t`: an `Input[]`, applied in order; `[]` means no change |
-| `{k:'h', g, t, v}` | both | My state hash after tick `t` |
+| `{k:'in', g, s, t, i}` | both | Seat `s`'s inputs for tick `t`: an `Input[]`, applied in order; `[]` means no change |
+| `{k:'h', g, s, t, v}` | both | Seat `s`'s state hash after tick `t` |
 
 Bump `PROTOCOL` in `net.js` whenever the simulation or messages change, so a
 cached old client can't play a new one and silently desync. It's 3 now: 2 was
@@ -87,7 +87,9 @@ targets only. You never see the other player's markers, only their dots.
   that hears nothing stalls after `delay` ticks; corrupting one copy is
   detected.
 - `src/net.js`: `PROTOCOL` and a development transport over
-  `BroadcastChannel`. (`roomCode()` has since moved to `multiplayer/lobby.js`.)
+  `BroadcastChannel`. (`roomCode()` has since moved to `multiplayer/lobby.js`,
+  the transport to `multiplayer/broadcast.js`, and the lockstep itself to
+  `multiplayer/lockstep.js`.)
 - `src/main.js`: network session (handshake, host deals games, rematches by
   host tap), "You win/You lose", the pause menu hides New game and Settings
   online, and rotating the phone doesn't pause an online game.

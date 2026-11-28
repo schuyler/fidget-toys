@@ -1,9 +1,14 @@
 // Wires the simulation, renderer, input, CPU and sound together.
 
-import { createGame, applyInput, step, isin, deg, PORT, STARBOARD, BLUE, RED, DRAW } from './sim.js';
+import { createGame, applyInput, step, stateHash, isin, deg, PORT, STARBOARD, BLUE, RED, DRAW } from './sim.js';
 import { createAI } from './ai.js';
 import { createRenderer, loadAssets, COLORS } from './render.js';
 import { createAudio } from './audio.js';
+import { createLockstep, PROTOCOL } from './net.js';
+import { broadcastTransport } from '../../multiplayer/broadcast.js';
+import { relayTransport, DEFAULT_RELAY, SEAT_TAKEN } from '../../multiplayer/relay.js';
+import { createLobby, roomCode, cleanCode } from '../../multiplayer/lobby.js';
+import { createNetPanel } from '../../multiplayer/netpanel.js';
 
 // The settings players see: six simple choices, each a preset. The tuning
 // parameters stay at the sim's DEFAULTS.
@@ -34,7 +39,8 @@ try {
 
 const query = new URLSearchParams(location.search);
 const debug = query.has('debug');
-const YOU = 0;
+/** ?debug: state hash after each of the last 300 ticks, so browser tests can compare two devices at the same tick. */
+const hashAt = new Map();
 /** Pixels of sideways drag for full rudder: about a thumb's width. */
 const FULL_LOCK_PX = 48;
 /** Wheel mode: how far the wheel turns, either way, for full rudder (a quarter turn). */
@@ -62,16 +68,47 @@ let gameSerial = 0;
 /** Your starboard side faces screen left (your ship is heading down the screen). */
 let leftIsStarboard = false;
 
-function newGame(start = true) {
-  const seed = query.has('seed') ? Number(query.get('seed')) : (Math.random() * 2 ** 31) >>> 0;
-  game = createGame({
-    seed,
+/**
+ * Network game state, or null for play against the CPU.
+ * @type {null | {
+ *   role: 'host'|'guest', local: number, room: string,
+ *   transport: import('../../multiplayer/relay.js').Transport,
+ *   ls: ReturnType<typeof createLockstep> | null,
+ *   gameNo: number, waitingSince: number, joinedAt: number,
+ *   status: 'lobby'|'playing'|'version'|'desync'|'left'|'full'|'unreachable'|'lost',
+ * }}
+ */
+let net = null;
+/** Your ship: blue against the CPU, or this device's seat online (host blue, guest red). */
+const you = () => (net ? net.local : BLUE);
+
+/**
+ * The game's settings, as createGame takes them. A network guest gets
+ * exactly the host's, from the start message.
+ * @typedef {{ seed: number, islands: string, wind: string, shadow: boolean, crewPerGun: number }} Deal
+ */
+
+/** @returns {Deal} */
+function deal() {
+  return {
+    seed: query.has('seed') ? Number(query.get('seed')) : (Math.random() * 2 ** 31) >>> 0,
     islands: settings.islands,
     wind: settings.wind,
     shadow: CHOICES.shadow[/** @type {'on'|'off'} */ (settings.shadow)],
     crewPerGun: CHOICES.crew[/** @type {'2'|'3'|'5'} */ (settings.crew)],
-  });
-  ai = createAI(RED, (seed * 7 + 3) >>> 0, { level: settings.mode === 'cpu' ? 'hard' : 'easy' });
+  };
+}
+
+/**
+ * @param {boolean} [start] false: set up the sea but wait at the start menu
+ * @param {Deal} [fixed] a network guest plays exactly the host's game
+ */
+function newGame(start = true, fixed) {
+  const d = fixed ?? deal();
+  game = createGame({ ...d });
+  hashAt.clear();
+  if (net) net.ls = null; // the old game's lockstep is done; attachLockstep() makes the next
+  ai = net ? null : createAI(RED, (d.seed * 7 + 3) >>> 0, { level: settings.mode === 'cpu' ? 'hard' : 'easy' });
   renderer.setSteering(/** @type {'drag'|'wheel'} */ (settings.steer));
   renderer.setGame(game);
   gameSerial++;
@@ -80,6 +117,7 @@ function newGame(start = true) {
   wheelGrip = null;
   keys.clear();
   pressed.clear();
+  lastRudder = 0;
   updateFacing(true);
   paused = false;
   if (start) {
@@ -113,7 +151,7 @@ let lastRudder = 0;
 
 /** @param {boolean} [force] */
 function updateFacing(force = false) {
-  const s = isin(game.ships[YOU].heading);
+  const s = isin(game.ships[you()].heading);
   if (force) leftIsStarboard = s > 0;
   else if (s > SWAP) leftIsStarboard = true;
   else if (s < -SWAP) leftIsStarboard = false;
@@ -122,10 +160,23 @@ function updateFacing(force = false) {
 /** Battery fired by screen button 0 (left) or 1 (right). @param {number} button */
 const batteryFor = (button) => ((button === 0) === leftIsStarboard ? STARBOARD : PORT);
 
+/** Steering and firing count only during play, online only once lockstep is up. */
+const actionsOn = () => phase === 'play' && !paused && (!net || !!net.ls);
+
+/**
+ * Send one of your inputs: straight to the game against the CPU, through
+ * lockstep online (where it takes effect a few ticks later on both devices).
+ * @param {import('./sim.js').Input} input
+ */
+function issue(input) {
+  if (net) net.ls?.queue(input);
+  else applyInput(game, you(), input);
+}
+
 /** @param {number} button */
 function fire(button) {
-  if (phase !== 'play' || paused) return;
-  applyInput(game, YOU, { type: 'fire', battery: batteryFor(button) });
+  if (!actionsOn()) return;
+  issue({ type: 'fire', battery: batteryFor(button) });
 }
 
 /**
@@ -159,9 +210,9 @@ function onWheel(e) {
 
 function syncRudder() {
   const r = Math.round(wantedRudder() * 100);
-  if (r !== lastRudder && phase === 'play' && !paused) {
+  if (r !== lastRudder && actionsOn()) {
     lastRudder = r;
-    applyInput(game, YOU, { type: 'rudder', value: r });
+    issue({ type: 'rudder', value: r });
   }
 }
 
@@ -179,7 +230,7 @@ canvas.addEventListener('pointerdown', (e) => {
   audio.unlock();
   if (paused) { resume(); return; }
   if (phase === 'over') {
-    if (performance.now() - overAt > 900) newGame();
+    if (performance.now() - overAt > 900) again();
     return;
   }
   if (phase === 'menu') return;
@@ -236,7 +287,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
   } else if (!e.repeat && (e.key === 'z' || e.key === 'Z' || e.key === 'q' || e.key === 'Q')) fire(0);
   else if (!e.repeat && (e.key === 'x' || e.key === 'X' || e.key === 'e' || e.key === 'E')) fire(1);
-  else if (e.key === ' ' && phase === 'over' && performance.now() - overAt > 900) newGame();
+  else if (e.key === ' ' && phase === 'over' && performance.now() - overAt > 900) again();
 });
 window.addEventListener('keyup', (e) => { const k = KEYMAP[e.key]; if (k) keys.delete(k); });
 
@@ -257,15 +308,21 @@ function frame(/** @type {number} */ now) {
     syncRudder();
     acc += dt * 1000;
     let steps = 0;
+    if (net && net.ls) net.ls.pump();
     while (acc >= tickMs && steps++ < 4) {
+      if (net && (!net.ls || !net.ls.ready())) break; // waiting on the other device's input
       acc -= tickMs;
       tick();
       if (phase !== 'play') break;
     }
-    if (acc > tickMs) acc = tickMs;
+    if (acc > tickMs) acc = tickMs; // don't spiral after a stall
+    if (net) {
+      const stalled = acc >= tickMs && !!net.ls && !net.ls.ready();
+      net.waitingSince = stalled ? net.waitingSince || now : 0;
+    }
   }
   updateFacing();
-  const me = game.ships[YOU];
+  const me = game.ships[you()];
   const reload = Math.round(game.params.reload * game.params.tickRate);
   const spots = renderer.buttonSpots();
   const held = new Set(pressed.values());
@@ -276,7 +333,7 @@ function frame(/** @type {number} */ now) {
   const r = wantedRudder();
   const live = phase === 'play' && !paused;
   renderer.draw(live ? acc / tickMs : 1, paused ? 0 : dt, {
-    you: YOU,
+    you: you(),
     buttons: phase === 'menu' ? [] : buttons,
     rudder: steering.size && live ? r : null,
     wheel: phase === 'menu' ? null : { turn: live ? r * WHEEL_LOCK : 0, held: !!wheelGrip },
@@ -288,36 +345,70 @@ function frame(/** @type {number} */ now) {
 
 function tick() {
   if (ai) for (const input of ai.think(game)) applyInput(game, ai.ship, input);
-  const ev = step(game);
+  const ev = net && net.ls ? net.ls.advance() : step(game);
   renderer.onTick(ev);
   const firedBy = new Set(ev.fired.map((f) => f.ship));
-  for (const s of firedBy) audio.boom(s === YOU);
+  for (const s of firedBy) audio.boom(s === you());
   if (ev.hits.length) {
     audio.hit();
-    if (ev.hits.some((h) => h.ship === YOU)) { try { navigator.vibrate?.(25); } catch { /* not supported */ } }
+    if (ev.hits.some((h) => h.ship === you())) { try { navigator.vibrate?.(25); } catch { /* not supported */ } }
+  }
+  if (net && net.ls && net.ls.desyncAt >= 0) {
+    phase = 'over';
+    net.status = 'desync';
+    return;
+  }
+  if (debug) {
+    hashAt.set(game.tick, stateHash(game));
+    hashAt.delete(game.tick - 300);
   }
   if (ev.splashes.length && game.tick % 3 === 0) audio.splash();
   if (ev.bumps.length && game.tick % 15 === 0) audio.bump();
   if (game.winner >= 0) {
     phase = 'over';
     overAt = performance.now();
-    audio.end(game.winner === game.ships[YOU].side);
+    audio.end(game.winner === game.ships[you()].side);
   }
 }
 
+/** Tap (or space) on the end screen: a new game against the CPU, a rematch from the host online. */
+function again() {
+  if (!net) newGame();
+  else if (NET_ERRORS[net.status]) leaveToMenu();
+  else if (net.role === 'host' && net.status === 'playing') hostStart(); // rematch
+}
+
+/** The WAITING overlay is showing: the other device has stalled for more than 600 ms. */
+const waitingShown = () => !!net && phase === 'play' && !!net.waitingSince && performance.now() - net.waitingSince > 600;
+
 function overlay() {
+  if (net) {
+    if (net.status === 'version') return { lines: ['UPDATE NEEDED'], sub: 'the two devices are running different versions · reload both' };
+    if (net.status === 'desync') return { lines: ['OUT OF SYNC'], sub: `the two devices disagree at tick ${net.ls?.desyncAt} · please report this` };
+    const err = NET_ERRORS[net.status];
+    if (err) return { lines: err, sub: 'tap for the menu' };
+    if (net.status === 'lobby') {
+      return net.role === 'host'
+        ? { lines: [net.room], sub: 'waiting for the other player to join…' }
+        : performance.now() - net.joinedAt > NO_HOST_MS
+          ? { lines: ['NO ONE', 'HERE YET'], sub: `room ${net.room} has no host · check the code, or ☰ to leave` }
+          : { lines: ['JOINING'], sub: `room ${net.room} · waiting for the host…` };
+    }
+    if (waitingShown()) return { lines: ['WAITING'], sub: 'for the other ship…' };
+  }
   if (phase === 'countdown' && !paused) {
     const how = settings.steer === 'wheel' ? 'turn the wheel to steer, cannons to fire' : 'drag to steer, buttons to fire';
-    return { lines: [String(Math.ceil(countdown))], sub: `you are blue · ${how}` };
+    return { lines: [String(Math.ceil(countdown))], sub: `you are ${you() === BLUE ? 'blue' : 'red'} · ${how}` };
   }
-  if (paused) return { lines: ['PAUSED'], sub: 'tap to resume' };
+  if (paused) return { lines: ['PAUSED'], sub: net ? 'tap to resume · the other ship waits for you' : 'tap to resume' };
   if (phase === 'over') {
     const w = game.winner;
-    const lines = w === DRAW ? ['DRAW!'] : w === game.ships[YOU].side ? ['VICTORY!'] : ['DEFEAT!'];
+    const lines = w === DRAW ? ['DRAW!'] : w === game.ships[you()].side ? ['VICTORY!'] : ['DEFEAT!'];
+    const next = !net ? 'tap to sail again' : net.role === 'host' ? 'tap for a rematch' : 'waiting for the host to start a rematch';
     return {
       lines,
       color: w === DRAW ? COLORS.text : COLORS.players[w],
-      sub: `${Math.round(game.ending / game.params.tickRate)}s · tap to sail again`,
+      sub: `${Math.round(game.ending / game.params.tickRate)}s · ${next}`,
       stats: statRows(),
     };
   }
@@ -328,7 +419,7 @@ function statRows() {
   const st = game.stats;
   const acc = (/** @type {number} */ s) => (st.fired[s] ? `${Math.round((100 * st.hits[s]) / st.fired[s])}%` : '–');
   return {
-    names: ['You', 'CPU'],
+    names: !net ? ['You', 'CPU'] : net.local === BLUE ? ['You', 'Them'] : ['Them', 'You'],
     rows: /** @type {[string, string|number, string|number][]} */ ([
       ['Crew left', game.ships[BLUE].crew, game.ships[RED].crew],
       ['Balls fired', st.fired[BLUE], st.fired[RED]],
@@ -405,6 +496,10 @@ $('btn-menu').addEventListener('click', () => {
   audio.unlock();
   if (phase === 'countdown' || phase === 'play') paused = true;
   $('pause-resume').hidden = phase === 'over' || phase === 'menu';
+  // In a network game the host's settings rule and rematches go through the host.
+  $('pause-new').hidden = !!net;
+  $('pause-settings').hidden = !!net;
+  $('pause-leave').hidden = !net;
   syncMute();
   pauseDialog.showModal();
 });
@@ -416,13 +511,161 @@ function resume() {
 $('pause-resume').addEventListener('click', resume);
 pauseDialog.addEventListener('cancel', (e) => { e.preventDefault(); resume(); });
 $('pause-new').addEventListener('click', () => { pauseDialog.close(); newGame(); });
+$('pause-leave').addEventListener('click', () => leaveToMenu());
 $('pause-settings').addEventListener('click', () => detour(pauseDialog, openSettings));
 $('pause-rules').addEventListener('click', () => detour(pauseDialog, () => rulesDialog.showModal()));
 muteBtn.addEventListener('click', () => { audio.setMuted(!audio.muted); syncMute(); });
 
+// ---------------------------------------------------------------------------
+// Network play, as in Dot Army: the host (blue) picks the sea and settings and
+// sends them to the guest (red); after that only lockstep inputs and hashes
+// flow. See dot-army/NETWORK.md for the messages.
+
+/** How long a guest waits on JOINING before being told no one is hosting. */
+const NO_HOST_MS = 5000;
+
+/** Statuses that end a network session, and what they say. */
+const NET_ERRORS = /** @type {Record<string, string[] | undefined>} */ ({
+  left: ['OPPONENT LEFT'],
+  full: ['ROOM FULL'],
+  unreachable: ["CAN'T REACH", 'THE SERVER'],
+  lost: ['CONNECTION LOST'],
+});
+
+// ?relay=bc: two tabs in one browser, no server. ?relay=wss://...: that relay. Neither: the default.
+const relayParam = query.get('relay');
+
+/** The link that brings the other player into this room as guest. */
+function linkFor(/** @type {string} */ code) {
+  const relay = relayParam ? `&relay=${encodeURIComponent(relayParam)}` : '';
+  return `${location.origin}${location.pathname}?room=${code}${relay}`;
+}
+
+/** @param {string} room @param {'host'|'guest'} role */
+function startNet(room, role) {
+  const seat = role === 'host' ? BLUE : RED;
+  const transport = relayParam === 'bc'
+    ? broadcastTransport('wooden-ships', room, seat)
+    : relayTransport(relayParam || DEFAULT_RELAY, 'wooden-ships', room, seat, { ping: debug });
+  /** @type {NonNullable<typeof net>} */
+  const session = { role, local: seat, room, transport, ls: null, gameNo: 0, waitingSince: 0, joinedAt: performance.now(), status: 'lobby' };
+  net = session;
+  transport.onMessage(onNetMessage);
+  transport.onEvent(onNetEvent);
+  newGame(false); // a sea to look at while waiting; replaced when the game starts
+  if (role === 'guest') {
+    const hello = () => {
+      if (net !== session || session.status !== 'lobby') return;
+      session.transport.send({ k: 'hello', v: PROTOCOL });
+      setTimeout(hello, 500); // until the host answers
+    };
+    hello();
+  }
+}
+
+/** @param {import('../../multiplayer/relay.js').RelayEvent} e */
+function onNetEvent(e) {
+  if (!net) return;
+  const s = net.status;
+  if (s === 'version' || s === 'desync' || NET_ERRORS[s]) return; // the first problem is the one shown
+  let status;
+  if (e.type === 'peer-left') {
+    // A guest leaving before the game starts just leaves the host waiting.
+    if (s === 'playing' || net.role === 'guest') status = 'left';
+  } else {
+    status = e.code === SEAT_TAKEN ? 'full' : !e.opened ? 'unreachable' : 'lost';
+  }
+  if (!status) return;
+  net.status = /** @type {NonNullable<typeof net>['status']} */ (status);
+  if (status === 'left') net.transport.close(); // free the seat: the game is over
+  phase = 'over';
+  overAt = performance.now();
+  lobby.close();
+}
+
+/** End any network session and go back to the start menu. */
+function leaveToMenu() {
+  if (net) net.transport.close();
+  net = null;
+  lobby.close();
+  if (pauseDialog.open) pauseDialog.close();
+  newGame(false);
+  if (!startDialog.open) startDialog.showModal();
+}
+
+const lobby = createLobby(/** @type {HTMLDialogElement} */ ($('lobby')), {
+  onJoin(code) {
+    lobby.close();
+    startNet(code, 'guest');
+  },
+  onBack: leaveToMenu,
+});
+
+$('start-online').addEventListener('click', () => {
+  audio.unlock();
+  startDialog.close();
+  const code = roomCode();
+  startNet(code, 'host');
+  lobby.openHosting(code, linkFor(code));
+});
+$('start-join').addEventListener('click', () => {
+  audio.unlock();
+  startDialog.close();
+  lobby.openJoin();
+});
+
+/** A start message's settings, checked: anything malformed means the other device isn't speaking this protocol. @param {any} m @returns {Deal | null} */
+function dealFrom(m) {
+  const ok = Number.isInteger(m.seed) && typeof m.islands === 'string' && typeof m.wind === 'string'
+    && typeof m.shadow === 'boolean' && Number.isInteger(m.crewPerGun) && m.crewPerGun > 0;
+  return ok ? { seed: m.seed, islands: m.islands, wind: m.wind, shadow: m.shadow, crewPerGun: m.crewPerGun } : null;
+}
+
+/** @param {any} msg */
+function onNetMessage(msg) {
+  if (!net || !msg || typeof msg !== 'object') return;
+  if (msg.k === 'hello' && net.role === 'host') {
+    if (msg.v !== PROTOCOL) net.transport.send({ k: 'bye', why: 'version' });
+    else if (net.status === 'lobby') hostStart();
+  } else if (msg.k === 'bye' && msg.why === 'version') {
+    net.status = 'version';
+  } else if (msg.k === 'start' && net.role === 'guest') {
+    const d = dealFrom(msg);
+    if (msg.v !== PROTOCOL || !d) { net.status = 'version'; return; }
+    if (msg.g <= net.gameNo) return; // already playing that one
+    net.gameNo = msg.g;
+    newGame(true, d);
+    attachLockstep();
+  } else if ((msg.k === 'in' || msg.k === 'h') && msg.g === net.gameNo && net.ls) {
+    net.ls.receive(msg);
+  }
+}
+
+/** Host: deal a fresh game (also used for rematches) and tell the guest. */
+function hostStart() {
+  if (!net) return;
+  lobby.close();
+  net.gameNo++;
+  const d = deal();
+  newGame(true, d);
+  net.transport.send({ k: 'start', g: net.gameNo, v: PROTOCOL, ...d });
+  attachLockstep();
+}
+
+function attachLockstep() {
+  if (!net) return;
+  const g = net.gameNo;
+  const transport = net.transport;
+  const delay = Number(query.get('delay')) || undefined; // ?delay=N to try other input delays
+  net.ls = createLockstep(game, net.local, (m) => transport.send({ ...m, g }), { delay });
+  net.status = 'playing';
+}
+
 if (debug) {
   /** @type {any} */ (window).woodenShipsDebug = () => ({
     phase, tick: game.tick, winner: game.winner, paused, leftIsStarboard,
+    hash: stateHash(game), hashes: Object.fromEntries(hashAt), status: net?.status, desync: net?.ls?.desyncAt ?? -1, net: net?.transport.stats() ?? null,
+    overlay: (() => { const o = overlay(); return o ? { lines: o.lines, sub: o.sub } : null; })(),
     buttons: renderer.buttonSpots(), wheel: renderer.wheelSpot(),
     wind: { ...game.wind },
     ships: game.ships.map((s) => ({ x: s.x, y: s.y, heading: s.heading, rudder: s.rudder, crew: s.crew, struck: s.struck, reload: s.batteries.map((b) => b.reloadLeft) })),
@@ -438,8 +681,15 @@ if (debug) {
 
 loadAssets(new URL('../assets/', import.meta.url).href).then((assets) => {
   renderer = createRenderer(canvas, assets);
-  newGame(false);
-  startDialog.showModal();
+  if (debug) createNetPanel(() => net?.transport.stats() ?? null);
+  // ?room=ABCD joins a game as guest straight away (that's what shared links
+  // are); &host makes this device the host instead.
+  const room = query.get('room');
+  if (room) startNet(cleanCode(room), query.has('host') ? 'host' : 'guest');
+  else {
+    newGame(false);
+    startDialog.showModal();
+  }
   requestAnimationFrame(frame);
 }).catch((err) => {
   document.body.insertAdjacentHTML('beforeend', `<p style="padding:24px">Couldn't load the game's pictures (${String(err.message)}). Try reloading.</p>`);

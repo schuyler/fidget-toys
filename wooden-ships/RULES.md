@@ -337,11 +337,24 @@ real seconds, so leading a moving target is a skill. That makes balls
 far slower than real ones relative to the ships. **(open: whether 4× is
 fast enough to feel like a fidget toy)**
 
-## Later
+## Playing online
 
-- **Network play** against another person, through the repo's shared
-  relay and lockstep (as in Dot Army). The sim was built for it:
-  deterministic, inputs only, rudder as an integer.
+- **Play online** on the start menu makes a room and shows its code and
+  a link to send. The other player opens the link, or picks **Join with
+  code** and types the code. The game starts when they arrive.
+- The host sails blue and picks the settings (islands, wind, wind
+  shadow, crew); the guest sails red. Steering style stays each
+  player's own. There's no CPU.
+- Both devices run the same game from the same seed, and only rudder
+  and fire inputs cross the network, through the repo's shared relay and
+  lockstep (as in Dot Army). An input takes effect 4 ticks (133 ms)
+  after you give it, on both devices at once.
+- ☰ pauses your device, and the other one waits for you with WAITING.
+  Online, the pause menu has **Leave game** instead of New game and
+  Settings. When the fight's over, the host taps for a rematch.
+- If the other player leaves, the connection drops or the two devices
+  ever compute different games (OUT OF SYNC), the game stops and says
+  so.
 
 ## Room for a campaign (not the MVP)
 

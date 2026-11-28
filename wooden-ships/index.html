@@ -19,6 +19,8 @@
     <p class="tagline">You steer. The wind does the rest.</p>
     <div class="pills">
       <button id="start-new" class="pill primary" autofocus>New game</button>
+      <button id="start-online" class="pill">Play online</button>
+      <button id="start-join" class="pill">Join with code</button>
       <button id="start-settings" class="pill">Settings</button>
       <button id="start-rules" class="pill">Rules</button>
     </div>
@@ -32,8 +34,11 @@
       <button id="pause-settings" class="pill">Settings</button>
       <button id="pause-rules" class="pill">Rules</button>
       <button id="pause-sound" class="pill">Sound: on</button>
+      <button id="pause-leave" class="pill">Leave game</button>
     </div>
   </dialog>
+
+  <dialog id="lobby" class="menu"></dialog>
 
   <dialog id="rules">
     <form method="dialog">
@@ -47,8 +52,9 @@
         <li><b>Guns aim themselves,</b> at the enemy as she is now, with no lead, and can swing 20° either way from square. Balls are slow: fire when she'll sail into them.</li>
         <li><b>Cross her bow or stern</b> and your whole broadside can land while none of her guns bear on you. That's the best move in the game.</li>
         <li><b>Crew is hit points.</b> Each hit kills one. A ship with none left strikes her colours, loses her rudder and drifts. The game ends 3 seconds after the last ball lands, so a ball already in the air can still sink the winner too: a draw. Islands and the sea's edge stop you dead; shallows (the pale ring round islands) slow you down.</li>
-        <li><b>The sea is bigger than the screen.</b> The view follows you; when the CPU is out of sight, an arrow on the edge points at it and says how far.</li>
+        <li><b>The sea is bigger than the screen.</b> The view follows you; when the enemy is out of sight, an arrow on the edge points at her and says how far.</li>
         <li><b>The wind shifts</b> every so often without warning; the compass shows where it's blowing and how hard. With wind shadow on, a ship just downwind of another gets half the wind.</li>
+        <li><b>Online,</b> Play online makes a room: send the link or the code, and the game starts when the other player joins. The host sails blue and picks the settings; the guest sails red. Your rudder and guns answer about a tenth of a second late, so both devices stay in step.</li>
       </ul>
       <p class="hint"><a href="https://github.com/schuyler/fidget-toys/blob/main/wooden-ships/RULES.md" target="_blank" rel="noopener">Full rules</a>, for the curious.</p>
       <menu>

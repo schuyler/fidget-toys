@@ -6,10 +6,11 @@ relay runs as a Node server at home or as a Cloudflare Worker; the games use
 the one deployed at `wss://fidget-rooms.erle.workers.dev` unless told
 otherwise.
 
-Status: **step 1 of the plan below.** Dot Army plays online through the
-relay, with a Play online / Join with code lobby. Every game message goes
-through the relay; peer-to-peer would come later, if it's ever worth it. The
-dice are built and unit-tested but no game uses them yet.
+Status: **step 1 of the plan below, and part of step 2.** Dot Army and
+Wooden Ships play online through the relay, with a Play online / Join with
+code lobby, on a shared tick lockstep (`lockstep.js`). Every game message
+goes through the relay; peer-to-peer would come later, if it's ever worth
+it. The dice are built and unit-tested but no game uses them yet.
 
 ## Try it
 
@@ -110,6 +111,24 @@ share sheet) or **Join a game** (type a code). It uses only the class names
 `pills`, `pill`, `primary` and `hint`, so the game's CSS styles it. The game
 builds the link and decides what Back does. `roomCode()` makes 4-character
 codes without look-alike characters.
+
+`broadcast.js` is the development transport behind `?relay=bc`: two tabs
+of one browser over a `BroadcastChannel`, no server, and so no peer-left or
+close events.
+
+`lockstep.js` is tick lockstep for real-time games. Each device runs the
+whole game; seats exchange only their inputs, stamped with the tick they
+take effect on, `delay` ticks ahead, plus a state hash every few ticks to
+catch a desync. The game plugs in through an adapter:
+
+```js
+createLockstep(game, { applyInput, step, hash, tick, merge }, mySeat, send, { seats: 2, delay: 3 });
+```
+
+`merge` (optional) folds an input into the ones not yet sent: Dot Army
+keeps one pending move per marker, Wooden Ships one pending rudder. Each
+game's adapter is its own `lockstep.js` or `net.js`, next to its
+`PROTOCOL`.
 
 `netpanel.js` puts a small readout in the corner: connection state,
 round-trip time, messages out and in, and the last close code.
@@ -268,8 +287,8 @@ All transports share the `Transport` interface defined in `relay.js`:
 - `p2pTransport`: a WebRTC DataChannel, set up through the Worker. One
   connection to each other seat (a full mesh), fine up to about 4–6 players.
 - `relayTransport`: a WebSocket to the relay (either host), which stays open. Built.
-- `broadcastTransport`: two tabs in one browser, for development. Already
-  exists.
+- `broadcastTransport`: two tabs in one browser, for development. Built
+  (`broadcast.js`).
 
 The session tries P2P first and falls back to the relay if no channel opens
 within a few seconds. `?relay=bc` picks BroadcastChannel, `?relay=<url>` a relay, and neither the
@@ -291,14 +310,11 @@ game-agnostic:
 
 ### Sync model 1: tick lockstep
 
-Today's `lockstep.js`, with two changes:
-
-- It imports `setTarget`, `step` and `stateHash` from Dot Army's `sim.js`.
-  Those become adapter functions passed in.
-- It assumes two players (`remote = 1 - localPlayer`). It becomes N seats:
-  a tick is ready when every seat's input for it has arrived.
-
-Input delay, hash checks every few ticks, and the replay log stay as they are.
+Built: `lockstep.js` (see The browser side, above), moved out of Dot Army
+with its sim functions turned into an adapter and its two players into N
+seats, where a tick is ready when every seat's input for it has arrived.
+Input delay, hash checks every few ticks, and the replay log are as they
+were.
 
 ### Sync model 2: turn lockstep
 
@@ -400,7 +416,10 @@ I'd accept the leak. **(open: owner's call)**
    ours. [PeerJS](https://peerjs.com/) is the self-hostable alternative.
 2. **Shared client:** transports, session, tick lockstep, in
    `multiplayer/`. Move Dot Army onto them and keep its two-tab e2e test
-   passing.
+   passing. *Partly done:* the lockstep and the two-tab transport are
+   shared, and Dot Army and Wooden Ships both use them. The session
+   (handshake, statuses, rematches) is still a copy in each game's
+   `main.js`; a third game would show which parts of it are really shared.
 3. **Turn lockstep**, once Coreward Bound has a simulation to sync.
    Look hard at [boardgame.io](https://github.com/boardgameio/boardgame.io) first. Its game
    structure fits Coreward well, but its randomness and secret state rely

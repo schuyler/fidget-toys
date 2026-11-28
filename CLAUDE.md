@@ -3,7 +3,8 @@
 Small browser games, one per directory. No build step: plain ES modules,
 served as static files. The toys are `dot-army/`, `wooden-ships/`,
 `coreward-bound/` and `star-troopers/`; read a toy's `RULES.md` before
-touching its game logic, and Dot Army's `NETWORK.md` for online play.
+touching its game logic, and Dot Army's `NETWORK.md` for online play (Dot
+Army and Wooden Ships play online; the shared parts are in `multiplayer/`).
 
 ## Running and checking
 
@@ -29,7 +30,9 @@ Browser checks need the static server on port 8765:
 (two tabs, `?relay=bc`), `dot-army/tools/e2e-online.cjs` (lobby, leaving,
 errors) and `multiplayer/tools/e2e-relay.cjs` (a game through a relay). The
 last two also need a relay: `node multiplayer/server.js`. Wooden Ships has
-`wooden-ships/tools/e2e-local.cjs` (a CPU game, steering, fire buttons).
+`wooden-ships/tools/e2e-local.cjs` (a CPU game, steering, fire buttons) and
+`wooden-ships/tools/e2e-two-tab.cjs` (online between two tabs; with
+`RELAY=ws://127.0.0.1:8788`, through a relay).
 `coreward-bound/tools/e2e.cjs` plays Coreward Bound turns and a whole game.
 `star-troopers/tools/e2e-local.cjs` plays a whole Star Troopers game through
 taps and drags (same server, no relay).
@@ -58,8 +61,8 @@ the headless tool. Settings the player sees are the six presets in
   targets, through the same inputs a human sends (add, remove, move). It must
   never touch game state directly.
 - `// @ts-check` files: `sim.js`, `hex.js`, `rng.js`, `ai.js`, `lockstep.js`,
-  `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`, `lobby.js`, `netpanel.js`;
-  in Wooden Ships, `sim.js`, `ai.js` and `rng.js`; in `coreward-bound/`,
+  `net.js`, and `multiplayer/room.js`, `relay.js`, `dice.js`, `lobby.js`, `netpanel.js`,
+  `lockstep.js`, `broadcast.js`; in Wooden Ships, `sim.js`, `ai.js`, `rng.js` and `net.js`; in `coreward-bound/`,
   `sim.js`, `hex.js`, `rng.js` and `ai.js` (Star Troopers has its own list
   below). Keep them type-clean.
 - Coreward Bound: a rule change updates `src/sim.js`, `test/sim.test.js`,

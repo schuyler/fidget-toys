@@ -6,7 +6,8 @@ import { createRenderer, COLORS } from './render.js';
 import { createAudio } from './audio.js';
 import { cellCenter, pixelToCell } from './hex.js';
 import { createLockstep } from './lockstep.js';
-import { broadcastTransport, PROTOCOL } from './net.js';
+import { PROTOCOL } from './net.js';
+import { broadcastTransport } from '../../multiplayer/broadcast.js';
 import { relayTransport, DEFAULT_RELAY, SEAT_TAKEN } from '../../multiplayer/relay.js';
 import { createLobby, roomCode, cleanCode } from '../../multiplayer/lobby.js';
 import { createNetPanel } from '../../multiplayer/netpanel.js';
@@ -554,7 +555,7 @@ function linkFor(/** @type {string} */ code) {
 function startNet(room, role) {
   const seat = role === 'host' ? 0 : 1;
   const transport = relayParam === 'bc'
-    ? broadcastTransport(room, role)
+    ? broadcastTransport('dot-army', room, seat)
     : relayTransport(relayParam || DEFAULT_RELAY, 'dot-army', room, seat, { ping: debug });
   const session = { role, local: seat, room, transport, ls: null, gameNo: 0, waitingSince: 0, joinedAt: performance.now(), status: 'lobby' };
   net = session;

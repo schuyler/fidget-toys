@@ -347,6 +347,29 @@ one round trip per roll instead of one and a half.
 **Secret simultaneous stances** need a commit-reveal of the choices
 themselves. That waits for turn lockstep.
 
+### Simultaneous orders (Star Troopers)
+
+Star Troopers has both players plot a turn in secret, then resolves it
+in one go with `resolveTurn`, rolling dice from the game's RNG (2d6 on
+the 1977 tables). Whoever sends orders first gives them away, and a
+shared seed lets a player try out their own orders in devtools before
+sending them. One exchange per turn handles both:
+
+1. Each side sends a hash of its orders.
+2. Once both hashes are in, each side sends its orders and its next
+   dice link.
+3. Each device checks the orders against the hash and the link against
+   the chain, makes the turn's seed from both links, and runs
+   `resolveTurn` with an RNG started from that seed.
+
+Nobody sees the other side's orders before locking their own, and the
+turn's dice don't exist until both sides are locked, so there's nothing
+to try out in advance. The last-revealer hole shrinks too: by the time
+anyone can work out the result, both sides' orders are fixed, so holding
+back a reveal can only end the game, not improve your turn. That's the
+"a stall is leaving" rule again. A plotting timer, for a player who
+never commits, is still open.
+
 ### Fog of war leaks
 
 Hidden hex values and the fuzzy stack sizes are all in each device's

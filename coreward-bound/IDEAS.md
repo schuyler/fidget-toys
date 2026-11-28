@@ -225,7 +225,13 @@ periphery hexes were ever visited.
 - **Network play** through the `multiplayer/` library, which already runs
   Dot Army online by lockstep. The simulation is deterministic and every
   move is an action (`act` in `src/sim.js`), so a turn can be sent as its
-  list of actions.
+  list of actions. Two problems first, both in "Problems specific to
+  turn-based games" in [multiplayer/README.md](../multiplayer/README.md):
+  with a shared seed, the scatter odds a jump shows become a known
+  outcome, so jumps need the networked dice in `multiplayer/dice.js`;
+  and every device holds the hidden potentials and true stack sizes, so
+  fog of war leaks to anyone who opens devtools. Whether to accept that
+  leak among friends is still open.
 - **A CPU for more than one rival.** `src/ai.js` assumes exactly one
   (`1 - civ` throughout).
 - **Stances.** Each civ holds a stance toward each other civ:

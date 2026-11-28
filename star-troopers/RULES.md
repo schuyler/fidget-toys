@@ -469,8 +469,12 @@ None of this is in the first version, but it's the plan.
   there's no pass-and-play. Simultaneous orders suit this well: each
   side sends only its committed orders for the turn, and both devices
   run the same deterministic turn from them. Neither side sees the
-  other's orders until both have committed. **(open: what happens when
-  one player is slow to commit, such as a plotting timer)**
+  other's orders until both have committed. The dice become shared
+  too: each turn's seed is made from both players' contributions,
+  revealed only after both have committed, so nobody can know the rolls
+  in advance. The design is under "Simultaneous orders" in
+  [multiplayer/README.md](../multiplayer/README.md). **(open: what
+  happens when one player is slow to commit, such as a plotting timer)**
 
 ## Notes
 

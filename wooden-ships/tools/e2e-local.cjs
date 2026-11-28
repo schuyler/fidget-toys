@@ -1,6 +1,6 @@
 // Checks Wooden Ships in a browser: menus, a CPU game in portrait and
-// landscape, steering, the screen-relative fire buttons, the camera and its
-// off-screen arrow, and the end screen.
+// landscape, steering (drag, keys and the wheel), the screen-relative fire
+// buttons, the camera and its off-screen arrow, and the end screen.
 //
 // Needs: the repo served on port 8765 (python3 -m http.server 8765 --bind 127.0.0.1)
 // and Playwright (preinstalled in Claude Code cloud sessions).
@@ -26,13 +26,14 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
   };
   const dbg = (p) => p.evaluate(() => woodenShipsDebug());
 
-  // 1. Settings offer the five presets.
+  // 1. Settings offer the six presets.
   {
     const p = await page({ width: 390, height: 780 });
     await p.click('#start-settings');
     const groups = await p.$$eval('#settings-form .opts', (els) => els.map((e) => [...e.querySelectorAll('input')].map((i) => `${i.name}=${i.value}`).join(',')));
-    check(groups.length === 5, `five settings rows (got ${groups.length})`);
+    check(groups.length === 6, `six settings rows (got ${groups.length})`);
     check(groups[0] === 'mode=cpu-easy,mode=cpu', `opponents are CPU easy and hard (got ${groups[0]})`);
+    check(groups[5] === 'steer=drag,steer=wheel', `steering is drag or wheel (got ${groups[5]})`);
   }
 
   // 2. A game runs in portrait and landscape, on the same sea.
@@ -67,13 +68,80 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
     check(mid.ships[0].rudder === expect, `${vp.width}x${vp.height}: drag right sets rudder ${expect} (got ${mid.ships[0].rudder})`);
     check(after.ships[0].rudder === 0, `${vp.width}x${vp.height}: letting go centres the rudder`);
 
+    // → on the keyboard is always starboard (clockwise), whichever way she heads.
+    await p.keyboard.down('ArrowRight');
+    await p.waitForTimeout(150);
+    const keyed = await dbg(p);
+    await p.keyboard.up('ArrowRight');
+    await p.waitForTimeout(150);
+    check(keyed.ships[0].rudder === 100 && (await dbg(p)).ships[0].rudder === 0, `${vp.width}x${vp.height}: → is starboard rudder (got ${keyed.ships[0].rudder}), and centres on release`);
+
+    // The buttons sit no more than 240 px either side of the middle.
+    const spots = before.buttons;
+    check(spots[1].x - spots[0].x <= 480.5, `${vp.width}x${vp.height}: fire buttons ${Math.round(spots[1].x - spots[0].x)} px apart`);
+
     // Left fire button fires the battery facing screen left.
     const pre = await dbg(p);
-    await p.mouse.click(50, vp.height - 70);
+    await p.mouse.click(spots[0].x, spots[0].y);
     await p.waitForTimeout(200);
     const post = await dbg(p);
     const bat = pre.leftIsStarboard ? 1 : 0;
     check(post.ships[0].reload[bat] > 0 && post.ships[0].reload[1 - bat] === pre.ships[0].reload[1 - bat], `${vp.width}x${vp.height}: left button fires the ${bat ? 'starboard' : 'port'} side (facing screen left)`);
+  }
+
+  // 2b. Wheel steering: drag round the wheel; clockwise is starboard whichever
+  // way she heads, and it centres when let go. Dragging the sea does nothing.
+  for (const vp of [{ width: 1280, height: 720 }, { width: 390, height: 780 }]) {
+    const p = await page(vp, '&seed=42', { mode: 'cpu-easy', islands: 'some', wind: 'shifty', shadow: 'on', crew: '3', steer: 'wheel' });
+    await p.click('#start-new');
+    await p.waitForFunction(() => woodenShipsDebug().phase === 'play', null, { timeout: 6000 });
+    const d0 = await dbg(p);
+    const w = d0.wheel;
+    check(!!w && Math.abs(w.x - vp.width / 2) < 1, `${vp.width}x${vp.height}: wheel at bottom-centre`);
+    const b = d0.buttons;
+    check(b[0].x < w.x && b[1].x > w.x && b[0].x + b[0].r < w.x - w.r && b[1].x - b[1].r > w.x + w.r, `${vp.width}x${vp.height}: cannons either side of the wheel, clear of it`);
+    check(b[0].x - b[0].r >= 0 && b[1].x + b[1].r <= vp.width, `${vp.width}x${vp.height}: cannons on screen`);
+    const turn = async (from, to) => { // drag round the wheel's rim from one angle to another (radians, screen)
+      for (let i = 0; i <= 12; i++) {
+        const a = from + ((to - from) * i) / 12;
+        await p.mouse.move(w.x + Math.cos(a) * w.r * 0.8, w.y + Math.sin(a) * w.r * 0.8);
+      }
+      await p.waitForTimeout(150);
+      return (await dbg(p)).ships[0].rudder;
+    };
+    for (const heading of [49152, 16384]) { // up the screen, then down it
+      await p.evaluate((h) => woodenShipsDebugSet(0, { heading: h, vx: 0, vy: 0 }), heading);
+      const top = -Math.PI / 2;
+      await p.mouse.move(w.x, w.y - w.r * 0.8);
+      await p.mouse.down();
+      const cw = await turn(top, top + Math.PI / 2);
+      const past = await turn(top + Math.PI / 2, top + Math.PI); // past full lock: stays at full lock
+      const back = await turn(top + Math.PI, top + Math.PI / 2 - 0.0001);
+      const ccw = await turn(top + Math.PI / 2, top + Math.PI / 4); // neutral is now a quarter round, where "back" left it
+      await p.mouse.up();
+      await p.waitForTimeout(150);
+      const after = (await dbg(p)).ships[0].rudder;
+      const dir = heading === 49152 ? 'up' : 'down';
+      check(cw === 100 && past === 100, `${vp.width}x${vp.height}, heading ${dir}: a quarter turn clockwise is full starboard (${cw}, ${past})`);
+      check(back === 0 && ccw === -50, `${vp.width}x${vp.height}, heading ${dir}: turning back undoes it (${back}), and an eighth anticlockwise is half port (${ccw})`);
+      check(after === 0, `${vp.width}x${vp.height}, heading ${dir}: let go and the wheel centres (got ${after})`);
+    }
+    // Dragging the open sea doesn't steer in wheel mode.
+    await p.mouse.move(vp.width / 2, vp.height / 3);
+    await p.mouse.down();
+    await p.mouse.move(vp.width / 2 + 80, vp.height / 3, { steps: 5 });
+    await p.waitForTimeout(150);
+    const sea = (await dbg(p)).ships[0].rudder;
+    await p.mouse.up();
+    check(sea === 0, `${vp.width}x${vp.height}: dragging the sea doesn't steer in wheel mode (got ${sea})`);
+    // The left cannon fires the side facing screen left.
+    const pre = await dbg(p);
+    await p.mouse.click(b[0].x, b[0].y);
+    await p.waitForTimeout(200);
+    const post = await dbg(p);
+    const bat = pre.leftIsStarboard ? 1 : 0;
+    check(post.ships[0].reload[bat] > 0, `${vp.width}x${vp.height}: left cannon fires the ${bat ? 'starboard' : 'port'} side`);
+    if (process.env.SHOTS) await p.screenshot({ path: `${process.env.SHOTS}/wheel-${vp.width}x${vp.height}.png` });
   }
 
   // 3. The camera follows your ship; an arrow points at the CPU when it's off screen.

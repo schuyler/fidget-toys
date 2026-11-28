@@ -43,7 +43,7 @@ is floats, so it may only use `+ − × ÷`, `sqrt`, `abs`, `min`, `max` and
 The CPU (`ai.js`) follows the same rule and acts only through
 `applyInput`. A rule change means updating `sim.js`, `test/sim.test.js`,
 `RULES.md` and the How to play card in `index.html` together, then running
-the headless tool. Settings the player sees are the five presets in
+the headless tool. Settings the player sees are the six presets in
 `main.js` (`CHOICES`); tuning parameters are `DEFAULTS` and `SHIP_TYPES` in
 `sim.js`.
 

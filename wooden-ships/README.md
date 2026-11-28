@@ -7,10 +7,11 @@ Play it at <https://schuyler.info/fidget-toys/wooden-ships/>, or serve the repo 
 ## Playing
 
 - Drag sideways anywhere to steer: drag the way you want the bow to swing. Let go and the rudder centres.
-- The two buttons in the bottom corners fire the broadside facing that way on screen. The arrow shows where the guns point; the ring is the reload.
+- Or pick the wheel in Settings (Steering): turn it clockwise and the ship turns clockwise, whichever way she's heading. A quarter turn is full rudder, and it spins back to centre when you let go.
+- The two buttons along the bottom fire the broadside facing that way on screen. The arrow (a cannon, with the wheel) shows where the guns point; the ring is the reload.
 - Waves roll downwind across the sea. Point your bow too close to where they're coming from and you stop: that's the no-go zone, 45° either side of the wind.
 - The sea is bigger than the screen and the view follows you. An arrow on the edge points at the CPU when it's out of sight.
-- Keyboard: ← → steer, Z and X fire.
+- Keyboard: → turns clockwise (to starboard) and ← anticlockwise, whichever way she's heading; Z and X fire.
 
 ## How it's built
 
@@ -30,7 +31,7 @@ Plain ES modules, no build step, same layout as Dot Army.
 - Upwind is slow (about 2 knots made good against 14 downwind), which makes the weather gauge matter a lot. Whether that's fun is still to be found out.
 - The CPU doesn't play the weather gauge. Easy is a lot weaker than hard in CPU-vs-CPU games (hard wins 93% on the big sea), but how it fares against people is untested.
 - No network play yet.
-- Steering by mouse drag is awkward: you have to hold the button down through a turn, and which way is which flips when your ship heads down the screen. The fire buttons are a long way apart on a wide screen. A ship's wheel and cannon buttons are being considered; see [IDEAS.md](IDEAS.md), which also has the other ideas waiting their turn.
+- Drag steering flips when your ship heads down the screen (drag the way the bow should swing), and you hold the button through a turn. The wheel is the alternative, but hasn't been playtested yet, and neither has a phone. [IDEAS.md](IDEAS.md) has the ideas waiting their turn.
 
 ## Art
 

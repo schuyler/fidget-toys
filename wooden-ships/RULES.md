@@ -220,9 +220,11 @@ Getting upwind of your rival lets you steal their wind. **(open)**
 
 You're blue, and you have the whole screen.
 
-- **Steering:** drag sideways anywhere. How far you drag from where you
-  first touched sets the rudder, up to full lock at about a thumb's
-  width (48 px). Let go and the rudder centres.
+- **Steering** is one of two ways, picked in Settings. Either way, let go
+  and the rudder centres.
+- **Drag** (the default): drag sideways anywhere. How far you drag from
+  where you first touched sets the rudder, up to full lock at about a
+  thumb's width (48 px).
   - Drag the way you want the **bow to swing on screen**. With your ship
     heading up the screen, dragging right is starboard rudder; heading
     down toward you, dragging right is port rudder. Like the fire
@@ -230,8 +232,21 @@ You're blue, and you have the whole screen.
   - It uses the same 15° rule as the buttons for when it swaps, and it's
     fixed for as long as your finger stays down, so a turn across the
     screen doesn't reverse halfway through.
-- **Fire:** two buttons in the bottom corners, **left** and **right**
-  as *you* see the screen, not port and starboard. The left button
+- **Wheel:** a ship's wheel at the bottom of the screen. Drag round it:
+  a quarter turn either way is full rudder, and turning past that does
+  nothing more. Let go and it spins back to centre, so you never have to
+  remember to straighten up. Dragging the open sea doesn't steer.
+  - Clockwise on the wheel is starboard rudder, and starboard rudder
+    turns the ship clockwise on screen whatever her heading, so there's
+    nothing to flip. The king spoke (straight up when centred) has a pale
+    handle so you can see where centre is.
+  - The fire buttons sit either side of it, drawn as cannons that point
+    where that side's guns point, run in when they fire, and run out
+    again as they reload.
+- **Fire:** two buttons along the bottom, **left** and **right**
+  as *you* see the screen, not port and starboard. On a narrow screen
+  they're in the corners; on a wide one they come in to no more than
+  240 px either side of the middle, so they're never a long reach apart. The left button
   fires whichever broadside is facing your left right now. Each button
   shows a small arrow pointing the way its guns point.
   - So you never have to work out port and starboard when your ship is
@@ -244,8 +259,10 @@ You're blue, and you have the whole screen.
 - There's no marker for the no-go zone. The waves show it: point your
   bow within 45° of where they're coming from and you lose way. See
   [IDEAS.md](IDEAS.md) for the look the interface is aiming for.
-- On a keyboard: ← → (or A, D) steer, with the same screen-relative
-  rule; Z (or Q) and X (or E) are the left and right buttons.
+- On a keyboard: → (or D) is always starboard rudder (clockwise) and ←
+  (or A) port, as on the wheel, in either steering mode; Z (or Q) and X
+  (or E) are the left and right buttons.
+- The camera keeps your own ship above the controls along the bottom.
 
 ## The CPU
 
@@ -275,6 +292,7 @@ You're blue, and you have the whole screen.
 | Wind | Steady, Shifty (default), Gusty |
 | Wind shadow | Off, On |
 | Crew per gun | 2, 3 (default), 5 |
+| Steering | Drag (default), Wheel |
 
 *Steady* never shifts. *Gusty* shifts twice as often, by up to 45° and
 6 kts.

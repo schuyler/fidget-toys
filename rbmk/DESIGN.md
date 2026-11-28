@@ -419,7 +419,12 @@ Results with the defaults (seeds 1–40 / 101–200):
 far above the cautious operator. Breaking the 15-rod rule is safe as
 long as nothing ever scrams, so the margin still doesn't matter to a
 smooth player. The inspector doesn't fix it (visits every ~2 h with a
-40-point reprimand still leave it at 58 h).
+40-point reprimand still leave it at 58 h). **Decided, next PR:** plant
+upsets scheduled from the seed on their own RNG stream (a turbine or
+main pump trip cuts flow or pressure for some seconds). Steam surges
+and the period shortens: from a healthy margin you catch it with rods or
+the trip scrams safely; in a pit at low power with few rods in, it's
+fatal. That's the 1986 trigger, and it uses the existing `flow`.
 
 ## Settings (presets, as in the other toys) (open)
 

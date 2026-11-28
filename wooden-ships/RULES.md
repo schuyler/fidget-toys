@@ -344,7 +344,8 @@ fast enough to feel like a fidget toy)**
   code** and types the code. The game starts when they arrive.
 - The host sails blue and picks the settings (islands, wind, wind
   shadow, crew); the guest sails red. Steering style stays each
-  player's own. There's no CPU.
+  player's own. There's no CPU. The guest's view is turned round, so
+  each player starts at the bottom of their own screen, heading up.
 - Both devices run the same game from the same seed, and only rudder
   and fire inputs cross the network, through the repo's shared relay and
   lockstep (as in Dot Army). An input takes effect 4 ticks (133 ms)

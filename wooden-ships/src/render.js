@@ -93,6 +93,12 @@ export function createRenderer(canvas, assets) {
   let shake = 0;
   let time = 0;
   /** @type {'drag'|'wheel'} */ let steer = 'drag';
+  /**
+   * The view: flip turns the sea 180° about the screen's centre (an online
+   * guest, so their ship starts at the bottom heading up, as the host's
+   * does); local is the ship this screen sails, whose hits shake it.
+   */
+  let view = { flip: false, local: 0 };
   /** the wheel's drawn turn (radians), easing back to centre after it's let go */
   let wheelShown = 0;
 
@@ -100,6 +106,12 @@ export function createRenderer(canvas, assets) {
   function setSteering(mode) {
     steer = mode;
     wheelShown = 0;
+  }
+
+  /** @param {{ flip: boolean, local: number }} v */
+  function setView(v) {
+    view = { ...v };
+    camReady = false;
   }
 
   /** @param {Game} g */
@@ -218,9 +230,10 @@ export function createRenderer(canvas, assets) {
     const x1 = Math.min(g.seaW, (cw - ox) / scale), y1 = Math.min(g.seaH, (ch - oy) / scale);
     // Whole device pixels, unscaled: the camera offset is rounded for the islands.
     const px = Math.round(ox * dpr), py = Math.round(oy * dpr);
-    const m = ctx.getTransform(); // dpr scale, plus any screen shake
+    const m = ctx.getTransform(); // dpr scale, plus any screen shake and the flip
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, Math.round(m.e), Math.round(m.f));
+    // A flipped view negates both axes: still whole pixels, turned 180°, not mirrored.
+    ctx.setTransform(Math.sign(m.a), 0, 0, Math.sign(m.d), Math.round(m.e), Math.round(m.f));
     for (let cj = Math.floor(y0 / cm); cj * cm < y1; cj++) {
       for (let ci = Math.floor(x0 / cm); ci * cm < x1; ci++) {
         const c = chunk(ci, cj);
@@ -252,9 +265,11 @@ export function createRenderer(canvas, assets) {
     tx += Math.max(-vw * 0.2, Math.min(vw * 0.2, ship.vx * ts * 1.5));
     ty += Math.max(-vh * 0.2, Math.min(vh * 0.2, ship.vy * ts * 1.5));
     tx = Math.max(me.x - vw * 0.3, Math.min(me.x + vw * 0.3, tx));
-    // Your ship may sit high on the screen but not low, where the controls are.
+    // Your ship may sit high on the screen but not low, where the controls
+    // are. Turned round, the bottom of the screen is north (−y).
     const below = Math.max(0.1, Math.min(0.3, (controlsTop() - 50) / ch - 0.5));
-    ty = Math.max(me.y - vh * below, Math.min(me.y + vh * 0.3, ty));
+    if (view.flip) ty = Math.max(me.y - vh * 0.3, Math.min(me.y + vh * below, ty));
+    else ty = Math.max(me.y - vh * below, Math.min(me.y + vh * 0.3, ty));
     if (!camReady) { camX = tx; camY = ty; camReady = true; }
     const k = 1 - Math.exp(-dt * 2.5);
     camX += (tx - camX) * k;
@@ -268,6 +283,12 @@ export function createRenderer(canvas, assets) {
   /** @param {number} x @param {number} y */
   const sx = (x) => ox + x * scale;
   const sy = (/** @type {number} */ y) => oy + y * scale;
+  /**
+   * World metres → where they are on screen, flip included. World drawing
+   * uses sx/sy inside the flipped transform; things drawn straight on the
+   * screen (the enemy arrow) use this. @param {number} x @param {number} y
+   */
+  const toScreen = (x, y) => (view.flip ? { x: cw - sx(x), y: ch - sy(y) } : { x: sx(x), y: sy(y) });
 
   /** @param {Events} ev */
   function onTick(ev) {
@@ -292,7 +313,7 @@ export function createRenderer(canvas, assets) {
         const a = Math.random() * Math.PI * 2, v = 4 + Math.random() * 8;
         fx.push({ x: h.x, y: h.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.9, max: 0.9, kind: 'wood', size: 3, rot: a, spin: (Math.random() - 0.5) * 12, sprite: `wood (${1 + Math.floor(Math.random() * 4)})` });
       }
-      if (h.ship === 0) shake = Math.min(1, shake + 0.25);
+      if (h.ship === view.local) shake = Math.min(1, shake + 0.25);
     }
     for (const s of ev.splashes) {
       if (s.land) fx.push({ x: s.x, y: s.y, vx: 0, vy: 0, life: 0.6, max: 0.6, kind: 'dust', size: 5, rot: 0, spin: 0 });
@@ -335,6 +356,9 @@ export function createRenderer(canvas, assets) {
       ctx.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k);
       shake = Math.max(0, shake - dt * 2.5);
     }
+    // Turned round about the screen's centre, which is where the camera
+    // points, so the camera itself needs no other change.
+    if (view.flip) { ctx.translate(cw, ch); ctx.rotate(Math.PI); }
     drawTerrain();
 
     drawStreaks(dt, ui.timeScale);
@@ -570,7 +594,7 @@ export function createRenderer(canvas, assets) {
     const i = g.ships.findIndex((s) => s.side !== me.side);
     if (i < 0) return;
     const foe = g.ships[i], f = poses[i], mp = poses[you];
-    const ex = sx(f.x), ey = sy(f.y);
+    const { x: ex, y: ey } = toScreen(f.x, f.y);
     const pad = (foe.type.length / 2) * scale;
     if (ex > -pad && ey > -pad && ex < cw + pad && ey < ch + pad) return;
     const left = 24 + safe.left, right = cw - 24 - safe.right;
@@ -621,7 +645,7 @@ export function createRenderer(canvas, assets) {
     if (!game) return;
     const r = 24;
     const x = 12 + safe.left + r, y = 10 + safe.top + r;
-    const dir = toRad(game.wind.dir) + Math.PI; // the way it blows
+    const dir = toRad(game.wind.dir) + Math.PI + (view.flip ? Math.PI : 0); // the way it blows, on screen
     ctx.save();
     ctx.fillStyle = 'rgba(13,16,32,0.55)';
     ctx.beginPath();
@@ -691,7 +715,7 @@ export function createRenderer(canvas, assets) {
       // A cannon, muzzle the way that side's guns point. It runs in when it
       // fires and out again as it reloads.
       const d = batteryDir(ship, b.battery);
-      const a = Math.atan2(d.y, d.x);
+      const a = Math.atan2(d.y, d.x) + (view.flip ? Math.PI : 0); // on screen
       const cr = assets.atlas.get('cannon');
       const w = b.r * 1.25, h = cr ? (w * cr.h) / cr.w : w * 0.55;
       const back = (1 - Math.min(1, b.reload)) * b.r * 0.3;
@@ -701,7 +725,7 @@ export function createRenderer(canvas, assets) {
       sprite('cannon', -w * 0.45 - back, -h / 2, w, h); // the sprite's muzzle points right
     } else if (ship) {
       const d = batteryDir(ship, b.battery);
-      const a = Math.atan2(d.y, d.x);
+      const a = Math.atan2(d.y, d.x) + (view.flip ? Math.PI : 0); // on screen
       ctx.translate(b.x, b.y);
       ctx.rotate(a);
       ctx.fillStyle = '#fff';
@@ -929,10 +953,10 @@ export function createRenderer(canvas, assets) {
   }
 
   return {
-    setGame, setSteering, layout, onTick, draw, buttonSpots, wheelSpot,
+    setGame, setSteering, setView, layout, onTick, draw, buttonSpots, wheelSpot, toScreen,
     /** The sea on screen, in metres, and the enemy arrow if one is showing (for tests). */
     view() {
-      return { x: -ox / scale, y: -oy / scale, w: cw / scale, h: ch / scale, arrow };
+      return { x: -ox / scale, y: -oy / scale, w: cw / scale, h: ch / scale, flip: view.flip, arrow };
     },
   };
 }

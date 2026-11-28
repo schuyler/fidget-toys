@@ -34,7 +34,6 @@ Plain ES modules, no build step, same layout as Dot Army.
 - Upwind is slow (about 2 knots made good against 14 downwind), which makes the weather gauge matter a lot. Whether that's fun is still to be found out.
 - The CPU doesn't play the weather gauge. Easy is a lot weaker than hard in CPU-vs-CPU games (hard wins 93% on the big sea), but how it fares against people is untested.
 - Online play has only been tried between two tabs and through a relay on the same machine, not between two phones over the internet. The 133 ms input delay is a guess at what the deployed relay needs; `?delay=N` (in ticks) tries others.
-- Online, the guest sees the sea the same way up as the host, so red starts at the top of the screen sailing down it. Dot Army turns the board round for its guest; Wooden Ships doesn't yet.
 - Drag steering flips when your ship heads down the screen (drag the way the bow should swing), and you hold the button through a turn. The wheel is the alternative, but hasn't been playtested yet, and neither has a phone. [IDEAS.md](IDEAS.md) has the ideas waiting their turn.
 
 ## Art

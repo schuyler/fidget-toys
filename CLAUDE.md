@@ -101,8 +101,12 @@ the headless tool. Settings the player sees are the six presets in
   float state, touched only by `+ − × ÷`, `min`, `max` and `abs` (no
   `Math.exp`, `log` or `**`), so a shift can be replayed exactly. The
   interface changes the reactor only through `setControls` and `scram`.
-- `// @ts-check` files: `sim.js`. Tuning numbers are `DEFAULTS` in
-  `sim.js`. Tests: `rbmk/test/sim.test.js`.
+- `src/orders.js` (dispatcher, inspector, rating) follows the same float
+  rule and only reads the reactor. Its schedule depends on the seed
+  alone, never on the player.
+- `// @ts-check` files: `sim.js`, `orders.js`, `rng.js`. Tuning numbers
+  are `DEFAULTS` in `sim.js` and `ORDER_DEFAULTS` in `orders.js`. Tests:
+  `rbmk/test/sim.test.js`, `orders.test.js`.
 
 ## Deploying
 

@@ -31,6 +31,32 @@ const TERRAIN = {
 };
 
 const GLYPH = { compact: 'C', orrin: 'O', vell: 'V' };
+
+// ---- Art: single-colour SVGs from ./art, tinted per use (fill is currentColor) ----
+/** `ink` is the longest side of the drawing within its 180 px source frame. */
+const ART = { base: { ink: 124 }, trooper: { ink: 127 }, vell: { ink: 128 } };
+/** The base's tint on its hex: a little lighter than the other terrain marks, since it is line art. */
+const BASE_MARK = '#8a91b8';
+/** The figure's longest side, in hex radii; the disc is 1.12 across. */
+const ICON_FILL = 0.78;
+const ICON = { compact: 'trooper', orrin: 'trooper', vell: 'vell' };
+/** @type {Record<string, string>} */ const artText = {};
+/** @type {Record<string, HTMLImageElement>} */ const artImg = {};
+for (const k of Object.keys(ART)) fetch(`art/${k}.svg`).then((r) => r.text()).then((t) => { artText[k] = t; }).catch(() => {});
+/** The tinted image, or null while it is still loading. */
+function tinted(/** @type {string} */ key, /** @type {string} */ col) {
+  const id = key + col;
+  let im = artImg[id];
+  if (!im) {
+    const t = artText[key];
+    if (!t) return null;
+    const svg = t.replace('color="#111"', `color="${col}"`).replace('width="180" height="180"', 'width="720" height="720"');
+    im = new Image();
+    im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    artImg[id] = im;
+  }
+  return im.complete && im.naturalWidth ? im : null;
+}
 /** Hex radius in CSS px at zoom 1: about 42 px across, a comfortable tap. */
 export const BASE_SIZE = 24;
 
@@ -159,6 +185,15 @@ export function createRenderer(canvas) {
   const sx = (/** @type {number} */ bx) => ox + bx * size;
   const sy = (/** @type {number} */ by) => oy + by * size;
 
+  /** Draw a figure centred on (cx, cy) with its longest side `inkSide` px; false while loading. */
+  function drawArt(/** @type {keyof typeof ART} */ key, /** @type {string} */ col, /** @type {number} */ cx, /** @type {number} */ cy, /** @type {number} */ inkSide) {
+    const im = tinted(key, col);
+    if (!im) return false;
+    const box = (inkSide * 180) / ART[key].ink;
+    ctx.drawImage(im, cx - box / 2, cy - box / 2, box, box);
+    return true;
+  }
+
   function drawBoard(/** @type {Scene} */ scene) {
     if (!game) return;
     const g = game;
@@ -170,7 +205,8 @@ export function createRenderer(canvas) {
       hexPath(x, y, size * (t === ROCK ? 1.0 : 0.94));
       ctx.fillStyle = TERRAIN[t];
       ctx.fill();
-      drawTerrainMark(t, x, y);
+      // A victory hex's terrain art is the base, drawn like the other terrain marks.
+      if (!(vic.has(i) && drawArt('base', BASE_MARK, x, y, size * 1.1))) drawTerrainMark(t, x, y);
       if (scene.sight && !scene.sight[i] && t !== ROCK) {
         hexPath(x, y, size * 0.94);
         ctx.fillStyle = 'rgba(5,7,16,0.45)';
@@ -324,11 +360,14 @@ export function createRenderer(canvas) {
       ctx.beginPath(); ctx.arc(x, y, r + ctx.lineWidth / 2, 0, Math.PI * 2); ctx.stroke();
       ctx.strokeStyle = left > 0.5 ? '#7dffb0' : left > 0.25 ? COLORS.watch : COLORS.sides[1];
       ctx.beginPath(); ctx.arc(x, y, r + ctx.lineWidth / 2, -Math.PI / 2, -Math.PI / 2 + left * Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.font = `700 ${Math.round(size * 0.6)}px system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(GLYPH[/** @type {keyof typeof GLYPH} */ (p.faction)] ?? '?', x, y + 1);
+      const icon = /** @type {keyof typeof ART} */ (ICON[/** @type {keyof typeof ICON} */ (p.faction)]);
+      if (!icon || !drawArt(icon, '#fff', x, y, size * ICON_FILL)) {
+        ctx.fillStyle = '#fff';
+        ctx.font = `700 ${Math.round(size * 0.6)}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(GLYPH[/** @type {keyof typeof GLYPH} */ (p.faction)] ?? '?', x, y + 1);
+      }
       if (p.leader) {
         ctx.font = `${Math.round(size * 0.45)}px system-ui, sans-serif`;
         ctx.fillStyle = COLORS.watch;

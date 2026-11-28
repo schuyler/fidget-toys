@@ -38,7 +38,7 @@ const PLAYTEST = { combat: 'dice', defence: 'original', command: 1 };
 
 test('R13: after the last beat, playback shows exactly the game the stage left behind', () => {
   let stages = 0;
-  for (const extra of [{ faction0: 'compact', faction1: 'orrin', squad0: 6, squad1: 4 }, { faction0: 'vell', faction1: 'compact', squad0: 6, squad1: 6, swarm: 1 }]) {
+  for (const extra of [{ faction0: 'terrans', faction1: 'orrin', squad0: 6, squad1: 4 }, { faction0: 'vell', faction1: 'terrans', squad0: 6, squad1: 6, swarm: 1 }]) {
     for (let seed = 1; seed <= 6; seed++) {
       eachStage({ ...PLAYTEST, ...extra, seed }, 30, ({ game, before, beats }) => {
         stages++;
@@ -59,7 +59,7 @@ test('R13: beats come in order: fire, launches, each movement step, bombs, then 
   const rank = { fire: 0, launch: 1, step: 2, blast: 3, end: 4 };
   const seen = new Set();
   for (let seed = 1; seed <= 6; seed++) {
-    eachStage({ ...PLAYTEST, faction0: 'compact', faction1: 'orrin', squad0: 6, squad1: 4, seed }, 30, ({ beats }) => {
+    eachStage({ ...PLAYTEST, faction0: 'terrans', faction1: 'orrin', squad0: 6, squad1: 4, seed }, 30, ({ beats }) => {
       for (let i = 1; i < beats.length; i++) assert.ok(rank[beats[i - 1].kind] <= rank[beats[i].kind], beats.map((b) => b.kind).join(','));
       const steps = beats.filter((b) => b.kind === 'step');
       steps.forEach((b, i) => { if (i) assert.ok(b.index > steps[i - 1].index); });
@@ -76,7 +76,7 @@ test('R13: beats come in order: fire, launches, each movement step, bombs, then 
 test('R13: with command on, troopers in command fire in their own wave, first', () => {
   let split = 0;
   for (let seed = 1; seed <= 8; seed++) {
-    eachStage({ ...PLAYTEST, faction0: 'compact', faction1: 'orrin', squad0: 8, squad1: 6, seed }, 30, ({ ev, beats, cmd }) => {
+    eachStage({ ...PLAYTEST, faction0: 'terrans', faction1: 'orrin', squad0: 8, squad1: 6, seed }, 30, ({ ev, beats, cmd }) => {
       const fire = beats.filter((b) => b.kind === 'fire');
       const all = ev.shots.filter((s) => s.kind === 'fire');
       assert.deepEqual(fire.flatMap((b) => b.shots), all);
@@ -91,7 +91,7 @@ test('R13: with command on, troopers in command fire in their own wave, first', 
 });
 
 test('R13: without command, all fire is one wave', () => {
-  eachStage({ combat: 'dice', defence: 'original', faction0: 'compact', faction1: 'orrin', seed: 3 }, 20, ({ beats }) => {
+  eachStage({ combat: 'dice', defence: 'original', faction0: 'terrans', faction1: 'orrin', seed: 3 }, 20, ({ beats }) => {
     for (const b of beats) if (b.kind === 'fire') assert.equal(b.wave, 'all');
     assert.ok(beats.filter((b) => b.kind === 'fire').length <= 1);
   });

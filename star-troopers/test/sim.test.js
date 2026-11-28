@@ -169,7 +169,7 @@ test('only troopers that were not hit recover (rule 6.31)', () => {
     { side: 1, cell: C(6, 9), shock: 4 },
   ]);
   resolveTurn(game, orders(game, { 0: { target: 1, fire: 3 } }));
-  assert.equal(game.troopers[0].shock, 1);      // Compact recovers 3
+  assert.equal(game.troopers[0].shock, 1);      // Terrans recovers 3
   assert.equal(game.troopers[1].shock, 4 + 1);  // attack 6 - range 2 = 4, divided by 3
 });
 
@@ -277,7 +277,7 @@ test('two stages: at most 6 points a stage, and the second gets what the first l
   resolveTurn(game, orders(game, { 0: { dodge: 6 }, 1: { dodge: 6 } }));
   assert.equal(game.stage, 2);
   assert.equal(game.turn, 1);
-  assert.equal(spendable(game, c), 3);   // Compact: 9 - 6
+  assert.equal(spendable(game, c), 3);   // Terrans: 9 - 6
   assert.equal(spendable(game, o), 6);   // Orrin: 12 - 6, capped at 6
   resolveTurn(game, orders(game, { 0: { dodge: 3 }, 1: { dodge: 6 } }));
   assert.deepEqual([game.turn, game.stage], [2, 1]);
@@ -408,9 +408,9 @@ test('original defence: terrain value, 1 per ten hexes of range, 1 per point spe
   assert.equal(defenceOf(game, t, C(2, 9), { ...idle(), path: [C(7, 9)], moveCost: 1, dodge: 2 }), 3 + 1 + 1 + 4);
 });
 
-test('leaders: about 1 in 5 Compact, 3 in 7 Orrin, no Vell', () => {
+test('leaders: about 1 in 5 Terrans, 3 in 7 Orrin, no Vell', () => {
   const lead = (f, n) => createGame({ seed: 4, faction0: f, squad0: n }).troopers.filter((t) => t.side === 0 && t.leader).length;
-  assert.deepEqual([lead('compact', 6), lead('compact', 10), lead('orrin', 4), lead('orrin', 7), lead('vell', 8)], [1, 2, 2, 3, 0]);
+  assert.deepEqual([lead('terrans', 6), lead('terrans', 10), lead('orrin', 4), lead('orrin', 7), lead('vell', 8)], [1, 2, 2, 3, 0]);
 });
 
 test('in command: terrain value plus range rating to a leader, within current points', () => {
@@ -427,7 +427,7 @@ test('in command: terrain value plus range rating to a leader, within current po
 
 test('with command on, troopers in command fire first, and their hits cut the others\' shots', () => {
   const setup = (command) => board(
-    [{ side: 0, cell: C(2, 9), faction: 'vell' }, { side: 1, cell: C(4, 9) }],  // the Compact trooper has no leader
+    [{ side: 0, cell: C(2, 9), faction: 'vell' }, { side: 1, cell: C(4, 9) }],  // the Terran trooper has no leader
     {}, { command },
   );
   const both = setup(0);
@@ -435,7 +435,7 @@ test('with command on, troopers in command fire first, and their hits cut the ot
   assert.equal(ev.shots.length, 2);
   const cmd = setup(1);
   ev = resolveTurn(cmd, orders(cmd, { 0: { target: 1, fire: 6 }, 1: { target: 0, fire: 6 } }));
-  // The Vell's shot (attack 24 against 1) takes 7, more than the 6 the Compact had in its shot.
+  // The Vell's shot (attack 24 against 1) takes 7, more than the 6 the Terrans had in its shot.
   assert.equal(ev.shots.length, 1);
   assert.equal(ev.shots[0].from, 0);
 });
@@ -456,12 +456,12 @@ test('swarms: up to three Vell share a cell; nobody else does', () => {
   assert.deepEqual([...cells.values()], [3, 3, 1]);
   const [a, b, c, d] = vell;
   assert.ok(canShare(g, [a, b, c]) && !canShare(g, [a, b, c, d]));
-  const compact = g.troopers.filter((t) => t.side === 1);
-  assert.ok(!canShare(g, [compact[0], compact[1]]) && !canShare(g, [a, compact[0]]));
+  const terrans = g.troopers.filter((t) => t.side === 1);
+  assert.ok(!canShare(g, [terrans[0], terrans[1]]) && !canShare(g, [a, terrans[0]]));
   assert.ok(!canShare(createGame({ faction0: V }), createGame({ faction0: V }).troopers.slice(0, 2)));
 });
 
-test('swarms move together, and a fourth Vell or a Compact trooper can\'t join', () => {
+test('swarms move together, and a fourth Vell or a Terran trooper can\'t join', () => {
   const at = C(4, 9), to = C(5, 9);
   const game = board([
     { side: 0, cell: at, faction: V }, { side: 0, cell: at, faction: V }, { side: 0, cell: at, faction: V },
@@ -488,7 +488,7 @@ test('a swarm pools its dodge, and pools a shot when all three plot the same one
   const split = mk();
   ev = resolveTurn(split, orders(split, { 0: { target: 3, fire: 2 }, 1: { target: 3, fire: 2 }, 2: { target: 3, fire: 1 } }));
   assert.deepEqual(ev.shots.map((x) => x.attack), [8, 8, 4]);
-  // the Compact shoots back at one of them: two of the swarm dodging 1 each (x4) protects all three
+  // the Terrans shoots back at one of them: two of the swarm dodging 1 each (x4) protects all three
   const dodge = mk();
   ev = resolveTurn(dodge, orders(dodge, { 0: { dodge: 1 }, 1: { dodge: 1 }, 3: { target: 2, fire: 6 } }));
   assert.ok(ev.shots.every((x) => x.defence === 3 + 8));   // open 0 + range 3 (6 cells / 2) + pooled dodge 8
@@ -638,7 +638,7 @@ test('R14: a launch records its scatter die: 1-6 when it needed a roll, 0 when i
 });
 
 test('R14: recording rolls changes nothing: a seeded CPU game ends in the same state as before', () => {
-  const g = createGame({ combat: 'dice', defence: 'original', command: 1, faction0: 'compact', squad0: 6, faction1: 'vell', squad1: 6, swarm: 1, seed: 4242 });
+  const g = createGame({ combat: 'dice', defence: 'original', command: 1, faction0: 'terrans', squad0: 6, faction1: 'vell', squad1: 6, swarm: 1, seed: 4242 });
   const ais = [createAI(0, 1), createAI(1, 2)];
   for (let n = 0; n < 9; n++) {
     const o = [];
@@ -649,7 +649,7 @@ test('R14: recording rolls changes nothing: a seeded CPU game ends in the same s
 });
 
 test('the preview\'s cancelling dodge follows the combat setting: under the tables a shot needs +1 to hurt', () => {
-  // Compact (Aim 2) at a Compact in the open 4 cells away: original defence 1 + 1 = 2.
+  // Terran (Aim 2) at a Terran in the open 4 cells away: original defence 1 + 1 = 2.
   const dice = board([{ side: 0, cell: C(6, 12) }, { side: 1, cell: C(6, 8) }], {}, { combat: 'dice', defence: 'original' });
   const [a, b] = dice.troopers;
   assert.equal(preview(dice, a, b, 1).cancel, 0);   // 2 against 2: already no loss

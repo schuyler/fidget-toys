@@ -9,14 +9,14 @@
  * Change them here.
  */
 export const FORCES = {
-  lighter: { orrin: 4, compact: 6, vell: 6 },
-  standard: { orrin: 6, compact: 8, vell: 8 },
+  lighter: { orrin: 4, terrans: 6, vell: 6 },
+  standard: { orrin: 6, terrans: 8, vell: 8 },
 };
 
 /** Fixed for playtesting: the original rules, in the Meeting scenario. */
 export const FIXED = /** @type {const} */ ({ scenario: 'meeting', combat: 'dice', defence: 'original', command: 1 });
 
-const FACTION_KEYS = ['compact', 'orrin', 'vell'];
+const FACTION_KEYS = ['terrans', 'orrin', 'vell'];
 
 /** The choices for each setting. */
 export const CHOICES = {
@@ -31,7 +31,7 @@ export const CHOICES = {
 /** @typedef {{ you: string, enemy: string, cpu: string, forces: string, terrain: string, swarms: string }} Settings */
 
 /** @type {Settings} */
-export const DEFAULT_SETTINGS = { you: 'compact', enemy: 'orrin', cpu: 'easy', forces: 'lighter', terrain: 'some', swarms: 'off' };
+export const DEFAULT_SETTINGS = { you: 'terrans', enemy: 'orrin', cpu: 'easy', forces: 'lighter', terrain: 'some', swarms: 'off' };
 
 /**
  * Settings from storage (or a form), with anything unknown replaced by the

@@ -65,11 +65,11 @@ mirror matches.
 
 | Faction | Homage to | Pool | Aim | Recovery | Value |
 |---|---|---|---|---|---|
-| **Compact** | Humans | 9 | 2 | 3 | 14 |
+| **Terrans** | Humans | 9 | 2 | 3 | 14 |
 | **Orrin** | L'Chal Dah | 12 | 2 | 1 | 15 |
 | **Vell** | Rame | 6 | 4 | 2 | 14 |
 
-- **The Compact** are middling at everything except bouncing back.
+- **The Terrans** are middling at everything except bouncing back.
   Recovery 3 is a third of their pool, so a trooper that gets out of
   the line of fire is soon back in the fight.
 - **The Orrin** have the deepest pool, so they can do more in a turn
@@ -143,7 +143,7 @@ defence = cover            (of the cell the target is in when shot)
 - There's no combined fire: every shot is worked out on its own, and
   their shock adds up.
 
-For example, a Compact trooper puts 6 points into a shot (attack 12)
+For example, a Terran trooper puts 6 points into a shot (attack 12)
 at another standing in the open 4 cells away (range 2). With no dodge,
 that's `floor(10 / 3) = 3` shock. If the target had put 2 points into
 dodging (+4), it would have taken `floor(6 / 3) = 2`.
@@ -162,7 +162,7 @@ dodging (+4), it would have taken `floor(6 / 3) = 2`.
 
 After the original's Command Communication (rule 16.0). With it on:
 
-- About 1 in 5 Compact troopers are leaders, and 3 in 7 Orrin, after the
+- About 1 in 5 Terran troopers are leaders, and 3 in 7 Orrin, after the
   original's unit chart. The Vell have no leaders: like the Rame, a
   joint mind, they're always in command.
 - A trooper is **in command** if it's a leader, or if the terrain value
@@ -176,10 +176,10 @@ After the original's Command Communication (rule 16.0). With it on:
   doesn't happen). The original lets the player choose which tasks lose
   points; this fixes the order.
 
-In CPU-vs-CPU games it's active (Compact troopers, with one leader to a
+In CPU-vs-CPU games it's active (Terran troopers, with one leader to a
 squad of six, are out of command about a third of the time, mostly
 after losing their leader) but changes win rates by only a point or two.
-Most Compact damage comes from bombs, and losses before launching rarely
+Most Terrans damage comes from bombs, and losses before launching rarely
 cancel one.
 
 ### Swarms (setting, off by default)
@@ -283,7 +283,7 @@ A game-turn is two stages, and each stage runs the whole sequence below.
 4. **Recovery:** every trooper that took no shock this stage removes
    shock equal to its Recovery. Since there are two stages, a trooper
    that stays out of the line of fire recovers twice a game-turn: a
-   Compact trooper, at Recovery 3, can shake off 6 shock a turn.
+   Terran trooper, at Recovery 3, can shake off 6 shock a turn.
 5. **Control:** victory hexes change hands (see below).
 6. **Win check.** The turn limit counts whole game-turns.
 
@@ -315,8 +315,8 @@ role; you pick yours in settings.
   victory hexes in its half. Its troopers start **dug in**: +1 defence
   while they're still in their deployment zone and haven't left it.
 - **The attacker** fields the fewest troopers whose total value is at
-  least **1.2 ×** the defender's. For example, against 4 Compact (56),
-  that's 5 Compact (70) or 5 Orrin (75).
+  least **1.2 ×** the defender's. For example, against 4 Terrans (56),
+  that's 5 Terrans (70) or 5 Orrin (75).
 - The attacker wins at the end of any turn in which it holds **two** of
   the three victory hexes. It doesn't need to be stronger everywhere,
   just in the right two places, so the defender has to guess where the
@@ -388,10 +388,10 @@ The browser game has six, remembered between visits:
 
 | Setting | Choices |
 |---|---|
-| You | Compact, Orrin, Vell |
-| Enemy | Compact, Orrin, Vell |
+| You | Terrans, Orrin, Vell |
+| Enemy | Terrans, Orrin, Vell |
 | CPU | Easy, Hard |
-| Forces | Lighter (4 Orrin, 6 Compact or 6 Vell a side), Standard (6, 8 or 8) |
+| Forces | Lighter (4 Orrin, 6 Terrans or 6 Vell a side), Standard (6, 8 or 8) |
 | Terrain | Open, Some, Dense |
 | Vell swarms | Off, On |
 
@@ -487,14 +487,14 @@ None of this is in the first version, but it's the plan.
   plays CPU-vs-CPU games without a browser and prints win rates, game
   length, how often a single shot takes down an unhurt trooper, how
   often shots can't beat defence, and how often games stall. A comma
-  list sweeps a parameter, so `faction0=compact,orrin,vell
-  faction1=compact,orrin,vell` plays every pairing. The CPU is crude,
+  list sweeps a parameter, so `faction0=terrans,orrin,vell
+  faction1=terrans,orrin,vell` plays every pairing. The CPU is crude,
   so these numbers find broken settings, not good ones.
 - **Tune the formulas, not the factions.** The faction numbers are the
   original's and stay put. What the original turned into damage with
   dice and a results table, this game does with a fixed formula, and
   that changes the balance. The first draft made everything kill
-  everything: a Vell's 6 points at Aim 4 took down a fresh Compact
+  everything: a Vell's 6 points at Aim 4 took down a fresh Terrans
   trooper in one shot, and games were over by turn 5. Damage divided by
   3 rather than 2, and range counting every 2 cells rather than 3,
   slowed that down.
@@ -506,10 +506,10 @@ None of this is in the first version, but it's the plan.
   - With two-stage turns (the current default), the Vell no longer beat
     everyone: the Orrin beat them about 70% of the time. That's what
     the original's designers built two stages for.
-  - The Compact lose to everyone: about 80–95% against the Orrin and
+  - The Terrans lose to everyone: about 80–95% against the Orrin and
     about 92% against the Vell. They deal almost no damage. An Orrin
-    spends 6 + 6 points a game-turn and a Compact 6 + 3, with the same
-    Aim, so in direct fire alone the Compact are simply weaker. In the
+    spends 6 + 6 points a game-turn and a Terran 6 + 3, with the same
+    Aim, so in direct fire alone the Terrans are simply weaker. In the
     original their answer was recovery (up to 6 shock a game-turn while
     unhit) and launched weapons, whose damage doesn't depend on
     Efficiency: a blast hits at a fixed strength (30 in its hex, 15 and
@@ -517,13 +517,13 @@ None of this is in the first version, but it's the plan.
     Efficiency only decides whether a guided weapon lands where it was
     aimed. List's tactics article says "the bulk of the damage to the
     enemy will be done by Launched Weapons."
-  - With launched weapons in (the current default), the Compact finally
+  - With launched weapons in (the current default), the Terrans finally
     deal real damage: about 1 shock per trooper-turn, up from 0.04, most
     of it from bombs. Games are faster (5–6 turns) and mostly end by
     fighting, not at the turn limit. But because a bomb's damage ignores
     Aim, the pool becomes the deciding number: it's both how much a
     trooper can take and how many bombs it can throw. The Orrin (pool
-    12) now beat everyone: about 85–93% against the Compact and 98%+
+    12) now beat everyone: about 85–93% against the Terrans and 98%+
     against the Vell. Their weakness, Recovery 1, only tells in long
     fights, and games are short.
   - So each piece of the original added so far has shifted the
@@ -534,11 +534,11 @@ None of this is in the first version, but it's the plan.
     untouched.
   - **Measured force matching** (`tools/forces.js`, every combination of
     2–8 troopers a side, then the best candidates at 300 games a
-    pairing): one Orrin is worth about 1.5–1.6 Compact, and one Compact
+    pairing): one Orrin is worth about 1.5–1.6 Terrans, and one Terran
     about 1.3 Vell. The three ratios agree with each other, which is a
     sign they're measuring something real. The most even whole-number
-    table is **4 Orrin = 6 Compact = 8 Vell**: Orrin 52% against
-    Compact, Vell 44% against Compact, Orrin 41% against Vell, games
+    table is **4 Orrin = 6 Terrans = 8 Vell**: Orrin 52% against
+    Terrans, Vell 44% against Terrans, Orrin 41% against Vell, games
     about 6–7 turns, mostly ending by fighting. The worth of a trooper
     isn't quite constant with squad size (the Vell fall off in bigger
     fights), so the table only holds near these sizes. Measured with
@@ -550,26 +550,26 @@ None of this is in the first version, but it's the plan.
     turned up after the measurements above): troopers spend about
     two-thirds of their time in cover, and bombs and direct fire share
     the damage, much as the original describes. Force matching changes:
-    - One Orrin is worth about 1.4 Compact, which is the original's own
+    - One Orrin is worth about 1.4 Terrans, which is the original's own
       ratio: its unit chart prices a ten-soldier Human squad the same as
-      a seven-soldier L'Chal Dah squad. 7 Orrin against 10 Compact
+      a seven-soldier L'Chal Dah squad. 7 Orrin against 10 Terrans
       comes out 39–61.
-    - Vell and Compact are roughly one for one, the Vell slightly
+    - Vell and Terrans are roughly one for one, the Vell slightly
       ahead. In the original, six Rame cost the same as ten Humans; the
       difference is everything the Rame had that the Vell don't yet
       (Killer Swarm, always in command so firing first, and
       countermeasures that work fully in the air).
     - The three don't sit on one scale: the Orrin beat the Vell by more
       than the other two ratios predict, so no whole-number table is
-      even all round. The best found are 6 Orrin / 8 Compact / 8 Vell
-      (53, 70 and 55: Orrin over Compact, Vell over Compact, Orrin over
+      even all round. The best found are 6 Orrin / 8 Terrans / 8 Vell
+      (53, 70 and 55: Orrin over Terrans, Vell over Terrans, Orrin over
       Vell) and 4 / 6 / 6 (38, 68, 54), over 300 games a pairing.
     - **(open: adopt the 1977 tables as the default, and which forces)**
   - **The CPU is now a big factor.** Teaching it that dodging and leaving
     the blast radius protect against bombs made it clearly better as the
-    Compact and the Orrin (beating the old CPU 148–52 and 133–65 in
+    Terrans and the Orrin (beating the old CPU 148–52 and 133–65 in
     mirror matches) but no better as the Vell (94–100). Vell against
-    Compact at 6 a side dropped from 67% to 34% as a result. Every
+    Terrans at 6 a side dropped from 67% to 34% as a result. Every
     balance figure here is partly a measure of how well the CPU plays
     each faction, so CPU changes need checking against the old CPU
     before their balance effects are trusted.

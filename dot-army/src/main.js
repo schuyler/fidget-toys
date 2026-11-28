@@ -412,7 +412,6 @@ function statRows() {
     rows: /** @type {[string, number, number][]} */ ([
       ['Dots made', st.spawned[0], st.spawned[1]],
       ['Kills', st.kills[0], st.kills[1]],
-      ['Lost in battle', st.lost[0], st.lost[1]],
       ['Thrown at spawns', st.spent[0], st.spent[1]],
       ['Spawns captured', st.captures[0], st.captures[1]],
       ['Biggest army', st.peak[0], st.peak[1]],

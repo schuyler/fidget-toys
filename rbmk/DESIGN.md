@@ -1,4 +1,4 @@
-# RBMK — design sketch
+# Prompt Critical — design
 
 A real-time, single-player game. You operate a graphite-moderated,
 water-cooled reactor modelled loosely on the RBMK-1000. The grid
@@ -12,14 +12,15 @@ in the actual reactor. The numbers are starting guesses to be tuned with
 a headless tool. Where they come from the real plant, that's noted.
 Questions still open are marked **(open)**.
 
-> Status: sketch for review. No code yet.
+> Status: the simulation (`src/sim.js`) and the orders and rating
+> (`src/orders.js`) are built and tested. No UI yet.
 
-## Alternate names
+## Name
 
-- **AZ-5**: the scram button, which is also how the game ends.
-- **Xenon Pit**: the poisoned low-power state the game is built around.
-- **Prompt Critical**: the moment you lose. It may suit the game-over
-  screen better than the title.
+The game is called **Prompt Critical**, after the moment you lose. The
+directory stays `rbmk/`. Names considered and passed over: **AZ-5** (the
+scram button, which is also how the game ends) and **Xenon Pit** (the
+poisoned low-power state the game is built around).
 
 ## What the player controls
 

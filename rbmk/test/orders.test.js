@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createReactor, scram } from '../src/sim.js';
 import {
-  createShift, updateShift, schedule, nextOrder, trapChance, tolerance, electricMW, snapshotShift, ORDER_DEFAULTS,
+  createShift, updateShift, schedule, nextOrder, trapChance, tolerance, lowRange, electricMW, snapshotShift, ORDER_DEFAULTS,
 } from '../src/orders.js';
 import { createRng } from '../src/rng.js';
 
@@ -51,7 +51,7 @@ test('orders follow one another, in range, with the ramp allowance the rules giv
     for (const o of orders) {
       assert.equal(o.start, prev ? prev.end : 0);
       assert.equal(o.target % 10, 0);
-      const [lo, hi] = P[`${o.kind}MWe`];
+      const [lo, hi] = o.kind === 'low' ? lowRange(P, o.start) : P[`${o.kind}MWe`];
       assert.ok(o.target >= lo && o.target <= hi, `${o.kind} ${o.target}`);
       const [hlo, hhi] = P[`${o.kind}Hold`];
       assert.ok(o.end - o.deadline >= hlo * MIN && o.end - o.deadline <= hhi * MIN);
@@ -74,6 +74,24 @@ test('tolerance tightens every two hours down to a floor', () => {
   assert.equal(tolerance(P, 2 * HOUR), 45);
   assert.equal(tolerance(P, 12 * HOUR), 20);
   assert.equal(tolerance(P, 30 * HOUR), 20);
+});
+
+test('low holds start shallow and deepen through the shift', () => {
+  assert.deepEqual(lowRange(P, 0), [200, 400]);
+  assert.deepEqual(lowRange(P, HOUR - 60), [200, 400]);
+  assert.deepEqual(lowRange(P, HOUR), [150, 400]);
+  assert.deepEqual(lowRange(P, 2 * HOUR), [100, 400]);
+  assert.deepEqual(lowRange(P, 30 * HOUR), [100, 400]);
+  let early = Infinity, late = Infinity;
+  for (let seed = 1; seed <= 500; seed++) {
+    for (const o of schedule(seed, 30 * HOUR)) {
+      if (o.kind !== 'low') continue;
+      if (o.start < HOUR) early = Math.min(early, o.target);
+      if (o.start >= 2 * HOUR) late = Math.min(late, o.target);
+    }
+  }
+  assert.equal(early, 200);
+  assert.equal(late, 100);
 });
 
 test('the trap (an urgent rise after a low hold) gets likelier through the shift', () => {

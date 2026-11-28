@@ -35,6 +35,8 @@
  * @property {number} I           iodine-135, 1 = full-power equilibrium
  * @property {number} X           xenon-135, 1 = full-power equilibrium
  * @property {number} damage      fuel damage 0..1
+ * @property {boolean} tripArmed  emergency protection: AZ-5 fires by itself on a short period
+ * @property {boolean} tripped    AZ-5 was pressed by the protection, not the operator
  * @property {boolean} relief     relief valves open
  * @property {number} reliefTime  game seconds the relief valves have been open
  * @property {{ value: number, at: number }} printout  the last margin printout (rods, clock)
@@ -42,6 +44,7 @@
  *
  * @typedef {{ type: 'meltdown', cause: 'prompt'|'fuel' }
  *   | { type: 'shutdown' }
+ *   | { type: 'trip' }
  *   | { type: 'relief', open: boolean }
  *   | { type: 'printout', value: number }
  *   | { type: 'dryout', on: boolean }} SimEvent
@@ -62,7 +65,7 @@ export const DEFAULTS = {
   maxRateDt: 0.05,       // sub-step shrinks so λ·r/(1−r)·dt stays under this
   // Reactivity, dollars
   rodWorth: 12,          // the whole bank, all rods in
-  xenonWorth: 4,         // xenon at full-power equilibrium
+  xenonWorth: 6,         // xenon at full-power equilibrium (~2.5–3% Δk at an RBMK's β ≈ 0.005)
   voidWorth: 5,          // steam fraction 1.0
   dopplerWorth: 1.5,     // per 600 °C of fuel above T_ref
   tipWorth: 0.06,        // graphite displacer effect, per rod, as a fraction of its worth
@@ -71,6 +74,9 @@ export const DEFAULTS = {
                          // which is where the displacers arrive
   tipWidth: 0.3,         // the displacer effect is felt over this much of a rod's travel
   startRods: 0.5,        // bank insertion at full power, used to set the core's excess reactivity
+  // Emergency protection: AZ-5 by itself when the doubling time falls below
+  // this (game over if the scram comes from the wrong state). 0 = no trip.
+  tripDoubling: 10,      // s
   // Rods
   strokeTime: 8,         // s for a rod's full travel (normal drive and scram alike)
   // Steam and temperature
@@ -209,7 +215,7 @@ export function createReactor(params = {}, start = {}) {
     params: p, status: 'running', cause: null, clock: 0,
     C: n, n, r: 0, rods: 0, rodsTarget: 0, scramX: 0, scramFrom: 0,
     P, pTarget: P, flow: 1, alpha, Tf: fuelEq(p, n, P, alpha),
-    I: start.I ?? eq.I, X: start.X ?? eq.X, damage: 0, relief: false, reliefTime: 0,
+    I: start.I ?? eq.I, X: start.X ?? eq.X, damage: 0, tripArmed: true, tripped: false, relief: false, reliefTime: 0,
     printout: { value: 0, at: 0 }, printing: null,
   };
   // Rods are linear in normal operation, so solve r = 0 for them directly.
@@ -298,6 +304,15 @@ function substep(s, h, events) {
   s.n = s.C / (1 - s.r);
   s.C += p.lambda * (s.n - s.C) * h;
 
+  // Emergency protection: a short period presses AZ-5. Compared as a growth
+  // rate, λr/(1−r) > ln 2 / tripDoubling, so no log is needed.
+  if (s.status === 'running' && s.tripArmed && p.tripDoubling > 0
+    && p.lambda * s.r / (1 - s.r) > LN2 / p.tripDoubling) {
+    scram(s);
+    s.tripped = true;
+    events.push({ type: 'trip' });
+  }
+
   // Fuel damage
   if (s.Tf >= p.meltTemp) return melt(s, 'fuel', events);
   if (s.Tf > p.damageTemp) {
@@ -360,6 +375,8 @@ export function readouts(s) {
     dryout: s.alpha > p.dryoutAlpha,
     damageLamp: s.damage > 0,
     relief: s.relief,
+    tripArmed: s.tripArmed,
+    tripped: s.tripped,
   };
 }
 

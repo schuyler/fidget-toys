@@ -12,8 +12,10 @@ in the actual reactor. The numbers are starting guesses to be tuned with
 a headless tool. Where they come from the real plant, that's noted.
 Questions still open are marked **(open)**.
 
-> Status: the simulation (`src/sim.js`) and the orders and rating
-> (`src/orders.js`) are built and tested. No UI yet.
+> Status: the simulation (`src/sim.js`), the orders and rating
+> (`src/orders.js`) and the fixed-tick shift loop (`src/shift.js`) are
+> built and tested, and `tools/headless.js` plays whole shifts with CPU
+> operators (results under "Headless tuning"). No UI yet.
 
 ## Name
 
@@ -36,6 +38,7 @@ poisoned low-power state the game is built around).
 | Rod bank (target) | 0–60 rods inserted | Rods move one after another toward the target at a fixed speed. A rod's full stroke takes ~18 s on the real plant; 8 s here. |
 | Coolant pressure (target) | 55–80 bar | Moves toward the target with a lag of a few seconds. Nominal is 70 bar. |
 | AZ-5 | button | Drives all rods in at the normal rod speed (on the real plant scram rods weren't faster) and locks the controls. The game ends when power has fallen, or melts down. |
+| Trip bypass | switch (step 4) | Blocks the emergency protection (below). Not built yet: the reactor state has `tripArmed` for it. |
 
 One bank of 60 instead of 211 individual rods. The number inserted is
 the operational reactivity margin (ORM); the real rule was 15 rods
@@ -93,8 +96,8 @@ Starting guesses, chosen so the traps line up:
 | Term | Guess | Why |
 |---|---|---|
 | Rod bank, full | −$12 (≈ $0.20 per "rod") | 60 rods of margin at the bottom of the scale |
-| Xenon at full-power equilibrium | −$4 | Real thermal reactors: ~2.5–3% Δk ≈ $4 |
-| Xenon peak after a cut from full power | ≈ −$7 | So a pit costs ~15 extra rods, taking a 30-rod margin below the 15-rod rule |
+| Xenon at full-power equilibrium | −$6 | Real thermal reactors: ~2.5–3% Δk; at an RBMK's β ≈ 0.005 that's $5–6 (from memory, not checked). Was $4: the headless runs showed pits too shallow to matter |
+| Xenon peak after a cut from full power | ≈ −$12 (X ≈ 2) at ~10% power | A deep low hold costs ~25 rods: a rule-follower can't hold it, and anyone who does is far below the 15-rod rule |
 | Void, full steam | +$5 over the whole range | The 1986 core had a large positive void coefficient. Exact figure **(open)** |
 | Doppler, cold to full power | −$1.5 | Small next to the void term on purpose |
 | `r_fuel` | set so r = 0 at full power, equilibrium xenon, ~30 rods in | |
@@ -217,6 +220,16 @@ dX/dt = yX · n + λI · I − λX · X − σ · n · X
   and leaves at a rate set by the coolant, so a big enough spike melts
   fuel however brief.
 - **Sacked**: rating reaches 0. Score = shift time.
+- **Emergency protection (trip)**: when the doubling time falls below
+  10 s (`tripDoubling`), AZ-5 fires by itself, exactly as if pressed.
+  From a healthy margin that ends the shift cleanly; from a xenon pit at
+  low power with few rods in, the tip effect takes it prompt critical.
+  The protection that should save you is what kills you, which is the
+  1986 lesson. Added after the headless runs: without it a low margin
+  only mattered if the operator chose to press AZ-5, and nobody needs
+  to, so the greedy operator ran at 8 rods for whole shifts unharmed.
+  A bypass switch (step 4) will let the player block it, as the 1986
+  crew blocked some trips.
 - **AZ-5**: rods drive in. If power then falls below ~1% without
   meltdown, the shift ends cleanly. Score = shift time. Scrammed from
   30 rods it's dull and safe. Scrammed from 5 rods in a xenon pit at low
@@ -240,12 +253,17 @@ starting guesses for the headless tool to tune. Times are game time
 | Kind | Target | Hold | Ramp allowance |
 |---|---|---|---|
 | Load follow | 500–990 MWe | 1–3 h | 20 min + 10 min per 100 MWe of change |
-| Low hold ("grid surplus", "maintenance") | 250–500 MWe | 4–8 h | same |
+| Low hold ("grid surplus", "maintenance") | 100–400 MWe (floor deepens, below) | 4–8 h | same |
 | Urgent rise | 800–990 MWe | 1–2 h | 15 min flat |
 
-  Low holds go down to ~25% thermal on purpose: into the unstable region
-  below the 22% rule, and long enough to dig most of a xenon pit. 30% of
-  ordinary orders are low holds.
+  Low holds go down to ~10% thermal on purpose: well into the unstable
+  region below the 22% rule (the 1986 test ran at ~6%), and long enough
+  to dig most of a xenon pit. 30% of ordinary orders are low holds.
+- **Low holds deepen**: the floor of a low hold starts at 200 MWe and
+  drops 50 MWe every game hour to 100 MWe (`lowStartMWe`, `lowDeepen`,
+  `lowEvery`). Without it, a deep cut as the very first order (from
+  full-power iodine, the deepest pit there is) sacked about a quarter of
+  rule-following shifts within 10 hours.
 - **The trap**: an urgent rise only ever comes straight after a low hold.
   The chance is 10% + 5% per hour on shift, capped at 80%.
 - **Tolerance** starts at ±50 MWe and tightens by 5 every 2 hours, to a
@@ -286,7 +304,9 @@ emergencies:
 | Kinetics, steam, temperature | seconds | ~1:1, maybe λ × 1.5 | The reactor feels live |
 | Rods | 18 s stroke | ~8 s stroke | Slow enough that a scram feels slow |
 
-**Slow motion**: when the doubling time drops below ~10 s, the global
+**Slow motion**: when the doubling time drops below ~20 s (it was ~10 s,
+but the protection now trips at 10 s, so slow motion has to start before
+it), the global
 multiplier eases from 1 down to ~0.25 (sound drops in pitch, alarms
 sound). The player gets a few extra seconds to react near the edge. Past
 prompt critical it's over, in slow motion.
@@ -351,6 +371,7 @@ rbmk/
   src/audio.js              hum, alarms, slow-motion pitch
   test/sim.test.js          xenon pit timing, tip effect, prompt-critical threshold, scram outcomes
   test/orders.test.js       schedule, trap odds, rating, inspections
+  src/shift.js              fixed-tick loop: reactor + dispatcher, 30 ticks a second
   tools/headless.js         CPU operators: cautious, greedy, idle
 ```
 
@@ -365,6 +386,45 @@ rbmk/
   cost and should melt down sometimes, usually after a pit. The *idle*
   operator should be sacked fast. If the cautious operator dies or the
   greedy one never does, the tuning is off.
+
+## Headless tuning
+
+`node rbmk/tools/headless.js N [key=value ...]` plays N shifts per
+operator (seeds 1..N, cap 96 game hours) and prints PASS/FAIL against
+the goals. Operators see only `readouts()`, the order, the rating and
+the teletype, and act only through `tick()`'s input. They glance at the
+panel every half second, as a person would. The shared controller turns
+the gap to the order into a wanted growth rate on the period meter and
+moves rods by a rule of thumb ($0.20 a rod).
+
+- **cautious**: never below 16 rods, ramps no faster than a ~23 s
+  doubling, scrams on any alarm. In a pit it aims high in the band and
+  trades pressure for steam.
+- **greedy**: no rod floor, ramps at a ~11.5 s doubling, drops pressure
+  when out of rods, AZ-5 on fuel damage.
+- **idle**: touches nothing.
+
+Results with the defaults (seeds 1–40 / 101–200):
+
+| | cautious | greedy | idle |
+|---|---|---|---|
+| Sacked | 39/40 · 94/100 | 0 · 0 | all |
+| Meltdown | 0 · 0 | 4 · 4 (all prompt, all after a pit) | 0 |
+| Trip (safe) | 0 · 0 | 33 · 92 | 0 |
+| Median hours | 36 · 44 | 26 · 26 | 4 · 4 |
+| Mean score (h) | 41 · 45 | 35 · 33 | 4 · 4 |
+
+**(open)** A greedy operator that ramps more gently (≥ 14 s doubling,
+`greedy.gmax=0.045`) never trips, never melts down, and scores ~72 h,
+far above the cautious operator. Breaking the 15-rod rule is safe as
+long as nothing ever scrams, so the margin still doesn't matter to a
+smooth player. The inspector doesn't fix it (visits every ~2 h with a
+40-point reprimand still leave it at 58 h). **Decided, next PR:** plant
+upsets scheduled from the seed on their own RNG stream (a turbine or
+main pump trip cuts flow or pressure for some seconds). Steam surges
+and the period shortens: from a healthy margin you catch it with rods or
+the trip scrams safely; in a pit at low power with few rods in, it's
+fatal. That's the 1986 trigger, and it uses the existing `flow`.
 
 ## Settings (presets, as in the other toys) (open)
 
@@ -385,10 +445,10 @@ built for it yet, but steps 2 and 4 should keep it cheap.
 - **Splitting the panel is presentation.** The adapter's `applyInput`
   accepts rod inputs only from one seat and pressure inputs only from the
   other. Each client draws only its own gauges.
-- **Needs a fixed tick.** `step(s, dt)` takes any dt today. Lockstep needs
-  both devices to step the same amount per tick (Wooden Ships uses 30 a
-  second), so `main.js` should drive the sim in fixed increments from the
-  start.
+- **Needs a fixed tick.** Lockstep needs both devices to step the same
+  amount per tick (Wooden Ships uses 30 a second). `src/shift.js` does
+  this (`TICK` = 1/30 s), and the headless tool already uses it, so
+  `main.js` should too.
 - **Slow motion has to live in `sim.js`.** If `main.js` worked out the
   slow-motion multiplier from the doubling time and passed a smaller dt,
   two devices could disagree. Computed inside the sim from `r`, it's
@@ -425,3 +485,12 @@ pressure needs a reason not to sit at maximum.
 
 - Visual details of the comic style, once there's something to look at.
 - Settings presets (see above).
+- **The rod readout is the true margin.** Rods go in one at a time and
+  fully, so `readouts().rods` equals the margin the inspector checks,
+  and the printout tells the player nothing new. Real ORM was a
+  computed rod-equivalent; one fix is to make the margin the
+  rod-equivalent of the reserve reactivity, lowered by xenon's skew of
+  the flux, so it differs from the lever.
+- The period meter shows `λr/(1−r)`, so reactivity can be worked out
+  from it. That's faithful (a real period meter tells you the same), but
+  reactivity isn't fully hidden.

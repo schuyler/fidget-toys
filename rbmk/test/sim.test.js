@@ -124,18 +124,49 @@ test('AZ-5 in a xenon pit with few rods in goes prompt critical', () => {
 });
 
 test('AZ-5 at low power with ~20 rods in survives', () => {
-  const s = createReactor({}, { power: 0.06, X: 1.5 });
+  const s = createReactor({}, { power: 0.06, X: 1.3 });
   assert.ok(margin(s) > 19, `margin ${margin(s)}`);
   scram(s);
   run(s, 60);
   assert.equal(s.status, 'shutdown');
 });
 
-test('pulling every rod at full power melts the reactor', () => {
-  const s = createReactor();
+test('pulling every rod at full power melts the reactor if the protection is off', () => {
+  const s = createReactor({ tripDoubling: 0 });
   setControls(s, { rodsTarget: 0 });
   run(s, 30);
   assert.equal(s.status, 'meltdown');
+});
+
+test('a short period trips AZ-5 by itself; from a healthy margin that shuts the reactor down', () => {
+  const s = createReactor();
+  setControls(s, { rodsTarget: 0 });
+  const events = run(s, 60);
+  const trip = events.findIndex((e) => e.type === 'trip');
+  assert.ok(trip >= 0, 'tripped');
+  assert.ok(s.tripped);
+  assert.ok(events.slice(trip).some((e) => e.type === 'shutdown'));
+  assert.equal(s.status, 'shutdown');
+});
+
+test('the trip fires at the doubling time it is set to, not before', () => {
+  // doubling = ln2 (1 − r) / (λ r): 0.4 dollars → 13 s, 0.5 → 8.7 s
+  for (const [dollars, trips] of [[0.4, false], [0.5, true]]) {
+    const s = createReactor(bare);
+    s.rods -= dollars / 12; s.rodsTarget = s.rods;
+    const events = run(s, 0.1);
+    assert.equal(events.some((e) => e.type === 'trip'), trips, `${dollars} dollars`);
+  }
+});
+
+test('the protection fires the same scram: from a pit at low power it is fatal', () => {
+  const s = createReactor({}, { power: 0.06, X: 1.8 });
+  assert.ok(margin(s) < 12, `margin ${margin(s)}`);
+  s.rods -= 2 / 60; s.rodsTarget = s.rods; // two more rods out: a surge
+  run(s, 30);
+  assert.ok(s.tripped);
+  assert.equal(s.status, 'meltdown');
+  assert.equal(s.cause, 'prompt');
 });
 
 test('low pressure at full power dries out the channels and damages the fuel', () => {

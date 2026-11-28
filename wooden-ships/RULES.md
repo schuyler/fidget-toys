@@ -429,17 +429,42 @@ Each is a sketch, not a rule yet.
 - **Charged shots (elevation).** Holding a fire button raises the guns.
   The longer you hold, the farther the broadside lands, up to
   `gunRange`. Let go to fire.
-  - A tap fires the flat, short shot: shorter than today's, somewhere
-    around 180–200 m. Charging covers the rest of the way out to 300 m.
-    The maximum stays at 300 m so that every shot you can make lands on
-    screen, where you can see it. **(open: the tap range)**
-  - The arc is faked. The sim keeps no height: a ball can only hit a
-    ship within a short window after it leaves the gun and a short
-    window before it lands, and charging only changes how long it
-    flies. A tap's two windows overlap, so it can hit anywhere along
-    its path, like the MVP's shot. A long shot can sail clean over a
-    ship in the middle of its flight, or splash short of her. **(open:
-    the window length)**
+  - A tap fires a flat, short shot, out to a new `tapRange` (start at
+    200 m). Charging covers the rest of the way out to 300 m. The
+    maximum stays at 300 m so that every shot you can make lands on
+    screen, where you can see it: 200 m is a little under half the
+    view's short side, so a tap covers the middle of the screen and
+    charging covers the edges. A 200 m tap flies for 1.3 s, and a ship
+    at full speed (about 20 m/s on screen) moves 27 m in that time, less
+    than her length, so a tap at a ship broadside-on to you mostly
+    still hits. **(open: the tap range. The risk is longer games,
+    because the CPU fires from as far out as it can. Tune it with the
+    headless tool before a playtest.)**
+  - A full charge takes about 1 real second. That's well inside the 5 s
+    reload, and long enough to stop at a chosen range. At 40°/s a ship
+    turns 40° in that second, twice the 20° traverse, so holding has a
+    real cost.
+  - The arc is faked with a height curve and no physics. A ball's
+    height is peak × 4f(1−f), where f is how much of its flight it's
+    done, and it can hit a ship only while that's below the hull's
+    height. The peak grows with range: at `tapRange` it's no higher than
+    the hull, so a tap can hit anywhere along its path, like the MVP's
+    shot. Past that it rises, so a long shot can hit only near the gun
+    and near where it lands. It can sail clean over a ship in between,
+    or splash short of her. Short shots get wide windows and long shots
+    narrow ones, with no special case, and it's still plain arithmetic.
+    (Fixed windows of one length don't work: a 200 m tap would need
+    100 m windows to cover its whole flight, and on a 300 m shot that
+    would be a third of it.)
+  - At full range the landing window should be about one ship length,
+    40 m, so the peak there is about 2.2 times the hull's height (the
+    last 40 m of 300 starts at f = 0.87, where 4f(1−f) ≈ 0.46). Against
+    a ship broadside-on to you, 12 m deep, that's about 52 m of range
+    to land in, roughly ±9%: fair with the marker on screen. Much
+    narrower, and spread and her own way make hits a coin flip; much
+    wider, and charging stops mattering. There's a matching window
+    just after the gun, so a charged shot can still hit a ship within
+    40 m. **(open: the window at full range)**
   - Traverse still aims for you, at where the enemy is when you let go,
     with no lead. So the player decides *when* and *how far*, and the
     ball still takes up to 2 seconds to arrive.
@@ -457,11 +482,11 @@ Each is a sketch, not a rule yet.
   just like one passing through it, and a ball that touches a hull
   today always hits. So the height has to show, or an overshoot looks
   like a bug.
-  - Each ball is drawn above its shadow, raised by peak × 4f(1−f),
-    where f is how much of its flight it's done. The shadow runs
-    straight along the water. The ball is raised toward the top of the
-    screen, not along a world direction, so it reads the same in the
-    guest's turned view.
+  - Each ball is drawn above its shadow, raised by the same curve as in
+    the sim, but several times taller so the arc reads on screen. The
+    shadow runs straight along the water. The ball is raised toward the
+    top of the screen, not along a world direction, so it reads the same
+    in the guest's turned view.
   - While you charge, a splashdown marker sits on the water where the
     broadside would land if you let go now: a faint ring, or a scatter
     of small splash marks as wide as the ±3° spread, so you can see
@@ -472,13 +497,21 @@ Each is a sketch, not a rule yet.
     drawn the same way as the balls, so it shows the shape they'll fly.
     This breaks the nautical look IDEAS.md asks for, on purpose: the
     arc is what teaches you how to read a ball's height against its
-    shadow. **(open: whether it stays once the shadows read well on
-    their own)**
+    shadow. A URL flag (something like `?arc=0`) turns it off for one
+    playtest without it; it shouldn't be a seventh setting. **(open:
+    whether it stays once the shadows read well on their own)**
   - The marker takes the guesswork out of range, but not the skill. It
     shows where the broadside lands on the enemy as she is now, and she
     keeps sailing for the up to 2 seconds the balls take to arrive. So
     a miss always means she moved, never that you misjudged the range.
     That's the leading skill the slow balls are there for (see Scale).
+- **Building charged shots.** After a phone playtest, since it adds an
+  action to the firing thumb and the controls may change first. Then,
+  in order, each tested before the next: the sim (press and release
+  inputs, the charge in ticks, `tapRange`, the height check, tests, a
+  headless run); balls drawn above their shadows; the marker and the
+  dashed arc; the CPU (an error in its hold time, and a hit prediction
+  that no longer assumes a flat 300 m shot).
 - **Magazine explosions** (optional): a hit that kills the last of a
   ship's crew has a small chance of blowing her up instead of making her
   strike. That brings back a dramatic sinking without a second damage

@@ -156,6 +156,8 @@ test('a ship with no crew strikes and the other side wins; both at once is a dra
   run(g, 90);
   assert.equal(g.ships[1].crew, 0);
   assert.ok(g.ships[1].struck);
+  assert.equal(g.winner, -1, 'decided, but not over until the sea is quiet');
+  run(g, 3 * 30 + 30);
   assert.equal(g.winner, BLUE);
 
   const d = gunnery(0, 150, 0);
@@ -163,8 +165,58 @@ test('a ship with no crew strikes and the other side wins; both at once is a dra
   applyInput(d, 0, { type: 'fire', battery: STARBOARD });
   applyInput(d, 1, { type: 'fire', battery: STARBOARD }); // heading east too, so her starboard faces away…
   d.ships[1].heading = deg(180); // …turn her round so her starboard faces us
-  run(d, 90);
+  run(d, 90 + 3 * 30);
   assert.equal(d.winner, DRAW);
+});
+
+test('the game ends 3 s after the last ball lands, not when the last crew dies', () => {
+  const g = gunnery(0, 150, 0);
+  g.ships[1].crew = 1; // the first ball of the ripple strikes her; three more are still on their way
+  applyInput(g, 0, { type: 'fire', battery: STARBOARD });
+  let landed = -1;
+  while (g.winner < 0 && g.tick < 600) {
+    step(g);
+    if (g.ending >= 0 && !g.balls.length && landed < 0) landed = g.tick;
+  }
+  assert.ok(g.ending >= 0 && landed > g.ending, 'balls were still in the air after she struck');
+  assert.equal(g.winner, BLUE);
+  assert.ok(Math.abs(g.tick - (landed + 90)) <= 1, `over at ${g.tick}, last ball landed at ${landed}`);
+});
+
+test('a ball already in the air when she strikes can strike the winner too: a draw', () => {
+  const g = gunnery(0, 150, 0);
+  g.ships[0].crew = 1; g.ships[1].crew = 1;
+  applyInput(g, 0, { type: 'fire', battery: STARBOARD });
+  g.ships[1].heading = deg(180);
+  run(g, 3); // her ball is away before ours lands
+  applyInput(g, 1, { type: 'fire', battery: STARBOARD });
+  run(g, 600);
+  assert.ok(g.ships[0].struck && g.ships[1].struck);
+  assert.equal(g.winner, DRAW);
+});
+
+test('after the fight is decided the loser drifts rudderless, the winner steers on, and nobody fires', () => {
+  const g = gunnery(0, 150, 0, { kts: 14 });
+  g.ships[1].crew = 1;
+  applyInput(g, 1, { type: 'rudder', value: 100 });
+  applyInput(g, 0, { type: 'fire', battery: STARBOARD });
+  while (g.ending < 0 && g.tick < 300) step(g);
+  assert.ok(g.ending >= 0 && g.winner < 0);
+  const [win, lose] = g.ships;
+  assert.ok(lose.struck);
+  assert.equal(lose.rudder, 0);
+  applyInput(g, 1, { type: 'rudder', value: 100 }); // ignored: she has struck
+  assert.equal(lose.rudder, 0);
+  applyInput(g, 0, { type: 'rudder', value: 40 }); // the winner can still steer
+  assert.equal(win.rudder, 40);
+  win.batteries[PORT].reloadLeft = 0;
+  applyInput(g, 0, { type: 'fire', battery: PORT });
+  run(g, 3);
+  assert.equal(win.batteries[PORT].firing, 0, 'no new shots once the fight is decided');
+  const h = lose.heading, x = lose.x, y = lose.y;
+  run(g, 60);
+  assert.equal(lose.heading, h, 'a struck ship does not turn');
+  assert.ok(Math.hypot(lose.x - x, lose.y - y) > 0, 'but she keeps drifting');
 });
 
 test('islands are point-symmetric, ringed by shallows, clear of the starts, with no diagonal-only tiles', () => {

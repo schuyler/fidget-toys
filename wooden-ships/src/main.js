@@ -260,7 +260,7 @@ function overlay() {
     return {
       lines,
       color: w === DRAW ? COLORS.text : COLORS.players[w],
-      sub: `${Math.round(game.tick / game.params.tickRate)}s · tap to sail again`,
+      sub: `${Math.round(game.ending / game.params.tickRate)}s · tap to sail again`,
       stats: statRows(),
     };
   }

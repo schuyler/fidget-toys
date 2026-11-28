@@ -46,7 +46,7 @@ for (let g = 0; g < games; g++) {
     }
   }
   rows.push({
-    seed, winner: game.winner, secs: game.tick / game.params.tickRate,
+    seed, winner: game.winner, secs: (game.ending >= 0 ? game.ending : game.tick) / game.params.tickRate,
     crew: game.ships.map((s) => s.crew), fired: game.stats.fired, hits: game.stats.hits,
     firstHitBy, firstHit: firstHit / game.params.tickRate, upwindAtShift, bumps,
     stopped: inIrons.map((t) => t / game.params.tickRate), ms: performance.now() - t0,

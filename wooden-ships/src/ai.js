@@ -61,7 +61,10 @@ export function createAI(shipId, seed, opts = {}) {
     const me = game.ships[shipId];
     if (!me || me.struck || game.winner >= 0) return out;
     const foe = game.ships.find((s) => s.side !== me.side && !s.struck);
-    if (!foe) return out;
+    if (!foe) { // the fight is won: straighten up and sail on until the end screen
+      if (rudder !== 0) { rudder = 0; out.push({ type: 'rudder', value: 0 }); }
+      return out;
+    }
 
     if (game.tick % period === 0) {
       const r = steer(game, me, foe);

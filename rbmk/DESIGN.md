@@ -219,26 +219,52 @@ tolerance, so the score doesn't count it a second time.
 
 ## Orders and rating
 
-- An order is: target MWe, tolerance (±50 MWe to start), ramp
-  allowance (time to reach it), and sometimes a hold duration.
-- Kinds:
-  - **Load follow**: up or down to a level.
-  - **Hold**: stay at a level for N hours, often low ("maintenance",
-    "grid has surplus").
-  - **Urgent rise**: needed back up quickly.
-- **The trap** is a long low hold followed by an urgent rise. Its odds
-  grow with time on shift, and tolerances tighten, so a shift can't be
-  survived forever by standing still.
-- **Rating** starts at 100. It loses points per second while you're
-  outside the band past the ramp allowance, gains a few for each order
-  met (capped at 100), and loses points for relief-valve lifts.
-- **Inspections**: rarely, an inspector checks the true margin. Below 15
-  rods costs a big rating hit. They're announced only after the fact on
-  the teletype ("Inspector visited 03:40. Margin 11 rods. Reprimand."),
-  so their timing can't be gamed. The rule exists but is enforced only
-  sometimes, which is also faithful, and it gives the player a reason to
-  read the margin printout.
-- Orders come from a seeded RNG, so a shift can be replayed exactly.
+Implemented in `src/orders.js`; the numbers are `ORDER_DEFAULTS`,
+starting guesses for the headless tool to tune. Times are game time
+(1 game hour = 30 real s).
+
+- **An order** is a target in MWe (a multiple of 10), a tolerance, a
+  ramp allowance and a hold. The output must be in band from the end of
+  the ramp to the end of the hold, when the next order arrives. There's
+  always exactly one order in force.
+- **Kinds**:
+
+| Kind | Target | Hold | Ramp allowance |
+|---|---|---|---|
+| Load follow | 500–990 MWe | 1–3 h | 20 min + 10 min per 100 MWe of change |
+| Low hold ("grid surplus", "maintenance") | 250–500 MWe | 4–8 h | same |
+| Urgent rise | 800–990 MWe | 1–2 h | 15 min flat |
+
+  Low holds go down to ~25% thermal on purpose: into the unstable region
+  below the 22% rule, and long enough to dig most of a xenon pit. 30% of
+  ordinary orders are low holds.
+- **The trap**: an urgent rise only ever comes straight after a low hold.
+  The chance is 10% + 5% per hour on shift, capped at 80%.
+- **Tolerance** starts at ±50 MWe and tightens by 5 every 2 hours, to a
+  floor of ±20. With the trap odds, this is what stops a shift lasting
+  forever.
+- **Rating** starts at 100:
+  - −40 per hour out of band after the ramp allowance (about 75 real
+    seconds out of band from full rating to sacked);
+  - +5 when an order ends with at least 80% of its hold in band ("met"),
+    capped at 100. Otherwise it's "missed", with no extra penalty;
+  - −10 per hour the relief valves are open.
+  - At 0 you're sacked. After AZ-5 or a meltdown the rating freezes.
+- **Inspections**: about one every 8 hours (gaps uniform between 1 minute
+  and 16 hours). The inspector checks the *true* margin, and the visit
+  reaches the teletype 30–60 minutes later ("Inspector visited 03:40.
+  Margin 11 rods. Reprimand."), so its timing can't be gamed. Below 15
+  rods costs 25 points, charged when the report arrives. The rule exists
+  but is enforced only sometimes, which is also faithful, and it gives
+  the player a reason to read the margin printout.
+- **The schedule depends only on the seed**, never on what the operator
+  does. The same seed gives everyone the same shift, so scores compare,
+  and the plan could be announced on the teletype ahead of time. A
+  responsive dispatcher was considered and left out: tightening
+  tolerances and rising trap odds should make shifts hard enough.
+  Orders and inspections use separate RNG streams, and every order draws
+  the same numbers whatever its kind, so tuning one kind doesn't reshuffle
+  the rest.
 
 ## Time scales (arcade pacing)
 
@@ -316,6 +342,7 @@ rbmk/
   src/render.js             gauges, period meter, chart
   src/audio.js              hum, alarms, slow-motion pitch
   test/sim.test.js          xenon pit timing, tip effect, prompt-critical threshold, scram outcomes
+  test/orders.test.js       schedule, trap odds, rating, inspections
   tools/headless.js         CPU operators: cautious, greedy, idle
 ```
 
@@ -337,6 +364,37 @@ Maybe three: **Pace** (relaxed / standard / brisk: the time scales),
 **Dispatcher** (calm / demanding: order frequency and tolerances), and
 **Instruments** (full / 1986: whether the margin printout exists at all).
 
+## Two-player co-op (later)
+
+A possible later mode, in the style of Spaceteam: two players on separate
+devices, each with half the controls and half the instruments. Nothing is
+built for it yet, but steps 2 and 4 should keep it cheap.
+
+- **Networking is the repo's existing lockstep** (`multiplayer/lockstep.js`,
+  as Dot Army and Wooden Ships use it). Each device runs the whole
+  simulation, including the dispatcher, and only inputs are exchanged. Any
+  deterministic dispatcher works, seed-only or state-aware.
+- **Splitting the panel is presentation.** The adapter's `applyInput`
+  accepts rod inputs only from one seat and pressure inputs only from the
+  other. Each client draws only its own gauges.
+- **Needs a fixed tick.** `step(s, dt)` takes any dt today. Lockstep needs
+  both devices to step the same amount per tick (Wooden Ships uses 30 a
+  second), so `main.js` should drive the sim in fixed increments from the
+  start.
+- **Slow motion has to live in `sim.js`.** If `main.js` worked out the
+  slow-motion multiplier from the doubling time and passed a smaller dt,
+  two devices could disagree. Computed inside the sim from `r`, it's
+  deterministic.
+- **Floats are already safe.** The + − × ÷ / min / max rule gives the same
+  results on every engine, as in Wooden Ships.
+- **The game design is the open part (open).** Spaceteam works because
+  what you're told concerns your partner's controls. Here, for example,
+  the rod operator could have the dispatcher teletype and the margin
+  printout, and the pressure operator the period meter and the steam
+  gauge. Rods and pressure are coupled, so the two players have to talk.
+  The 1986 control room was also split between operators who each saw
+  only part of the picture.
+
 ## Order of work
 
 1. `sim.js` with tests: xenon pit timing, prompt-jump power, steam and
@@ -352,7 +410,7 @@ Maybe three: **Pace** (relaxed / standard / brisk: the time scales),
 8. `RULES.md`, the How to play card, links from the site index and
    `CLAUDE.md`, an e2e script.
 
-Later: the turbine-test order (pump coastdown), and plant efficiency if
+Later: the turbine-test order (pump coastdown), two-player co-op (above), and plant efficiency if
 pressure needs a reason not to sit at maximum.
 
 ## Open questions

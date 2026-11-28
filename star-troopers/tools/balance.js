@@ -9,8 +9,8 @@
 import { createGame, resolveTurn, living, pathCost, DRAW, isCover } from '../src/sim.js';
 import { createAI } from '../src/ai.js';
 
-const FACTIONS = ['compact', 'orrin', 'vell'];
-const PAIRS = [['orrin', 'compact'], ['vell', 'compact'], ['orrin', 'vell']];
+const FACTIONS = ['terrans', 'orrin', 'vell'];
+const PAIRS = [['orrin', 'terrans'], ['vell', 'terrans'], ['orrin', 'vell']];
 
 const args = process.argv.slice(2);
 const perSide = Number(args[0] ?? 100);

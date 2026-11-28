@@ -246,7 +246,7 @@ test('R8: a single trooper\'s shot preview is the sim\'s preview', () => {
 });
 
 test('R8: a swarm of three pools one shot at three times the attack; a pair fires two shots', () => {
-  const sw = { swarm: 1, faction0: 'vell', faction1: 'compact' };
+  const sw = { swarm: 1, faction0: 'vell', faction1: 'terrans' };
   const three = make([
     { side: 0, cell: C(6, 14), faction: 'vell' }, { side: 0, cell: C(6, 14), faction: 'vell' }, { side: 0, cell: C(6, 14), faction: 'vell' },
     { side: 1, cell: C(6, 8) },
@@ -264,7 +264,7 @@ test('R8: a swarm of three pools one shot at three times the attack; a pair fire
 });
 
 test('R8: fire hits everyone in the target\'s cell, so the preview sums over every occupant', () => {
-  const sw = { swarm: 1, faction0: 'compact', faction1: 'vell' };
+  const sw = { swarm: 1, faction0: 'terrans', faction1: 'vell' };
   const g = make([
     { side: 0, cell: C(6, 14) },
     { side: 1, cell: C(6, 8), faction: 'vell' }, { side: 1, cell: C(6, 8), faction: 'vell' }, { side: 1, cell: C(6, 8), faction: 'vell' },

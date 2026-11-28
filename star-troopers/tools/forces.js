@@ -3,14 +3,14 @@
 // sizes (from both sides of the map) and prints the first faction's share
 // of decisive games. Balanced combinations are where that crosses 50%.
 //
-// Usage: node star-troopers/tools/forces.js [gamesPerSide] [sizes=3,4,5,6] [pairs=orrin:compact,...] [key=value ...]
+// Usage: node star-troopers/tools/forces.js [gamesPerSide] [sizes=3,4,5,6] [pairs=orrin:terrans,...] [key=value ...]
 import { createGame, resolveTurn, DRAW } from '../src/sim.js';
 import { createAI } from '../src/ai.js';
 
 const args = process.argv.slice(2);
 const perSide = Number(args[0] ?? 50);
 let sizes = [3, 4, 5, 6];
-let pairs = [['orrin', 'compact'], ['vell', 'compact'], ['orrin', 'vell']];
+let pairs = [['orrin', 'terrans'], ['vell', 'terrans'], ['orrin', 'vell']];
 /** @type {Record<string, string|number>} */
 const params = {};
 for (const kv of args.slice(1)) {

@@ -30,7 +30,7 @@ const TERRAIN = {
   [BUILDING]: '#4b5072',
 };
 
-const GLYPH = { compact: 'C', orrin: 'O', vell: 'V' };
+const GLYPH = { terrans: 'C', orrin: 'O', vell: 'V' };
 
 // ---- Art: single-colour SVGs from ./art, tinted per use (fill is currentColor) ----
 /** `ink` is the longest side of the drawing within its 180 px source frame. */
@@ -39,7 +39,7 @@ const ART = { base: { ink: 124 }, trooper: { ink: 127 }, vell: { ink: 128 } };
 const BASE_MARK = '#8a91b8';
 /** The figure's longest side, in hex radii; the disc is 1.12 across. */
 const ICON_FILL = 0.78;
-const ICON = { compact: 'trooper', orrin: 'trooper', vell: 'vell' };
+const ICON = { terrans: 'trooper', orrin: 'trooper', vell: 'vell' };
 /**
  * Terrain tiles: three drawings per type, each filling a hex (200 units across
  * is two hex radii). A cell picks one, and whether to mirror it, from its index,

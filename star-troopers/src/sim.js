@@ -42,7 +42,7 @@ export const FACTIONS = /** @type {const} */ ({
   // leaders: share of a squad that are leaders, from the original's unit
   // chart (a Human squad of 10 has 2; a L'Chal Dah squad of 7 has 3). The
   // Rame have none: as a joint mind, they're always in command.
-  compact: { name: 'Compact', pool: 9, aim: 2, recovery: 3, leaders: 2 / 10, alwaysInCommand: false },
+  terrans: { name: 'Terrans', pool: 9, aim: 2, recovery: 3, leaders: 2 / 10, alwaysInCommand: false },
   orrin: { name: 'Orrin', pool: 12, aim: 2, recovery: 1, leaders: 3 / 7, alwaysInCommand: false },
   vell: { name: 'Vell', pool: 6, aim: 4, recovery: 2, leaders: 0, alwaysInCommand: true },
 });
@@ -60,8 +60,8 @@ export const DEFAULTS = {
   height: 19,
   terrain: 'some',          // 'open' | 'some' | 'dense'
   scenario: 'meeting',      // 'meeting' | 'assault'
-  faction0: 'compact',      // side 0 starts at the bottom
-  faction1: 'compact',      // side 1 starts at the top
+  faction0: 'terrans',      // side 0 starts at the bottom
+  faction1: 'terrans',      // side 1 starts at the top
   attacker: 0,              // Assault: which side attacks
   squad: 4,
   squad0: 0,                // tuning: side 0's squad size, overriding squad (0 = use squad)

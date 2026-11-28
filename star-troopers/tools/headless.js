@@ -6,8 +6,8 @@
 // combination of the listed values gets its own row. `level=easy|hard`
 // sets both CPUs. For example, every pairing in both scenarios:
 //
-//   node star-troopers/tools/headless.js 40 faction0=compact,orrin,vell \
-//     faction1=compact,orrin,vell scenario=meeting,assault
+//   node star-troopers/tools/headless.js 40 faction0=terrans,orrin,vell \
+//     faction1=terrans,orrin,vell scenario=meeting,assault
 import { createGame, resolveTurn, living, DRAW } from '../src/sim.js';
 import { createAI } from '../src/ai.js';
 

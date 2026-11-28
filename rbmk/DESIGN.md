@@ -25,13 +25,13 @@ Questions still open are marked **(open)**.
 
 | Control | Range | Notes |
 |---|---|---|
-| Rod bank depth (target) | 0–60 "rods" inserted | The rods move toward the target at a fixed speed. Full stroke takes ~18 s on the real plant; maybe ~8 s here. |
+| Rod bank (target) | 0–60 rods inserted | Rods move one after another toward the target at a fixed speed. A rod's full stroke takes ~18 s on the real plant; 8 s here. |
 | Coolant pressure (target) | 55–80 bar | Moves toward the target with a lag of a few seconds. Nominal is 70 bar. |
 | AZ-5 | button | Drives all rods in at the normal rod speed (on the real plant scram rods weren't faster) and locks the controls. The game ends when power has fallen, or melts down. |
 
-One bank instead of 211 individual rods. The bank depth expressed in
-"rods" doubles as the operational reactivity margin (ORM). The real rule
-was 15 rods minimum (§ Reactivity margin).
+One bank of 60 instead of 211 individual rods. The number inserted is
+the operational reactivity margin (ORM); the real rule was 15 rods
+minimum.
 
 ## What the player sees
 
@@ -93,20 +93,31 @@ Starting guesses, chosen so the traps line up:
 
 ### Rod worth and the tip effect
 
-```
-rodWorth(d) = −W · S(d) + D · bump(d)
-```
-
-- `S(d)` is S-shaped: little effect at the top and bottom of travel, most
-  in the middle. That's realistic, and it means rods near the top barely
-  respond.
-- `bump(d)` is positive between d ≈ 0 and 0.25, peaking around 0.1. That's
-  the graphite displacer pushing water out of the bottom of the channels.
-  Any insertion from nearly fully withdrawn first *adds* reactivity, for
-  a few seconds. D ≈ $0.5–1 **(open)**.
-- So the tip effect isn't only a scram rule. A player who has pulled
-  everything out and nudges the rods back in will see power *rise*. That's
-  discoverable, and it's what happened in the real plant.
+- **Normal operation:** rods move one after another, so the bank's worth
+  is linear in the number inserted ($0.20 a rod).
+- **On AZ-5,** every withdrawn rod starts moving at once. A single rod's
+  reactivity against its own depth x is
+  `rodShape(x) = −S(x) + tip · bump(x)`, where:
+  - `S(x)` is a smoothstep: a rod does little at the top and bottom of
+    its travel.
+  - `bump(x)` is positive over the first 30% of travel. That's the
+    graphite displacer pushing water out of the bottom of the channel
+    before the absorber arrives.
+  - So for the first ~1.5 s of a scram, every withdrawn rod is *adding*
+    reactivity. The fewer rods were in, the more rods do this.
+- **Xenon makes it worse:** `tip` is multiplied by `1 + 2·(X − 1)` when
+  xenon is above equilibrium. Xenon poisons the middle of the core, which
+  pushes the flux toward the bottom, where the displacers arrive.
+- Tuned so a scram from full power with 30 rods in gives a brief ~+$0.16
+  bump (power up ~20%, then down). At 6% power the 15-rod rule is about
+  where a scram stops being survivable: 16 rods survives at r = $0.985,
+  12 rods goes prompt critical.
+- **Changed from the first sketch,** which had one bank with an S-shaped
+  worth curve and a tip bump in normal operation too. With a single
+  depth, "8 rods of margin" meant the bank sat too deep for the tip
+  effect to show. Moving the rods in sequence and only together on
+  scram matches how the margin is counted, and puts the danger on AZ-5.
+  The discoverable "nudging rods in raises power" effect is gone.
 
 ## Power (point kinetics, one delayed group, prompt jump)
 
@@ -139,8 +150,8 @@ dC/dt = λ · (n − C)          λ ≈ 0.08 /s
 T_sat(P)  ≈ 270 + 1.0 · (P − 55) °C        steam tables: 55 bar ≈ 270, 70 ≈ 286, 80 ≈ 295
 alpha_eq  = alphaMax · (n / flow) / (n / flow + n0) − kP · (P − 70)    clamped to [0, alphaMax]
 alpha     → alpha_eq   with τ ≈ 2 s
-Tf_eq     = T_sat(P) + 600 · n / h(alpha)
-Tf        → Tf_eq      with τ ≈ 5 s
+dTf/dt    = (600 · n − (Tf − T_sat(P)) · h(alpha)) / 5 s
+            (steady state: Tf = T_sat + 600 · n / h)
 ```
 
 - **`flow`** is main-pump flow, fixed at 1.0 in the first version. It's
@@ -194,6 +205,9 @@ dX/dt = yX · n + λI · I − λX · X − σ · n · X
 - **Prompt critical** (r ≥ $1): immediate meltdown. Score 0.
 - **Fuel damage**: builds while Tf is over ~1200 °C, faster further over.
   It reaches 1 → meltdown. Score 0. A warning lamp lights as it builds.
+  Fuel at 2800 °C melts at once. Heat comes in at a rate set by power
+  and leaves at a rate set by the coolant, so a big enough spike melts
+  fuel however brief.
 - **Sacked**: rating reaches 0. Score = shift time.
 - **AZ-5**: rods drive in. If power then falls below ~1% without
   meltdown, the shift ends cleanly. Score = shift time. Scrammed from
